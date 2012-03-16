@@ -1,0 +1,74 @@
+<html>
+<head>
+<style type="text/css">
+	body{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+		background-color: #fcffff;
+		margin: 10px 40px 10px 40px;
+	}
+	table{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+	}
+	textarea{
+		background-color: #FAEFE8;
+		border-style: solid;
+		border-width: 1;
+		border-color: #AAAAAA;
+	}
+	textarea.outputarea{
+		background-color: #CCCCCC;
+	}
+	code{
+		color: #0044AA;
+		font-style: normal;
+	}
+	div.demo{
+		background-color: #F0F0F0;
+		padding: 10px 10px 5px 10px;
+		max-width: 690;
+		clear:right;
+	}
+	div.aside{
+		font-size: 9pt;
+		font-style: italic;
+		padding: 0px 0px 0px 20px;
+	}
+	div.floatbox{
+		float:right;
+		padding: 10px 10px 10px 10px;
+	}
+	div.control{
+		float:right;
+		vertical-align: top;
+	}
+	tr.odd{
+		background-color: #F0F0F0;
+	}
+</style>
+<title>Swym Standard Lybrary</title>
+<script type="text/javascript" src="syntax/shCore.js"></script>
+<script type="text/javascript" src="syntax/shBrushSwym.js"></script>
+<link type="text/css" rel="stylesheet" href="syntax/shCoreSwym.css"/>
+<script language=javascript src="swymloader.js"></script>
+<script language=javascript>
+window.onload = function()
+{
+	var stdLybSource = SWYM.stdlyb;
+	stdLybSource = stdLybSource.replace(/;/g,"\n");
+
+	var interpSource = document.getElementById('interpSource');
+	interpSource.textContent = stdLybSource;
+	
+	SyntaxHighlighter.highlight(interpSource);
+}
+
+</script>
+</head>
+<body>
+<div class=demo>
+<h3>Swym - Stdlyb</h3><p>
+<pre id="interpSource" class="brush: swym;">"Hello, World!"</pre><br>
+</div>
+</body>

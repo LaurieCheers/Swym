@@ -1,0 +1,1180 @@
+<html>
+<style type="text/css">
+body{
+font-family: Verdana, Arial, Helvetica;
+font-size: 10pt;
+background-color: #fcffff;
+margin: 10px 40px 10px 40px;
+}
+table{
+font-family: Verdana, Arial, Helvetica;
+font-size: 10pt;
+}
+textarea{
+background-color: #FAEFE8;
+border-style: solid;
+border-width: 1;
+border-color: #AAAAAA;
+}
+textarea.outputarea{
+background-color: #CCCCCC;
+}
+code{
+color: #0044AA;
+font-style: normal;
+}
+div.demo{
+background-color: #F0F0F0;
+padding: 10px 10px 5px 10px;
+max-width: 690;
+clear:right;
+}
+div.aside{
+font-size: 9pt;
+font-style: italic;
+padding: 0px 0px 0px 20px;
+}
+div.floatbox{
+float:right;
+padding: 10px 10px 10px 10px;
+}
+div.control{
+float:right;
+vertical-align: top;
+}
+tr.odd{
+background-color: #F0F0F0;
+}
+</style>
+<head><title>Swym - an interactive tutorial</title></head>
+<script language=javascript src="swym.js"></script>
+<script language=javascript src="swymTokenize.js"></script>
+<script language=javascript src="swymParser.js"></script>
+<script language=javascript src="swymEtc.js"></script>
+<script language=javascript src="swymSimpleEval.js"></script>
+<script language=javascript src="swymStdlyb.js"></script>
+<script language=javascript>
+function getTextfields(div)
+{
+var sourceText;
+var destText;
+
+for( var Idx = 0; Idx < div.childNodes.length; Idx++ )
+{
+var nodeI = div.childNodes[Idx];
+if ( nodeI && nodeI.type == "textarea" )
+{
+if ( !sourceText )
+{
+sourceText = nodeI;
+}
+else
+{
+destText = nodeI;
+break;
+}
+}
+}
+
+return {source:sourceText, dest:destText};
+}
+
+function saveOriginal(textArea)
+{
+if ( !textArea.originalValue )
+textArea.originalValue = textArea.value;
+}
+
+function doRevert(div)
+{
+var fields = getTextfields(div);
+
+if ( fields.source.originalValue )
+fields.source.value = fields.source.originalValue;
+fields.dest.value = "";
+}
+
+function doResize(div)
+{
+var fields = getTextfields(div.parentNode);
+
+if ( fields.source.savedrows && fields.source.rows != fields.source.savedrows )
+{
+fields.source.rows = fields.source.savedrows;
+fields.dest.rows = fields.dest.savedrows;
+fields.source.cols = fields.source.savedcols;
+fields.dest.cols = fields.dest.savedcols;
+}
+else
+{
+fields.source.savedrows = fields.source.rows;
+fields.dest.savedrows = fields.dest.rows;
+fields.source.savedcols = fields.source.cols;
+fields.dest.savedcols = fields.dest.cols;
+fields.source.rows = 20;
+fields.dest.rows = 20;
+fields.source.cols = 80;
+fields.dest.cols = 80;
+}
+}
+
+function runDemo(div)
+{
+//var theDiv = document.getElementById(divId);
+var fields = getTextfields(div);
+
+fields.dest.value = "...waiting...";
+
+// call out to the main "eval" method
+var result = SWYM.Eval(fields.source.value);
+
+fields.dest.value = result;
+}
+</script>
+<body>
+<image align=top src="SwymLogo1.png">
+<p><i>A language tutorial by Laurie Cheers.</i></p>
+<p>Welcome to Swym. This programming language is designed to let you Say What You Mean, as clearly and elegantly as possible. (It's pronounced "swim", in case you were wondering.)</p>
+
+<p>I designed Swym in a crazy way - I wrote down some programs I wanted to be able to write, regardless of whether they were implementable; and then I reverse-engineered semantics for them. That process showed me how I needed to change the programs, to make them behave more consistently, and to make them parseable. It took about five years of iterating like this, on and off, before the language finally started to gel enough to be implementable. I hope you like the results. If nothing else, the process seems to have given Swym a unique flavour.</p>
+
+<p>The interpreter is currently implemented in Javascript. This isn't intended to be permanent - just for this proof-of-concept implementation. For the same reason, don't be surprised if you experience any slowdowns: at the moment this language isn't optimized at all. Seriously; not. at. all. I decided I preferred getting it working over getting it fast.</p>
+
+<p>I wrote it in Javascript partly because I wanted to learn Javascript better, but mostly to let me embed a command line in this webpage, like this...</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+"Hello, World!"</textarea>
+<div class=control>
+<input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'>
+</div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Click <b>Run</b> to see the output. (You'll need Javascript enabled on your browser, of course.)</p>
+<p>Each time you click you're running the Swym interpreter, live in your web browser. Feel free to rewrite any of the examples on this page and run them to see what you get.</p>
+
+<p>You can also click the <b>+/-</b> button to expand the text boxes, or click <b>Revert</b> if you've deleted the original text and want to get it back.
+
+<hr><h3>Contents</h3>
+<ol>
+<li><a href="#BasicsSection">The Basics</a></li>
+<li><a href="#ListsSection">Lists and strings</a></li>
+<li><a href="#FunctionsSection">Functions</a></li>
+<li><a href="#MultivalueSection">Multi-values</a></li>
+<!--li><a href="#Section5">Variables and cells</a></li-->
+<li><a href="#EtcSection">Etc</a></li>
+<li><a href="#PatternsSection">Patterns and lazy lists</a></li>
+<li><a href="#FutureSection">Future development</a></li>
+</ol>
+
+<p>But hey, maybe you're in a hurry, and you just want to get a flavour of what the language is like. Well, here's a little buffet of code examples. Read on for full details...</p>
+
+<p>Multi-values:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[10, 1..4, 0, 100, 1<..<8]</textarea>
+<div class=control>
+<input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'>
+</div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>The etc keyword:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.total: .1st + .2nd + etc;
+
+[1..10].total
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Patterns:</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+Int.Divisor: [1..this].Where{this%it == 0}
+Prime: {.Divisor == [1,this]}
+
+[1..50].Where(Prime)
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Lazy lists: (Try clicking this one more than once...)</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+Vowel: "aeiou"
+Consonant: "bcdfghjklmnpqrstvwxyz"
+
+random-Struct{ Consonant, Vowel, Consonant, Consonant, Vowel }</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<hr><a name="BasicsSection"></a><h3>Section 1 - The Basics</h3>
+<p>This part of a language tutorial is always tedious, so I'll try to make it quick. Swym is designed to be at least somewhat familiar to anyone who knows a C-like language, such as Java, C#, Javascript... or C itself, of course. Swym has the standard C-style comments (<code>/* */</code> and <code>//</code>), character and string syntax (<code>'X'</code> and <code>"Hello\nWorld!"</code>), arithmetic operators (<code>+ - * / % += -= *= /= %= ++ --</code>), and logical operators (<code>== != &lt; &gt; &lt;= &gt;= && || !</code>), all with the standard precedence. All the basic stuff you see in all these languages. Control expressions also resemble the ones in C - for example, <code>if(x){ return(x); } else { return(y); }</code>. And yes, bring your semicolons. You'll need them.</p>
+
+<div class=demo>
+<textarea cols=70 rows=2 onfocus='saveOriginal(this)'>
+// this will output "true".
+output( 4+5 == (32-5)/3 );
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<div class=aside><p>(FYI, since this is implemented in Javascript, all numbers are implemented as double-precision floats. Thus the division above is floating-point division. I haven't decided whether I want to keep this behaviour permanently.)</p></div>
+
+<p>Yes, function calls look pretty familiar too. Calling <code>output(</code><i>whatever</i><code>)</code> will cause the specified value to be shown in the output window (without halting your program). If your program halts without calling <code>output</code> at all, it'll output the result of the last expression. That's what was happening with the minimalist "Hello World" above.</p>
+
+<p>For convenience, there's also a function <code>print</code>, which does the same as <code>output</code>, but adds a line break. Let's try declaring our own, to see what a function declaration looks like:</p>
+
+<div class=demo>
+<textarea cols=70 rows=10 onfocus='saveOriginal(this)'>
+Value.myprint:
+{
+output(this);
+output("\n");
+}
+
+myprint(5); // print 5
+
+x: "hello";
+x.myprint; // print hello
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=2 class=outputarea></textarea>
+</div>
+
+<p>The colon operator is the way we declare things. The identifier to the left of the colon is the name being declared, and whatever's on the right is the value, or the function's body. Names are case sensitive. As you can see, when we declare a function this way its first argument is implicitly called <code>this</code>.</p>
+
+<p>You'll notice that the definition starts with the word <code>Value</code>. That's the type signature of this function - in this case, not that interesting. <code>Value</code> is the universal type: it matches any value at all.</p>
+
+<p>One major theme in Swym is its flexible syntax. Any single-argument function call can be written function-call style (<code>myprint(x)</code>), or member-access style (<code>x.myprint</code>) with no difference in meaning. You can also mix styles in a single expression (<code>myprint(5.square)</code>). This distinction is entirely aesthetic. I usually find a line is more readable when written in one way or the other.<p>
+
+<p>Functions can also take more than one argument, but it would cause confusion if we allowed the same flexibility there (We can't have <code>a.given(b)</code> mean the same as <code>given(a,b)</code>)! So a function with more than one argument must be called either prefix or infix style, whichever it was declared with.</p>
+
+<p>One last note - <code>x: "hello"</code> above is declaring a <em>constant</em>. You can't modify it after the initial definition. <code>x</code> will contain the value "hello", forever. Swym does have variables too, but we need to introduce a few more concepts before we get to those.</p>
+
+<p>Swym has five basic data types:
+<ol>
+<li>Booleans (<code>true</code> and <code>false</code>)</li>
+<li>Numbers (such as <code>42</code> and <code>-0.5</code>)</li>
+<li>Characters (such as <code>'H'</code> and <code>'\n'</code> - see <a href="#ListsSection">Lists</a> for more details.)</li>
+<li>Lists (such as <code>[1,3,5,9]</code> and <code>"Hello"</code> - see <a href="#ListsSection">Lists</a>.</li>
+<li>Functions (such as <code>{it*it}</code> - see <a href="#FunctionsSection">Functions</a>.)</li>
+</ol></p>
+
+<p>There's one value that's not of the above types: <code>null</code>. This, and the boolean <code>false</code> are considered falsy to anything that cares (such as <code>if</code>). Everything else is considered truthy (including the number <code>0</code> and the empty string <code>""</code> - be careful there).</p>
+
+<hr><a name="ListsSection"></a><h3>Section 2 - Lists and Strings</h3>
+
+<p>In Swym, declaring a list of values looks much like an array in Javascript. You just write a series of values between square brackets. The values can be separated by either commas or semicolons. If you want you can also put a comma or semicolon after the last item; or not. (Again, these are just aesthetic choices). And naturally, <code>[]</code> is the empty list. (Or <code>[,]</code> or <code>[;;,,,;,]</code>.)</p>
+
+<p>Note that in Swym, square brackets <em>always</em> denote that a new list is being created. You can't use them to get elements from a list. Accessing elements of a list can be done with the function <code>at</code> - for example, <code>mylist.at(0)</code>. (By default, the first element is at index 0.)</p>
+
+<p>Strings don't have a special type of their own in Swym - any list of character values is a string. So most functions that operate on lists can also operate on strings:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+print-Reversed[1,3,5,9];
+print-Reversed("Hello");
+print( "yes" == ['y','e','s'] ); // prints "true": these are equivalent
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=3 class=outputarea></textarea>
+</div>
+
+<div class=aside><p>(PS: two bits of syntactic sugar snuck in there. Firstly, if you're doing a function call such as <code>Reversed( [1,3,5,9] )</code>, you can save some typing by omitting the round brackets - <code>Reversed[1,3,5,9]</code>. A name followed by any type of open bracket denotes a function call. Incidentally, that's why Swym doesn't support indexing a list using square brackets: <code>a[b]</code> would denote calling the function <code>a</code> on the list <code>[b]</code>.</p>
+<p>And secondly, if you're doing a function call like <code>print(Reversed("Hello"))</code>, you can save a little more typing by changing it into what I call "hyphenated style": <code>print-Reversed("Hello")</code>. It doesn't make that much difference here, but in more complex expressions it can be a nice way to avoid strings of close brackets... <code>))))))</code>.</p>
+
+<p>PS: and yes, the minus sign can also mean subtraction. Here's the rule: a hyphenated function is a series of identifiers separated by minus signs and no whitespace, and there must be <em>either</em> (A) a dot at the beginning, (B) an open bracket at the end, or (C) at least two minus signs in the sequence. So <code>a-b</code> means subtraction, as does <code>a&nbsp;-&nbsp;b(c)</code>. But <code>a.b-c</code> and <code>a-b-c</code> and <code>a-b(c)</code> are function calls. So, yeah - if you think this is weird... I know. It's just that sometimes the hyphenation makes the code so pretty! I couldn't resist it.</p>
+
+<p>A useful trick for improving these hyphenated calls is to add calls to <code>of</code>. The <code>of</code> function is defined as <code>Value.of: it;</code> which is to say, it has no effect and simply returns its argument verbatim. <code>of</code>'s only purpose is to improve readability: <code>print-Stem-of-each-Partitioning-of-X</code>.)</p></div>
+
+<p>If every element in a list is a character, Swym will print the list as a string. Otherwise, it gets displayed as a comma-separated list of values. (One weird case: the empty list <code>[]</code> is equivalent to an empty string, and it gets printed as such.)</p>
+
+<p>Swym supports string interpolation, as seen in Perl or Ruby: when you write <code>$name</code> in a string, you're inserting the contents of the value called <code>name</code> at that point. If you actually want a $ sign in your string, use <code>\$</code>.
+
+<p>Unlike Perl or Ruby, however, Swym also lets you write <code>$foo.bar</code> to call a postfix-style function within a string - or <code>$(</code><i>whatever</i><code>)</code> to run some arbitrary code. The latter is also useful to precisely mark the end of the interpolated section - for example, without it you couldn't insert a value that's immediately followed by a letter. <code>"You're on the $(floor)th floor."</code>.</p>
+
+<p>Take it away, maestro...</p>
+
+<div class=demo>
+<textarea cols=70 rows=12 onfocus='saveOriginal(this)'>
+Int.bottles:
+case(this)
+[0] {"no more bottles"}
+[1] {"1 bottle"}
+else {"$this bottles"};
+
+for(3..1)
+{
+print("$it.bottles of beer on the wall, $it.bottles of beer.");
+print("You take one down, pass it around, ");
+print("$((it-1).bottles) of beer on the wall.\n");
+}</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=13 class=outputarea></textarea>
+</div>
+
+<div class=aside><p>(More syntactic sugar: Any function call like <code>f(x,y)</code> can also be written <code>f(x)(y)</code>. So the <code>case</code> and <code>for</code> statements there are really just function calls: <code>case( this,[0],{"no more bottles"},[1],{"1 bottle"} )</code>, and <code>for( 3..1, {...} )</code>. On the other hand, <code>else</code> is a keyword - we'll go into that a bit later.)</p></div>
+
+<p>This example will hopefully give you a bit more of a feel for the language. I won't explain every detail for now, but the basic logic should be clear enough: first we're defining a function called <code>bottles</code>, which takes an <code>Int</code> as a parameter (implicitly named <code>this</code>), and uses the function <code>case</code> to choose one of three possible templates to display that number of bottles. Then, to print each verse, we count down from 3 to 1 (and that number is implicitly called <code>it</code>), and we call <code>it.bottles</code> a few times to fill in the appropriate numbers of bottles. This also works if you replace the 3 with 99, of course.</p>
+
+<hr><a name="FunctionsSection"></a><h3>Section 3 - Functions</h3>
+
+<p>In actual fact, there were five functions being defined in the example above - 'bottles', plus four anonymous functions. Swym's notation for declaring anonymous functions is very minimalist: just write any expression in curly brackets. Such a function takes one argument, called <code>it</code>, and returns the result of evaluating the expression. So <code>{it*2}</code>, for example, is a function that returns twice the number you pass to it.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+for(44){ it*2 }
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p><a name="myfor">The function <code>for</code> is a very simple one - it just takes a value, and a function, and calls that function with that value. Let's define our own, for the sake of it:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+myfor(v:Value)(.f:Function): v.f;
+
+myfor(44){ it*2 }
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Something to note: we named the second parameter <code>.f</code>, not just <code>f</code>. If we hadn't put a dot at the beginning, we wouldn't have been able to call it using a function call.</p>
+
+<p>Whichever function call syntax you use, a call to a function named <code>foo</code> is actually treated as a call to a function named <code>.foo</code>. Or to put it another way - functions have their own namespace in Swym. You can have a function called <code>.foo</code> and a value called <code>foo</code>, and they'll happily coexist. Whenever you write <code>x.foo</code> or <code>foo(x)</code> you'll be calling the function; any other way of referring to <code>foo</code> will refer to the value.</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+Int.half: this/2;
+half: 0.5;
+
+half.half
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Which means that, yes, all you can do with a function named <code>.foo</code> is call it. In particular, you can't just <em>refer</em> to the function without calling it. This is pretty unusual in a functional language, but it turns out not to be a big problem. Instead of passing the function directly, you'll have to define a new anonymous function which <em>calls</em> <code>.foo</code>. You can pass anonymous functions around just fine.</p>
+
+<p>As you can perhaps see, although Swym could certainly (semantically speaking) be classed as a functional language, it gently discourages the kind of mind-bogglingly abstract function-munging that sometimes goes on in languages like Haskell.</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+Greeting:["hello","hola","bonjour"];
+
+Greeting.SortedBy{.length};
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<div class=aside><p>(This comes up so much, we have one more bit of syntactic sugar for it: writing <code>.function</code> is a shorthand for <code>it.function</code>.)</p></div>
+
+<p>Aww, that wasn't so bad, was it? In case it's not obvious, <code>.SortedBy</code> is a function that takes a list, and a function, and returns the contents of the list, sorted by the results from that function. And <code>.length</code> is a function that takes a list, and returns the list's length.</p>
+
+<p>Let's see some more predefined functions that work on lists:</p>
+<table>
+<tr class=odd><td>P.at(n)</td><td>The value at index <i>n</i>. (P.at(0) being the first.)</td></tr>
+<tr><td>1st(P), first(P)</td><td>The first value in the list P.</td></tr>
+<tr class=odd><td>2nd(P)</td><td>The second value in P.</td></tr>
+<tr><td>5th(P)</td><td>The fifth value in P.</td></tr>
+<tr class=odd><td>53rd(P)</td><td>The fifty-third value in P. (Etc. You get the idea.)</td></tr>
+<tr><td>last(P)</td><td>The last value in P.</td></tr>
+<tr class=odd><td>2ndLast(P)</td><td>The second-last value in P. (Etc.)</td></tr>
+<tr><td>length(P)</td><td>The number of values in P.</td></tr>
+<tr class=odd><td>total(P)</td><td>(on a list of numbers) All those numbers, added together.</td></tr>
+<tr><td>Flattened(P)</td><td>(on a list of lists) All those lists, concatenated into a single list.</td></tr>
+<tr class=odd><td>min(P)</td><td>The smallest value. (Or if several are equally small, the first of them.)</td></tr>
+<tr><td>Min(P)</td><td>A new list: all the equal-smallest values.</td></tr>
+<tr class=odd><td>max(P)</td><td>The largest value. (Or if several are equally large, the first of them.)</td></tr>
+<tr><td>Max(P)</td><td>A new list: all the equal-largest values.</td></tr>
+<tr class=odd><td>random(P)</td><td>Any value from P, selected at (pseudo)random.</td></tr>
+<tr><td>Reversed(P)</td><td>A new list: the contents of P, in reversed order.</td></tr>
+<tr class=odd><td>Shuffled(P)</td><td>A new list: the contents of P, in a random order.</td></tr>
+<tr><td>Sorted(P)</td><td>A new list: the contents of P, in ascending order.</td></tr>
+<tr class=odd><td>Tail(P)</td><td>A new list: all values in P except the first.</td></tr>
+<tr><td>Middle(P)</td><td>A new list: all values in P except the first and last.</td></tr>
+<tr class=odd><td>Stem(P)</td><td>A new list: all values in P except the last.</td></tr>
+<tr><td>P.Each{f}</td><td>A new list: the result of calling f on each element.</td></tr>
+<tr class=odd><td>P.Where{f}</td><td>A new list: the values in P for which <i>f</i> returns true.</td></tr>
+<tr><td>P.SortedBy{f}</td><td>A new list: the contents of P, sorted by the values returned by <i>f</i>.</td></tr>
+<tr class=odd><td>P.withMin{f}</td><td>A new list: the first value for which f returns the smallest value.</td></tr>
+<tr><td>P.WithMax{f}</td><td>A new list: all the values with the equal-largest value of f.</td></tr>
+</table>
+
+<p>In particular, notice the naming convention - most functions start with an uppercase letter if they return a new list (i.e. multiple values), or lowercase if they return a single value. If a single-value function doesn't have a suitable value to return (for example if you write <code>[5,8,3].10th</code> to get the tenth element of a 3-element list), then it will return <code>null</code>.</p>
+
+
+<p>Let's try out a couple of these functions.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[[8,5],[2,5],[6,2],[1,4]].WithMax{.2nd - .1st}</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<hr><a name="MultivalueSection"></a><h3>Section 4 - Multi-values</h3>
+
+<p>And now for something completely different (different from every other language, that is). In most languages, an expression must return one and only one value. In Swym, an expression can return <em>several</em> values!</p>
+<p>So, er, what does that mean? Well, one common use for it is to fill in the contents of a list. If you write a multi-valued expression in a list, the result will be a list with <em>all</em> those values inserted at that position.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[10, 1..4, 0, 100, 1<..<8]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>This is demonstrating two of the simplest multi-value operators.</p>
+<!--p>The <code>±</code> operator returns two values: a + b, then a - b. (Or the left hand side can be omitted - so it will just return b, then -b). And, er, yes... that's not an ascii symbol. I'm not entirely comfortable with this, but it has survived my numerous attempts to replace it. Bottom line: there's just no better way to write plus-or-minus. And really, it's not <em>that</em> awkward. You can type it with Alt-241, which makes a nice easy-to-remember triangle pattern on the numeric keypad. And if all else fails, you can even use the pure ascii version, <code>+_</code>. Nevertheless, this is probably one of my more controversial design decisions in Swym. I'll be interested to see how reliably it can be displayed, and what people make of it.</p-->
+<p>The <code>..</code> operator returns a sequence of integers - starting with the left hand one, and ending with the right hand one. The sequence can be ascending or descending, and will include both endpoints. If you want a sequence that excludes one or both endpoints, and/or enforces an ascending or descending order, there are some related operators: <code>..&lt;</code> for example, which will exclude the right hand number - and also the left hand one, if it's greater than or equal to the right hand side. So <code>1..&lt;0</code>, for example, won't return any values at all. Other operators in the family are <code>..&gt; &lt;.. &gt;.. &lt;..&lt; &gt;..&gt;</code>.
+
+<p>And of course, we're already familiar with the simplest multi-value operator: the <code>,</code> operator just returns the value(s) from its left hand side, followed by the value(s) from its right hand side.</p>
+
+<p>One particularly useful way of producing multiple values is the <code>each</code> function. (Not to be confused with the <code>Each</code> function). <code>each</code> takes a list, and literally returns each element of that list. It's the inverse of the list construction <code>[]</code> operator. For example:</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+Int.NontrivialDivisor: [1<..this/2].Where{ this%it == 0 };
+
+Int.Divisor: [1, each(.NontrivialDivisor), this];
+
+16.Divisor</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>This is a little more involved, so let's go through it step by step.</p>
+<p>The first line is a function that takes a number, and generates a list of its nontrivial divisors (i.e. the numbers it's divisible by, except for 1 and itself). So for example, <code>NontrivialDivisor-of(16)</code> would return <code>[2,4,8]</code>. The function works by first generating a list <code>[1&lt;..this/2]</code>, which contains every positive integer greater than 1, up to and including half of the number in question (a little optimization there). Then, it calls <code>Where</code> to discard those which don't divide into the first number with remainder zero.</p>
+
+<p>In particular, notice the code <code>this%it</code> - where <code>this</code> is the number we're generating the divisors for, and <code>it</code> is the list element we want to test.</p>
+
+<p>The second line is a function that generates a list of all divisors for a number, both trivial and nontrivial. It does this by simply constructing a list containing 1, then (literally) each nontrivial divisor, and then the number itself. And finally, the third line calls Divisor to generate all the numbers 16 is divisible by.</p>
+
+<p>So, we've seen how a multi-value expression behaves within square brackets. Let's have a look at how they interact with other expressions. For example:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[ 10 + (1..6) ]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Yes, writing 10 + (1..6) is like writing 10+1, 10+2, 10+3, 10+4, 10+5, 10+6. Basically, the whole expression <code>10+(<i>something</i>)</code> is being evaluated once for each (<i>something</i>). If there are two or more multi-values, we run the expression once for each <em>pair</em> of values - each value on the left gets combined with each value on the right:
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[ (1..5) * (1,10,100) ]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Functions and string interpolations also work this way. For example, here we call <code>print</code> repeatedly:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+print("print has been called $(1..6) time(s)");</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=7 class=outputarea></textarea>
+</div>
+
+<p>There's an important corollary to this: when you define a function, the function parameters it receives are guaranteed to be single values. If someone does call your function with a multivalue, the function body will just run multiple times.<p>
+
+<p>Oh, and there's one function which gets called this way an awful lot. We saw it in the bottles of beer example - it's called <code>for</code>.</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+for(1..6)
+{
+  output("blah ");
+}
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>The last concept I want to introduce here is called <i>zero values</i>. It follows fairly obviously from the features I just explained: if an expression can evaluate to more than one value, naturally it can also evaluate to <em>less</em> than one. <code>each[5,6,7]</code> returns three values, while <code>each[]</code> returns zero values.</p>
+
+<p>Similarly, if you write <code>print(each[5,6,7])</code>, the print function gets called three times. And if you write <code>print(each[])</code>, the print function doesn't get called at all.</p>
+
+<p>Enter the operator <code>?</code>. It takes any number of values, and drops any that are <code>false</code> or <code>null</code>. So <code>null?</code> will return zero values, just like <code>each[]</code>.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+(true, false, 1, 0, null) ?</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=3 class=outputarea></textarea>
+</div>
+
+<p>This turns out to be great for aborting a series of function calls that might fail at any point:</p>
+
+<p><code>ApronPocket: [bob?.mother?.apron?.pocket?];</code></p>
+
+<p>That is to say: if bob exists, get his mother; if his mother exists, get her apron; if her apron exists, get its pocket. But if any of these is <code>null</code>, don't call any more functions: ApronPocket will just become <code>[]</code>.</p>
+
+<p>In fact, <code>?</code> acts as the language's primitive building block for all conditionals. The <code>if</code> function can be trivially defined using <code>?</code>:</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+myif(Value)(.then:Function): for(this?){ then() };
+
+x: 2;
+myif(x > 0){ output("x > 0 "); };
+myif(x &lt; 2){ output("x &lt; 2 "); };</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Ta-daa! In Swym, <code>if</code> is just a normal function. It takes a value and a function, and calls the function if and only if the value is truthy.</p>
+
+<p>Note that if the value is falsy, <code>if</code> returns zero values. This is pretty handy, as it turns out, because we can detect the difference with...</p>
+
+<div class=demo>
+<textarea cols=70 rows=7 onfocus='saveOriginal(this)'>
+myif(Value)(.then:Function): for(this?){ then() };
+
+x: 1;
+myif(x > 1)
+{ print("x > 1"); }
+else
+{ print("x &lt;= 1"); }</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>After all, how silly would it look to have an "if" without allowing an "else"?</p>
+
+<p><code>else</code> is a keyword. (One of a very select set, in fact, because the language only has three keywords - <code>is</code>, <code>else</code>, and <code>etc</code>). On its left hand side, <code>else</code> takes any number of values. If there's one or more of them, it returns those values unchanged. If there are zero values, it evaluates and returns its right hand side instead.</p>
+
+<p>(As is probably becoming clear, Swym is a C-like language that's built out of lego bricks.)</p>
+
+<p>One last thing to note - <code>a? else{b}</code> is a handy way to express a "fallback" in the event that <code>a</code> is null. But there's no easy way to emulate an a?b:c operator this way. You'll just have to say <code>if(a){b}else{c}</code>.
+
+<!--hr><a name="Section5"></a><h3>Section 5 - Variables and cells</h3>
+<p>Ok - on to Swym's support for mutable data. As we already established, most of the time when you declare something in Swym, it's a constant. Here's an example of declaring a variable, modifying it, and reading from it:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+x:var(Int) = 5;
+x+=2;
+print(x);
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Yeah, the declaration syntax is a little more cumbersome than C's, but bear with me here; as with array indexing, this is just a reflection of the relative importance of variables in the two languages.</p>
+
+<p>Variables in Swym, like C, get passed by value. In other words, when you pass a variable into a function, its "variableness" will be stripped off. This prevents functions from unexpectedly modifying your variables. To prevent this behaviour, you can use the <code>~</code> postfix operator:</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+Int.Var.increment: this++;
+x:var(Int) = 5;
+
+x~.increment;
+print(x);
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Now, here's something you can't create in C - a list of variables! Again, you'll need to use the <code>~</code> operator to put them into the list.</p-->
+
+<hr><a name="EtcSection"></a><h3>Section 5 - The Etc keyword</h3>
+<p>I think <code>etc</code> is probably the part of Swym that I'm most proud of. It's the ultimate embodiment of language's design philosophy: code readability, at the cost of all else. Writing <code>etc</code> in an expression is your way of telling the compiler "...and so on in the obvious way. You figure it out". Let's have a look:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.total: .1st + .2nd + etc;
+
+[1..10].total;
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>There isn't all that much for the compiler to figure out, here... but we can already start to get a hint of how powerful this concept can be. The <code>etc</code> keyword must appear immediately after an infix operator, and it searches the surrounding code for a chain of instances of that operator, and the arguments they take. In this case it sees the <code>+</code> operator, and two arguments: <code>.1st</code> and <code>.2nd</code>. From these it can extrapolate <code>.3rd</code>, <code>.4th</code> and so on, stopping (it helpfully deduces) when the end of the list is reached. Let's see another example:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.byPairs: [[.1st, .2nd], [.3rd, .4th], etc];
+
+byPairs[1..10];
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Now we're making a sequence of <code>,</code> operators, and we have two terms to extrapolate from - <code>[.1st, .2nd]</code> and <code>[.3rd, .4th]</code>. What's the difference between these two expressions? Well, <code>.1st</code> has been replaced with <code>.3rd</code>, and <code>.2nd</code> has been replaced with <code>.4th</code>. The compiler considers each of these differences independently. So for the first case it will deduce the sequence <code>.1st .3rd .5th .7th...</code>, and for the second, <code>.2nd .4th .6th .8th...</code>.</p>
+
+<p>And, for those who are wondering: yes, 2-4-6-8 is the default, but you can get it to understand 2-4-8-16 if you give enough examples.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[2,4,8,etc..<10000]
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Also note the halt condition, which - of course - is reminiscent of the 1..&lt;10 notation we saw earlier. An <code>etc..&lt;</code> expression will terminate as soon as it sees a term that's greater than the termination value. Note that while the left hand side of an etc expression is handled at compile time, the termination value is determined at runtime. And as you'd expect, there's a related family: <code>etc..&lt;= etc..&gt; etc..&gt;=</code>. </p>
+
+<p>We can use this to decompose a number into powers of two -</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+Int.toBits: [1,2,4,etc..<=this].Where{(this/it)%2 >= 1};
+
+19.toBits
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>The compiler always assumes that each entry in the sequence follows directly on from the previous one. So if you'd like your etc sequence to alternate in some way, you'll need to bracket the expressions. let the compiler deduce how each <em>group</em> of terms follows on from the previous <em>group</em>.
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+Interleave(a:List)(b:List): [ (a.1st, b.1st), (a.2nd, b.2nd), etc];
+
+Interleave[1..9][100,200,etc..900];
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>In the end, the compiler processes <code>Interleave</code> in almost exactly the same way as <code>byPairs</code>.</p>
+
+<p>Here's a quick demonstration of how to define your own <code>each</code> function. This is actually how the built-in <code>each</code> function is defined. Look, there's nothing magical about it. (at least, no more magic than the rest of the language!).</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.myeach: .1st, .2nd, etc;
+
+10 + myeach[1..5]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=5 class=outputarea></textarea>
+</div>
+
+<p>And this etc concept keeps on surprising me - every time I work with it, I find something new it can do. Very cool. Here's a particularly elegant one:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.transpose: [[.each.1st], [.each.2nd], etc];
+
+transpose[[10..15],[20..25],[30..35]]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=2 class=outputarea></textarea>
+</div>
+
+<p>And another:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+1/2 + 2/4 + 3/8 + etc</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div><br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>I should point out here that I've capped the number of iterations to avoid having infinite loops in cases like this. At the moment, an <code>etc</code> expression cannot perform more than 1000 iterations. This won't be a permanent limit - just until the compiler can be made a little smarter about detecting loop termination conditions.</p>
+
+<hr><a name="PatternsSection"></a><h3>Section 6 - Introducing Patterns</h3>
+<p>The last big concept in Swym that I haven't covered yet is the Pattern. We've seen a few already - here are some of the predefined patterns that Swym offers.</p>
+
+<!--div class=floatbox><image src="plaid.jpg"><br><center><small><i>Not that kind of pattern.</i></small></center></div-->
+<a name="patternlist"></a>
+<table>
+<tr class=odd><td>Int</td><td>Any whole number.</td></tr>
+<tr><td>Positive</td><td>Any number greater than zero.</td></tr>
+<tr class=odd><td>Natural</td><td>Any whole number greater than or equal to zero.</td></tr>
+<tr><td>Num</td><td>Any number.</td></tr>
+<tr class=odd><td>Pattern</td><td>Any pattern (function or list).</td></tr>
+<tr><td>String</td><td>Any string. (a list that contains only characters.)</td></tr>
+<tr class=odd><td>Function</td><td>Any function.</td></tr>
+<tr><td>List</td><td>Any list.</td></tr>
+<tr class=odd><td>Bool</td><td>The value true or false.</td></tr>
+<tr><td>Value</td><td>Any number, list, pattern, function... anything. This is the most general pattern possible.</td></tr>
+</table>
+
+<p>That's right - the types we've been using are patterns. You can think of a pattern, in general, as a (potentially infinite) set of possible values. The key feature that patterns have is the ability to test whether they contain a given value, using the <code>is</code> operator:</p>
+
+<div class=demo>
+<textarea cols=70 rows=6 onfocus='saveOriginal(this)'>
+print( 4 is Num ) // true, 4 is a number
+
+DivisorOf16: [1,2,4,8,16];
+print( DivisorOf16 is List ) // true, it is a list
+
+print( 4 is DivisorOf16 ) // also true
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=3 class=outputarea></textarea>
+</div>
+
+<p>That last line was there to wake you up. A list is a kind of pattern! Specifically, it's a pattern that contains a very limited set of values - the elements of that list. Check out how <code>Bool</code> is defined, for example:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+Bool</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Having said that... what are the more general patterns, like Value or String? Surely they can't be lists of all possible values...?</p>
+
+<div class=demo>
+<textarea cols=70 rows=8 onfocus='saveOriginal(this)'>
+Even: {it%2 == 0};
+print(5 is Even); // false, 5 is not an even number
+
+UnderTen: {it &lt; 10};
+print(5 is UnderTen); // true, 5 is less than ten
+
+myValue: {true}; // let's define our own version of Value
+print(5 is myValue); // true, everything is a Value</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=3 class=outputarea></textarea>
+</div>
+
+<p>Well, hey - a function is also a kind of pattern! Specifically, a function is a pattern that contains all values for which it returns a truthy value.</p>
+
+<p>We're seeing something new here: these functions are being stored under ordinary variable names. You may remember, back when I defined <a href="#myfor">myfor</a>, that I said functions have their own namespace - and that if I had called the function <code>f</code> instead of <code>.f</code>, that function would not have been callable. Well, that's what is happening here. UnderTen is a function that has been 'disarmed'. By storing it under a normal variable name, we've made it behave like a normal value - you can pass it around, and test it with <code>is</code>, but it cannot be called unless you first copy it into a <code>.foo</code> variable. (In fact, the easiest way is to call a function that will do that for you: <code>for(&nbsp;x,&nbsp;UnderTen&nbsp;)</code>).</p>
+
+<p>Let's try defining a pattern that's more than just a toy example.</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+Int.Divisor: [1..this].Where{this%it == 0};
+Prime: {.Divisor == [1,this]};
+
+[1..50].Where(Prime)
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Let's see how many surprises we can pack into this section. Remember the <code>Where</code> function we saw earlier, that filters a list? Well, its argument is actually just a pattern:</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+[1..10,10..1,1..10].Where[3,5]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>As is probably pretty obvious at this point, 'patterns' correspond to sets in set theory. <code>Where</code> is intersection, <code>[]</code> the empty set, and <code>Value</code> the universal set. The operator <code>|</code> serves as set union, and (equivalently) list concatenation. And inversion? Well, that would be the <code>Non</code> function. But hey, why don't we implement our own?</p>
+
+<div class=demo>
+<textarea cols=70 rows=7 onfocus='saveOriginal(this)'>
+MyNon(Pattern):
+{
+  {!(it is this)} // look, it's a function that returns a function!
+}
+
+print(5.5 is MyNon(Int)); // true, it's not an integer
+print(6 is MyNon(Int)); // false, it's an integer</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=2 class=outputarea></textarea>
+</div>
+
+<p>You can even implement Bertrand Russell's favourite paradox if you want:</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+PatternNotContainingItself: Non{it is it};
+
+print(Value is PatternNotContainingItself); // false
+print([1,2,3,4] is PatternNotContainingItself); // true</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=2 class=outputarea></textarea>
+</div>
+
+<div class=aside><p>(Pop quiz: apart from Value, my <a href="#patternlist">introductory list</a> contains two other patterns that aren't described by PatternNotContainingItself. Can you name them?)</p></div>
+
+<p>And naturally, there's no way to answer whether <code>PatternNotContainingItself is PatternNotContainingItself</code>. (In fact, on the current implementation that'll cause a stack overflow).</p>
+
+<p>So: that's the 'what' of patterns, in a nutshell. Now I guess I'd better answer the 'why': what are these things good for? Why are they in the language? Why conflate lists with functions and treat them both as sets?</p>
+
+<p>To start answering that question, here's another example.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+each-Pair-of-Bool
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=4 class=outputarea></textarea>
+</div>
+
+<p>The Pair function, applied to a pattern, is a simple enough concept - it lets you confirm that <code>[4,5] is Pair-of-Int</code>, for example.</p>
+
+<p>But, as I played with this concept - and others like it that we'll see in a moment - I realized it ought to be more powerful. There are lots of situations where it's really useful to be able to iterate though every possible value of a given type; and if you use Pair on such a type, it would make sense to allow you iterate through every possible pair of those values.</p>
+
+<p>I soon realized that these 'enumerable types' were essentially the same as lists - and there were plenty of situations where I wanted to use a list function on an enumerable type, or vice versa, so I was having to convert data from one format to the other. Really clunky.</p>
+
+<p>So I unified them. All enumerable types are lists. All lists are enumerable types. And if you call Pair on a list (rather than just a pattern), it returns another list: all possible Pairs of elements of your list.</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+Pair-of-Bool
+</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Internally, however, this thing is smarter than your average list - it doesn't just blindly generate the list of pairs and then try to match potential candidates against every one of the possible pairs. Enumeration happens only on demand; and testing whether a given list is a Pair-of-Bool would use a completely different code-path.</p>
+
+<p>Here are some more functions that produce these "smart lists":</p>
+
+<table>
+<tr class=odd><td>List.Segment</td><td>All the different contiguous segments that can be taken from this list.</td></tr>
+<tr><td>List.Prefix</td><td>All the segments that start from the first element.</td></tr>
+<tr class=odd><td>List.Suffix</td><td>All the segments that end with the last element.</td></tr>
+<tr><td>List.Filter</td><td>All the different ways you could drop elements from this list.</td></tr>
+<tr class=odd><td>List.Permutation</td><td>All the different ways to reorder this list.</td></tr>
+<tr><td>List.Partition</td><td>All the ways to slice this list into (nonempty) pieces.</td></tr>
+<tr class=odd><td>P.Pair</td><td>All the possible lists that contain two P's.</td></tr>
+<tr><td>Struct{P1, P2}</td><td>A generalization of Pair: all the possible lists that contain a P1, then a P2 - or whatever other sequence you specify.</td></tr>
+</table>
+
+<p>These things are really nice to work with. Who likes anagrams?</p>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+random-Permutation-of("Hello World!")</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>(As you may recall, the <code>random</code> function just selects one random element from a list.)</p>
+
+<p>Alternatively, we can generate new nonsense words:</p>
+
+<div class=demo>
+<textarea cols=70 rows=4 onfocus='saveOriginal(this)'>
+Vowel: "aeiou"
+Consonant: "bcdfghjklmnpqrstvwxyz"
+
+random-Struct{ Consonant, Vowel, Consonant, Vowel }</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>And usual, the next step in this process is to start defining our own! The simplest way to create a lazy-evaluated list is the <code>LazyList</code> function. For example, let's define our own version of the Prefix function - which takes a list, and returns all the ways you could truncate the list.</p>
+
+<div class=demo>
+<textarea cols=70 rows=6 onfocus='saveOriginal(this)'>
+List.MyPrefix: LazyList(.length)
+{
+  [this.at(0..it)]
+}
+
+each-MyPrefix-of[100..106]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=7 class=outputarea></textarea>
+</div>
+
+<p>The LazyList function takes two arguments: the length of the list we're generating, and a function that generates elements of that list, when given their index.</p>
+
+<p>It also has an optional third argument: a <em>pattern</em> that we can use to quickly decide whether a value is in the list. This is just an optimization - if you don't provide one, testing it will still work, but it'll be much slower. It'll search through the list, checking each element to see whether it matches. The whole point of using a LazyList, though, is that it's (potentially) an incredibly long list with a definite pattern to it. Let's try defining that Pair function.</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+List.MyPair: LazyList(.length * .length)
+{ [ this.at(it%this.length), this.at-floor(it/this.length) ] }
+{ it is List && .length == 2 && .1st is this && .2nd is this; };
+
+each( MyPair-of[100..106].Where-MyPair-of[104..109] )</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=9 class=outputarea></textarea>
+</div>
+
+<!--p>Let's try something trickier - the Partitioning function.</p>
+
+<div class=demo>
+<textarea cols=70 rows=9 onfocus='saveOriginal(this)'>
+List.MyPartitioning: LazyList(2.pow(.length-1))
+{
+  for[this.Cell.1st, this.Cell.Tail.Filter.at(it).each]
+{
+  [ ([.1st..&lt;.2nd], [.2nd..&lt;.3rd], etc), [.last..this.last]]
+}
+};
+
+each-MyPartitioning-of[100..106]</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=7 class=outputarea></textarea>
+</div-->
+
+<hr><a name="FutureSection"></a><h3>Section 7 - Future Development</h3>
+
+<p>This section is just to show off some more features that are more or less working, but I'm not satisfied with their current design.</p>
+
+<h4>Quantifiers:</h4>
+
+<div class=demo>
+<textarea cols=70 rows=7 onfocus='saveOriginal(this)'>
+A:[1..10];
+B:[5..9];
+
+if(/ some(A) > every(B) )
+{
+   print("Yes, there's an A that is greater than every B");
+}</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Quantifiers allow you to say what you mean using a convenient, familiar english concept. They're currently implemented as a special kind of multi-value. So you can think of the functions <code>.some</code> and <code>.every</code> (and their less positive brothers <code>.no</code> and <code>.notevery</code>) as being strange cousins to the <code>.each</code> function.</p>
+
+<p>Basically, this expression some(A) > every(B) is getting executed once for every possible pairing of A and B values - but stopping when a match is found. Note also that lexical order matters - so <code>some(A) == every(B)</code> is quite different from <code>every(B) == some(A)</code>. (The first one checks whether there's just a <em>single</em> value in A that's equal to <code>all</code> the values in B. The second one checks whether each of the values in B is equal to some value - but not necessarily all the same value - in A).</p>
+
+<p>In an ideal world, I'd like to allow <code>.some</code> (but not the others) to bind the value it has matched: <code>if(/test( result:some(A) )){ ...do something with result... }</code>. I also want to find a way to get rid of the resolve operator, <code>/</code> - that's how you convert these multi-values into single boolean results. But it feels clumsy to me - I want them to be auto-resolved reliably enough that you almost never need to use it. I just haven't found the correct rule for when to do it.</p>
+
+<h4>Cells:</h4>
+
+<div class=demo>
+<textarea cols=70 rows=1 onfocus='saveOriginal(this)'>
+Cell[1,2,4,etc..<500].Where{it > .index*10}</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Cells are an amazingly useful and natural concept but, again, I'm not 100% happy with them at the moment. Essentially, a cell is an element of a list that has added metadata: it knows what list it's from, and which index it was at within that list.</p>
+
+<p>To get started, the Cell function is used to convert any list into a list of cells. The cells are the same as the elements of the original list, except that they respond to three extra functions: <code>.sourceList</code> to get the original list, <code>.index</code> to get this cell's index within that list, and <code>.cellValue</code> to strip away this metadata and just return the original value.</p>
+
+<p>So far, this probably sounds moderately useful, but a little clunky. Why do we use the Cell function - isn't that just a needless extra step? Why can't this information come along for free, <em>every</em> time we get an element from a list? Well, actually, this explicit call provides one crucial benefit: we make it possible for the programmer to specify exactly <em>which</em> source list he was interested in. In other words, it becomes possible to make a list that contains cells from <em>another list</em>.</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+X:[101,107,112,116,etc..>100];
+
+Y:Cell(X).Where{it > 115};
+
+Y.Each{.index}</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>Here, the function Where scans through the list we give it, selects the values that are greater than 115, and uses them to create a list Y. But since the input list is <code>Cell(X)</code>, Y is actually a list of cells - cells whose source list is list X. Which means that when we tell the Each function to get the index of each of them, we see their index <em>within the list X</em>, not their index in the list Y.</p>
+
+<p>I said that cells behave the same as the value they're based on... but there is one more difference:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+List.MyMiddle: [1st(.Cell) <..< last(.Cell)];
+
+MyMiddle("Hello World");</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>When you use a range operator on a pair of cells, you're not getting a numeric range: you're getting a range of cells from the source list. This makes it amazingly easy and natural to manipulate slices of a list, and do all kinds of useful tricks.</p>
+
+<p>Finally, I should point out you're not limited to calling the standard <code>.sourceList</code> and <code>.index</code> functions. If you want, you can define your own functions that operate on cells:</p>
+
+<div class=demo>
+<textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
+Cell.After: [it <.. last-Cell-of(.sourceList)];
+
+After-3rd-Cell-of("Hello World");</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>So, yeah, it's all really cool stuff... but the current implementation has problems. If you filter a list of cells (as we saw above), and then you use MyMiddle on the filtered list, the result will have lost its original cell metadata. MyMiddle calls Cell internally, so the cells it returns are always sourced to the <em>filtered</em> list! I haven't entirely figured out what I want to do about this, but I think I want some lexical scoping here. Each block of code can only have one cell list, and if you call .Cell on a list, then that's the cell list you're going to use. Any use of .index - or any other function that takes a Cell as its argument - will implicitly select that cell list.</p>
+
+<h4>Vars:</h4>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+x: Int.var = 5;
+print(x);
+
+x = 7;
+print(x);</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=3 class=outputarea></textarea>
+</div>
+
+<p>Eagle eyed readers may have noticed that this is the first time I've used an assignment operator in this entire tutorial. Swym is powerful enough that mutable data is often unnecessary, but I'm a pragmatist: when you need it, you need it. So I added support for opt-in mutable data.</p>
+
+<p>The question is, how should it work? Under the current implementation, it's a form of metadata, much like the cells we just saw. As you can see, you create new variables with the <code>.var</code> function. It takes one argument, a pattern: in this case, <code>Int</code>. So this variable can only contain integer values. Initially, we assign it the value <code>5</code>, which means <code>x</code> can be treated almost exactly like the value <code>5</code>, but with one extra feature: you can assign it new values with the <code>=</code> operator (and others like <code>+=</code> or <code>--</code>). ()</p>
+
+<p>This seems like a pretty nice model. For example, it means you can create a list of variables, generate a new list containing some of those variables, and use that to modify the original list.</p>
+
+<div class=demo>
+<textarea cols=70 rows=5 onfocus='saveOriginal(this)'>
+MyList:[ for(1..10){ Value.var = it~ } ];
+
+MyList.Where{it%2 == 0}.each += 100;
+
+output(MyList)</textarea>
+<div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
+<input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
+<br>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<textarea cols=70 rows=1 class=outputarea></textarea>
+</div>
+
+<p>In contrast to the other features in this section, I haven't really found a reason to call this "flawed" - it's just an area for future development. Sometimes, Saying What You Mean has to involve mutable data, because that's just What You Mean.</p>
+
+<p>Ok, well... th-th-that's all I have for now, folks! Hope you enjoyed it!</p>
+
+</body>
+</html>

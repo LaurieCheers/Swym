@@ -1,0 +1,677 @@
+<html>
+<head><title>Swym Automated Tests</title>
+<script language=javascript src="swym.js"></script>
+<script language=javascript src="swymTokenize.js"></script>
+<script language=javascript src="swymParser.js"></script>
+<script language=javascript src="swymEtc.js"></script>
+<script language=javascript src="swymRuntime.js"></script>
+<script language=javascript src="swymCompile.js"></script>
+<script language=javascript src="swymTypeCheck.js"></script>
+<script language=javascript src="swymStdlyb.js"></script>
+<script language=javascript>
+
+function runAllTests()
+{
+    var rerunLast = document.createElement('input');
+    rerunLast.type = 'button';
+    rerunLast.value = 'Re-run last test';
+    rerunLast.onclick = function(){ runTest(lastRunSource, lastRunTarget); };
+    document.body.appendChild(rerunLast);
+    document.body.appendChild(document.createElement('p'));
+
+  addReportTable("pretests:");
+//  runTest("x:5; Number.square:{it*it}; square(x)",						"25");
+  //runTest("1 + etc.. 5",												"15");
+ // runTest("[10..1].whereIndex{it>5}}",							"[4,3,2,1]");
+  endReportTable();
+
+//return;
+
+  addReportTable("Basic Arithmetic:");
+  runTest("1","1");
+  runTest("false","false");
+  runTest("-5", "-5");
+  runTest("4+5", "9");
+  runTest("2*5", "10");
+  runTest("2 - 5", "-3");
+  runTest("2==4", "false");
+  runTest("2==2", "true");
+  runTest("2>4", "false");
+  runTest("2<2", "false");
+  runTest("2<4", "true");
+  runTest("4+4/2", "6");
+  runTest("(4+4)/2", "4");
+  runTest("8/4*2", "4");
+  runTest("8/(4*2)", "1");
+  runTest("(1,2)+1", "2\n3");
+  runTest("1+(1,2)", "2\n3");
+  runTest("(1,2)+(10,20)", "11\n21\n12\n22");
+  runTest("// this will print \"true\".\nprint( 4+5 == (32-5)/3 );", "true");
+  endReportTable();
+  
+  addReportTable("Basic Logic:");
+  runTest("true || false", "true");
+  runTest("true && false", "false");
+  runTest("3>2", "true");
+  runTest("3>3", "false");
+  runTest("3>4", "false");
+  runTest("3>=2", "true");
+  runTest("3>=3", "true");
+  runTest("3>=4", "false");
+  runTest("3<2", "false");
+  runTest("3<3", "false");
+  runTest("3<4", "true");
+  runTest("3<=2", "false");
+  runTest("3<=3", "true");
+  runTest("3<=4", "true");
+  endReportTable();
+
+  addReportTable("Basic Constants:");
+  runTest("'x'=4", "4");
+  runTest("'x'=-9; x", "-9");
+  runTest("'x'=2; 'y'=7-x; x*y", "10");
+  runTest("'radius'=2;\n'area'=PI * radius * radius;\nprint(\"A circle of radius $radius has area $area.\");", "A circle of radius 2 has area 12.56637061435917.");
+  endReportTable();
+
+  addReportTable("Basic Strings:");
+  runTest("\"\"",										"\"\"");
+  runTest("\"Hello, World!\"",										"\"Hello, World!\"");
+  runTest("\"\\\"Hello\\\", \\$World!\"",					"\"\"Hello\", $World!\"");
+  runTest("\"Hello\" + \"World\"",									"\"HelloWorld\"");
+  runTest("\"Hello \" + ($93) + \"!\"",								"\"Hello 93!\"");
+  runTest("'world'=\"Earth\"; \"Hello $world!\"",	"\"Hello Earth!\"");
+  runTest("'number'=93; \"Hello $number!\"",				"\"Hello 93!\"");
+  runTest("'he'=\"Hello\"; 'wo'=\"World\"; \"$he$wo$he\"", "\"HelloWorldHello\"");
+  runTest("\"Hello $(40.{it-7}*3) Flake\"",		"\"Hello 99 Flake\"");
+  runTest("\"Hello $(\")\") Flake\"",		"\"Hello ) Flake\"");
+  runTest("'x'=\"Wor\"; \"Hello $(x)ld!\"",		"\"Hello World!\"");
+  runTest("$191", "\"191\"");
+  runTest("$[191]", "\"191\"");
+  runTest("$$191", "\"191\"");
+  runTest("$$[191]", "\"[191]\"");
+  runTest("\"x\".1st", "\"x\"");
+  runTest("[\"x\".1st]", "\"x\"");
+  runTest("[[\"x\".1st]]", "[\"x\"]");
+  runTest("[[\"x\".1st.1st]]", "[\"x\"]");
+  runTest("[\"x\"]", "[\"x\"]");
+  runTest("\"x\".tail", "\"\"");
+  runTest("\"x\".1st.tail", "\"\"");
+  runTest("[\"x\"].tail", "[]");
+  endReportTable();
+
+  addReportTable("Basic Functions:");
+  runTest("{true}", "{true}");
+  runTest("({true})", "{true}");
+  runTest("'x'->{x}", "'x'->{x}");
+  runTest("for(3){*2}", "6");
+  runTest("'myfor'('arg')('body'){arg.do(body)}; myfor(3){it*2}", "6");
+  runTest("5.{it+2}",												"7");
+  runTest("Number.'x' {1+3}; 5.x",										"4");
+  runTest("Number.'x' = .*2; 5.x",										"10");
+  runTest("Number.'square' {this*this}; 7.square",							"49");
+  runTest("Number.'square' {this*this}; 'x'=5; output(\"Hello $x.square!\")",	"Hello 25!");
+  runTest("Number.'square' {this*this}; 'x'=5; output(\"Hello $(square(x))!\")",	"Hello 25!");
+  runTest("Value.'twice'('f'){ yield .do(f); yield .do(f) }\n \"Boo\".twice{it}.each.println",	"Boo\nBoo\n");
+  //runTest("::test = {2+it}; 4.{test()}",                        "2");
+  runTest("Number.'double' {*2}\ndouble(4);", "8");
+  runTest("Number.'double' {this*2};\n4.double;", "8");
+  runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else{+1}", "5");
+  runTest("'elsie'('x', 'else') {x.(else)}; elsie(4)else({+1})", "5");
+  runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else it+1", "5");
+  runTest("Number.'eqtest' = 4; 10.eqtest", "4");
+  runTest("Number.'eqtest' = {4}; 10.eqtest", "4");
+  runTest("Number.'eqtest' {4}; 10.eqtest", "4");
+  runTest("Number.'test' { return this+1; }; 4.test+1", "6");
+  runTest("Number.'test' { if(this>4) { return 4 } else { return 5 } }; 4.test", "5");
+  runTest("Number.'test' { if(this>4) { return 4 } else { return 5 } }; 5.test", "4");
+  runTest("Number.'test' { if(this>4) { return 4 } else { 5 } }; 5.test", "~error~");
+  runTest("Number.'test' { yield 4; if(this>4){ return }; yield 3; }; 4.test", "[4,3]");
+  runTest("Number.'test' { yield 4; if(this>4){ return }; yield 3; }; 5.test", "[4]");
+  endReportTable();
+
+  addReportTable("Sequences:");
+  runTest("[1,,,,,]",										"[1]");
+  runTest("[1,2,3]",										"[1,2,3]");
+  runTest("[1,2,3].at(1)",										"2");
+  runTest("[1,2,3].1st",										"1");
+  runTest("[1..3]",                                        "[1,2,3]");
+  runTest("[10..1].3rd",										"8");
+  runTest("[10..1].3rdLast",										"3");
+  runTest("[10..1].{[.1st, .3rd, .2ndLast, .6th]};",				"[10,8,2,5]");
+  runTest("[10..1].{[.at((0,1,4,7))]};",				"[10,9,6,3]");
+  runTest("[1,2,3,,,,,4,,]",										"[1,2,3,4]");
+  runTest("\"Hello\".{[it,it,it]}",							"[\"Hello\",\"Hello\",\"Hello\"]");
+  runTest("[print(each[33,44]); print(55);]",							"334455");
+  runTest("'list'=[1,2,3]; [list.each + list.each]",		"[2,3,4,3,4,5,4,5,6]");
+  runTest("[ -(1,2,3) ]",							"[-1,-2,-3]");
+  //runTest("Value.'ttl' {result:Number.var = 0; result += .each; result}; [1,3,7,0].ttl",			"11");
+  runTest("'list'=[1,2,3]; [9,list.each,[8],list,7]",			"[9,1,2,3,[8],[1,2,3],7]");
+  runTest("\"Hello\".1st", "\"H\"");
+  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h]]", "\"HHHHHH\"");
+  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h,h]]", "[\"H\",\"H\",\"H\",\"H\",\"H\",\"HH\"]");
+  runTest("'h'=1st(\"H\"); [h,h,h,h,h]", "\"HHHHH\"");
+  runTest("'h'=1st(\"H\"); [h,h,h,h,1]", "[\"H\",\"H\",\"H\",\"H\",1]");
+  runTest("'h'=1st(\"H\"); [[h,h,h,h],1]", "[\"HHHH\",1]");
+  runTest("[\"Hello\".each]", "\"Hello\"");
+  runTest("[\"B\"..\"Y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXY\"");
+  runTest("[\"B\"..\"y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy\"");
+  runTest("[\"y\"..\"B\"]", "\"yzAB\"");
+  runTest("[\"B\"..\"5\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYZ012345\"");
+  runTest("[\"9\"..\"0\"]", "\"9876543210\"");
+  runTest("Number.'divides'('n') {n%this == 0};  Number.'isPrime' = length( [1..this].where{.divides(this)} ) == 2;  [0..20].where{.isPrime}", "[2,3,5,7,11,13,17,19]");
+  runTest("[10,1**5,10]", "[10,1,1,1,1,1,10]");
+  runTest("[(1,2)**5]", "[1,2,1,2,1,2,1,2,1,2]");
+  runTest("'list'=[\"x\",\"y\",\"z\"]; list.each.{.print; .print;}",			"xxyyzz");
+  runTest("'list'=[\"x\",\"y\",\"z\"]; ((list,list)).each.print;",			"xyzxyz");
+  runTest("'list'=[\"Hi\",\"Bye\",\"Ciao\"]; list.each.{ \"($it$it)\"; }",	"\"(HiHi)\"\n\"(ByeBye)\"\n\"(CiaoCiao)\"");
+  runTest("'list'=[\"Hi\",\"Bye\",\"Ciao\"]; \"I say $list.each!\"",	"\"I say Hi!\"\n\"I say Bye!\"\n\"I say Ciao!\"");
+  runTest("'list'=[\"Hi\",\"Bye\",\"Ciao\"]; \"I say $list!\"",	"\"I say HiByeCiao!\"");
+  runTest("'list'=[\"Hi\",\"Bye\",\"Ciao\"]; list.each.{\"I say $it!\"}",	"\"I say Hi!\"\n\"I say Bye!\"\n\"I say Ciao!\"");
+//  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Hi\",\"Bye\",\"Ciao\"].pretty(\" and \"); ",	"\"Hi, Bye and Ciao\"");
+//  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Bye\", \"Ciao\"].pretty(\" or \"); ",	"\"Bye or Ciao\"");
+//  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Ciao\"].pretty(\" and \"); ",	"\"Ciao\"");
+  runTest("[10..6].keys", "[0,1,2,3,4]");
+  runTest("\"Hello\".keys", "[0,1,2,3,4]");
+  runTest("Int.'bottles' = case(this){ 0:\"no more bottles\", 1:\"1 bottle\", else:\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
+			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n\n");
+  runTest("Int.'b'{\"$(.{0:\"no more\",else:this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
+  			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n");
+  runTest("\"Foo\".each.length.[]", "[1,1,1]");
+  endReportTable();
+
+   addReportTable("JSON");
+  runTest("{\"x\":10, \"y\":20}", "{\"x\":10, \"y\":20}");
+  runTest("{\"x\":10, \"y\":20}.at(\"x\")", "10");
+  runTest("{\"x\":10, \"y\":20}.at(\"y\")", "20");
+  runTest("{\"x\":10, \"y\":20}.at(\"z\")", "~error~");
+  runTest("Table.'getx' = .at(\"x\"); getx{\"x\":10, \"y\":20}", "10");
+  runTest("0.{else:1}", "1");
+  runTest("{\"xx\":10, \"y\":20}.keys", "[\"xx\",\"y\"]");
+  runTest("{\"x\":10, \"y\":20}.length", "~error~");
+  runTest("table[1..10]{^2}", "{1:1, 2:4, 3:9, 4:16, 5:25, 6:36, 7:49, 8:64, 9:81, 10:100}");
+//  runTest("[x:10, y:10].at(\"x\")+1", "11");
+  endReportTable();
+
+  addReportTable("Type system torture");
+  runTest("true+1", "~error~");
+  runTest("4.{+1}+1", "6");
+  runTest("4.{it}+1", "5");
+  runTest("true.{+1}", "~error~");
+  runTest("true.{it}+1", "~error~");
+  runTest("true.( 4.'x'->{{x}} )+1", "5");
+  runTest("true.( true.'x'->{{x}} )+1", "~error~");
+  runTest("4.( true.'x'->{{it}} )+1", "5");
+  runTest("true.do( true.do 'x'->{{it}} )+1", "~error~");
+  runTest("{+1}.do( 4.'x'->{{ x.(it) }} )+1", "6");
+  runTest("{+1}.( true.'x'->{{ x.(it) }} )+1", "~error~");
+  runTest("4.do( {+1}.do 'x'->{{.do(x)}} )+1", "6");
+  runTest("true.do( {+1}.do 'x'->{{do(x)}} )+1", "~error~");
+  runTest("'test'('x'){x+1}; test(4)+1", "6");
+  runTest("'test'('x'){x+1}; test(true)+1", "~error~");
+  runTest("'test'('x'){4.do(x)}; 'test2'('x') {test(x)}; test2{+1}", "5");
+  runTest("'test'('x'){true.do(x)}; 'test2'('x') {test(x)}; test2{+1}", "~error~");
+  runTest("'test'('x'){4.do(x)}; test{+1}", "5");
+  runTest("'test'('x'){true.do(x)}; test{+1}", "~error~");
+  runTest("'test'('x'){4.do(x)}; test{it}+1", "5");
+  runTest("'test'('x'){true.do(x)}; test{it}+1", "~error~");
+  runTest("'test'('x'){{.do(x)}}; 4.do( test{it} )+1", "5");
+  runTest("'test'('x'){{.do(x)}}; true.do( test{it} )+1", "~error~");
+  runTest("'test'('x'){{.do(x)}}; 4.do( test{it} )+1", "5");
+  runTest("'test'('x'){{.do(x)}}; true.do( test{it} )+1", "~error~");
+  runTest("( if(true){4} else{5} )+1", "5");
+  runTest("( if(true){4} else{true} )+1", "~error~");
+  runTest("Value.'test'('x') { if(.do(x)){4} else{5} }; 4.test{<5}+1", "5");
+  runTest("Value.'test'('x') { if(.do(x)){4} else{true} }; 4.test{<5}+1", "~error~");
+  runTest("$5.if(String)+$5", "\"55\"");
+  runTest("$5.if(String)+5", "~error~");
+  runTest("$5.if(Int)+$5", "~error~");
+  runTest("$5.if(Int)+5", "<no values>");
+  endReportTable();
+  
+  addReportTable("Builtins");
+  runTest("[4,5,6,7].where{>5}", "[6,7]");
+  runTest("[4,5,6,7].where{.in[6..8]}", "[6,7]");
+  runTest("Number.'isEven' = this%2 == 0;\n\n[1,2,3,4,5,6,7,8,9].where{.isEven};", "[2,4,6,8]");
+  runTest("7.is(Number)", "true");
+  runTest("true.is~Number", "false");
+  runTest("7.is(String)", "false");
+  runTest("\"Hello\".is~String", "true");
+  runTest("false.is(Bool)", "true");
+  runTest("7.is~Bool", "false");
+  runTest("each~Bool", "true\nfalse");
+  runTest("'DivisorOf16' = [1,2,4,8,16];\nDivisorOf16.trace;", "[1,2,4,8,16]\n");
+  runTest("[1..9].{[.1st, .at(0), .2nd, .3rd, .4th, .4thLast, .3rdLast, .2ndLast, .last]}", "[1,1,2,3,4,6,7,8,9]");
+  runTest("[1..9, 9..1].{.min, .max, .whereMin, .whereMax}", "1\n9\n[1,1]\n[9,9]");
+  runTest("[1..5].{.stem, .tail, .middle}", "[1,2,3,4]\n[2,3,4,5]\n[2,3,4]");
+  runTest("[1..5].{.stem, .tail, .middle}", "[1,2,3,4]\n[2,3,4,5]\n[2,3,4]");
+  runTest("[1,1,1].random", "1");
+  runTest("[1..4].total", "10");
+  runTest("[[1..4],[1..3],[1..5]].{.min{.length}, .max{.length}}", "[1,2,3]\n[1,2,3,4,5]");
+  runTest("[[1..4],[2..4],[1..2],[2..5],[2..3],[1..3]].{.whereMin{.length}, .whereMax{.length}}", "[[1,2],[2,3]]\n[[1,2,3,4],[2,3,4,5]]");
+  runTest("\"He1Lo\".{.uppercase,.lowercase}", "\"HE1LO\"\n\"he1lo\"");
+  runTest("[10..1].whereKey{.in[3,4,7]}", "[7,6,3]");
+  runTest("[10..1].whereKey{it>5}", "[4,3,2,1]");
+  runTest("10.is{it>6}, 6.is{it>6}, 10.in[5..9], 6.in[5..9]", "true\nfalse\nfalse\ntrue");
+  runTest("[1..3].reversed", "[3,2,1]");
+  runTest("\"Hello\".reversed", "\"olleH\"");
+  runTest("[1] == [1]", "true");
+  runTest("\"Hello\".middle", "\"ell\"");
+  runTest("[1..3].reversed == [3..1]", "true");
+  runTest("\"god\".reversed == \"dog\", \"dog\" == \"god\".reversed", "true\ntrue");
+  runTest("Array.'isPalindrome' = .reversed == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
+  runTest("Array.'isPalindrome' = .reversed == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
+  runTest("forEach[1..5]{it*it}", "[1,4,9,16,25]");
+  runTest("if(this:4, test:String, then:{\"Yes, string\"}, else:{\"Not string\"})", "\"Not string\"");
+  runTest("if(this:\"\", test:String, then:{\"Yes, string\"}, else:{\"Not string\"})", "\"Yes, string\"");
+  runTest("[[8,5],[2,5],[6,2],[1,4]].whereMax{.2nd - .1st}", "[[2,5],[1,4]]");
+  runTest("\"Hello\".starting(3)", "\"Hel\"");
+  runTest("\"Hello\".ending(3)", "\"llo\"");
+  runTest("\"Hello\".trimStart(3)", "\"lo\"");
+  runTest("\"Hello\".trimEnd(3)", "\"He\"");
+  runTest("\"Hello\".startsWith(\"He\")", "true");
+  runTest("\"Hello\".startsWith(\"Hello\")", "true");
+  runTest("\"Hello\".startsWith(\"\")", "true");
+  runTest("\"Hello\".startsWith([])", "true");
+  runTest("\"Hello\".startsWith(\"HelloWorld\")", "false");
+  runTest("\"Hello\".startsWith(\"Hx\")", "false");
+  runTest("\"Hello\".endsWith(\"llo\")", "true");
+  runTest("floor~sin(1..5)", "0\n0\n0\n-1\n-1");
+  endReportTable();
+
+  addReportTable("Destructuring:");
+  runTest("['x','y'].'test' = x+y; test[5,6]", "11");
+  runTest("'test'['x','y'] = x+y; test[5,6]", "11");
+  runTest("'test'(xy:['x','y']) = x+y; test(xy:[5,6])", "11");
+  runTest("['x','y'].'test' = x+y+.length; test[5,6]", "13");
+  runTest("[['x'],['y','z']].'test' = x+y+z; test[[5],[3,3]]", "11");
+  runTest("[5,6].['x','y']->{x+y}", "11");
+  endReportTable();
+
+  addReportTable("Cells:");
+  runTest("context:[5..1]; context.indexOf(context.each)",	"0\n1\n2\n3\n4");
+  runTest("context:[5..1]; context.After(context.first)",	"[4,3,2,1]");
+  runTest("context:[5..1]; context.Before(context.3rd)",	"[5,4]");
+  runTest("context:[5..1]; context.range(context.2nd, context.4th)",	"[4,3,2]");
+  runTest("context:[5..1]; context.rangeXX(context.2nd, context.4th)",	"[3]");
+  runTest("context:[5..1]; context.rangeIX(context.2nd, context.4th)",	"[4,3]");
+  runTest("context:[5..1]; context.rangeXI(context.2nd, context.4th)",	"[3,2]");
+  runTest("context:[5..1]; context.rangeII(context.2nd, context.4th)",	"[4,3,2]");
+  runTest("context:[5..1]; context.Neighboring3(context.3rd)",	"[4,3,2]");
+  runTest("context:[5..1]; context.Neighboring2(context.3rd)",	"[4,2]");
+  runTest("context:[5..1]; context.Neighboring2(context.last)", "[2,null]");
+  runTest("context:[5..1]; context.{.Neighboring2(each(.Neighboring2(.3rd)))}",	"[5,3]\n[3,1]");
+  runTest("Array.temp: yield .Neighboring2(.each); Array.temp2: yield .Neighboring2(.3rd).temp; [5..1].temp2",	"[null,2]\n[4,null]");
+  runTest("context:[5,3,1,4]; context.indexOf(context.where[1].first)", "2");
+  runTest("context:[5,3,1,4]; context.indexOf(context.where[3,1].first)", "1");
+  endReportTable();
+  
+  addReportTable("Variables:");
+  runTest("'x' = Value.var(4); x = 5; x", "5");
+  runTest("'x' = Value.var[4]; x = [5]; x", "[5]");
+  runTest("'x' = Value.var(3); 'y' = Value.var(x); x = 4; [x, y]", "[4,3]");
+  runTest("'x' = Value.var(3); 'y' = Value.var(4); (x,y) = (y,x); [x.value,y.value]",	"[4,3]");
+//  runTest("vars: Mutable[6,3,9]; vars.each = 1; vars",	"[1,1,1]");
+//  runTest("x:Value.var = 3; y: Value.var=8; z: Value.var=9; vars: Mutable[x,y,z]; vars.each = 1; [x,y,z,vars.each]",	"[3,8,9,1,1,1]");
+//  runTest("Value.var:x=3; :z=[x]; x=9; z",	"[3]");
+//  runTest("Value.var:x=3; :z=[x;x;x]; x = 9; [z.each==x]",	"[false,false,false]");
+  runTest("'set10'('v'){ v=10 }; 'x' = Value.var(3); set10(ref x); x",	"10");
+  endReportTable();
+
+  addReportTable("Etc keyword:");
+  runTest("[1..10].{.1st + .2nd + etc}", "55");
+  runTest("[1..10].{.1st * .2nd * etc}", "3628800");
+  runTest("[1..10].{[[.1st,.2nd], [.3rd,.4th], etc]}", "[[1,2],[3,4],[5,6],[7,8],[9,10]]");
+  runTest("[1..11].{[[.1st,.2nd], [.3rd,.4th], etc]}", "[[1,2],[3,4],[5,6],[7,8],[9,10]]");
+  runTest("[1..10].{[.2nd, .4th, etc]}", "[2,4,6,8,10]");
+  runTest("[1..10].{[.1st, .2nd, .4th, etc]}", "[1,2,4,8]");
+  runTest("[1..10].{[.10th, .9th, etc]}", "[10,9,8,7,6,5,4,3,2,1]");
+  runTest("[1..10].{[.1stLast, .2ndLast, etc]}", "[10,9,8,7,6,5,4,3,2,1]");
+  runTest("[1..10].{[.1st, .1st+.2nd, etc]}", "[1,3,6,10,15,21,28,36,45,55]");
+  runTest("[1, 2, 4, etc..<100]", "[1,2,4,8,16,32,64]");
+  runTest("[1, 1+2, etc..<100]", "[1,3,6,10,15,21,28,36,45,55,66,78,91]");
+  runTest("Array.'ttl'{.1st + .2nd + etc}; [1..10].ttl", "55");
+  runTest("Array.'myproduct'{.1st * .2nd * etc}; [1..5].myproduct", "120");
+  runTest("Int.'factorial'{1*2*etc..this}; 5.factorial", "120");
+  runTest("'dotProduct'('a')('b') { a.1st*b.1st + a.2nd*b.2nd + etc }; dotProduct[1,1,2][0,5,2]", "9");
+  runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[\"hello\",\"there\",\"world\"]", "[\"htw\",\"eho\",\"ler\",\"lrl\",\"oed\"]");
+  runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[[1..5],[10..15],[20..25]]", "[[1,10,20],[2,11,21],[3,12,22],[4,13,23],[5,14,24]]");
+  endReportTable();
+
+
+  addReportTable("Quantifiers:");
+  runTest("some[1..10]{<2}","true");
+  runTest("some[2..10]{<2}","false");
+  runTest("!(some[1..10]{<2})","false");
+  runTest("every[2..9]{ ==some [1..10] }","true");
+  runTest("[2..9].every{>1}","true");
+  runTest("[1..9].every{>1}","false");
+  runTest("some[1..10]{ ==every [2..9] }","false");
+  runTest("every[1..10]{>4}","false");
+  runTest("every[5..10]{ >=every [1..5] }","true");
+  runTest("every[5..10]{ >every [1..5] }","false");
+  runTest("if( every[1..10]{>0}){ output(\"yes\") }","yes");
+  runTest("if( every[1..10]{>1}){ output(\"yes\") }","<no output>");
+  runTest("if( some[1..10]{>9}){ output(\"yes\") }","yes");
+  runTest("if( some[1..10]{>10}){ output(\"yes\") }","<no output>");
+  runTest("if( no[1..10]{>9}){ output(\"yes\") }","<no output>");
+  runTest("if( none[1..10]{>10}){ output(\"yes\") }","yes");
+  runTest("10 !=any [1..10]", "false");
+  runTest("11 !=any [1..10]", "true");
+  runTest("10 ==any [1..10]", "true");
+  runTest("11 ==any [1..10]", "false");
+  runTest("no[10..20]{ ==any [1..10] }", "false");
+  runTest("no[11..20]{ ==any [1..10] }", "true");
+  endReportTable();
+
+/*  addReportTable("Structs:");
+  runTest("[5] is Struct{Int}",											"true");
+  runTest("[5.1] is Struct{Int}",										"false");
+  runTest("[5, 6] is Struct{Int, Int}",									"true");
+  runTest("[5..7] is Struct{Int, Int}",									"false");
+  runTest("[5, 6.1] is Struct{Int, Int}",								"false");
+  runTest("[5, [2, 3]] is Struct{Int, Struct{Int,Int}}",				"true");
+  runTest("[5,5] is Int.Pair",											"true");
+  runTest("[5, 0.5] is Pair(Int)",										"false");
+  runTest("Pair[0,1].each",								"[0,0]\n[0,1]\n[1,0]\n[1,1]");
+  runTest("[Struct{[-1..1],[-1..1]}.each]",					"[[-1,-1],[-1,0],[-1,1],[0,-1],[0,0],[0,1],[1,-1],[1,0],[1,1]]");  
+  runTest("Vowel:\"aeiou\"; Consonant:\"bcdfghjklmnpqrstvwxyz\"; Struct{Vowel,Consonant,Vowel}.50th",					"\"amu\"");
+//  runTest("QueenY:[0..3]; Board:Struct{QueenY, QueenY, QueenY, QueenY}; Board is Solution: /no(.Cell) is Threatened; Cell is Threatened: /some(.Other).{ this == it || this-this.index == it-it.index || this+this.index == it+it.index }; 1st(Solution)", "[1,3,0,2]");
+  endReportTable();
+*/
+  addReportTable("Overloaded Functions:");
+  runTest("Int.'twice' {*2}; Array.'twice' {[.each,.each]}\; 4.twice, \"4\".twice;", "8\n\"44\"");
+  endReportTable();
+
+  addReportTable("Structs:");
+  runTest("'T'=Struct{}; T.is~Type",							"true");
+  runTest("'T'=Struct{}; Type.is~T",							"false");
+  runTest("'T'=Struct{}; 'obj'=new~T; obj.is~Type",				"false");
+  runTest("'T'=Struct{}; 'obj'=new~T; obj.is~T",				"true");
+  runTest("'T'=Struct{}; 'obj'=new~T; obj == obj",				"true");
+  runTest("'T'=Struct{}; 'obj1'=new~T; 'obj2'=new~T; obj1 == obj2", "false");
+  runTest("'A'=Struct{}; 'B'=Struct{}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new, B.new, A.new].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
+  runTest("'T'=Struct{'x':Number}; T.new(x:5).x", "5");
+  runTest("'T'=Struct{'last':Number}; T.new(last:10).last + [1..10].last",	"20");
+  runTest("'T'=Struct{'name':String, 'num':Number}; T.new(name:\"Hello\", num:3).{.name.length-.num}", "2");
+  endReportTable();
+
+}
+
+// debug functions
+SWYM.AutoLog0 = function(fn, also)
+{
+  var fnToCall = SWYM[fn];
+  SWYM[fn] = function(){ var result = fnToCall(); alert(fn+"() = "+result+(also?(" and "+also):"")); return result; };
+}
+SWYM.AutoLog1 = function(fn, also)
+{
+  var fnToCall = SWYM[fn];
+  SWYM[fn] = function(a){ var result = fnToCall(a); alert(fn+"("+a+") = "+result+(also?(" and "+also):"")); return result; };
+}
+SWYM.AutoLog2 = function(fn, also)
+{
+  var fnToCall = SWYM[fn];
+  SWYM[fn] = function(a,b){ var result = fnToCall(a,b); alert(fn+"("+a+","+b+") = "+result+(also?(" and "+also):"")); return result; };
+}
+SWYM.AutoLog3 = function(fn, also)
+{
+  var fnToCall = SWYM[fn];
+  SWYM[fn] = function(a,b,c){ var result = fnToCall(a,b,c); alert(fn+"("+a+","+b+","+c+") = "+result+(also?(" and "+also):"")); return result; };
+}
+//SWYM.AutoLog0("PopStack", SWYM.stack);
+//SWYM.AutoLog1("PushStack", SWYM.stack);
+//SWYM.AutoLog3("OpDecl");
+
+
+// scripts to implement the page itself
+SWYM.RunToOutput = function()
+{
+  var outputarea = document.getElementById("output");
+  outputarea.value = "...working...";
+  
+  // call out to the main "eval" method
+  var result = SWYM.Eval(document.getElementById("source").value);
+
+  outputarea.value = result;
+}
+
+
+SWYM.SelectLineByPos = function(textarea, pos)
+{
+  SWYM.SelectLineByNumber(textarea, SWYM.LineForTextPos(textarea.value, pos));
+}
+
+SWYM.SelectLineByNumber = function(textarea, line)
+{
+  textarea.selectionStart = SWYM.TextPosForLine(textarea.value, line);
+  textarea.selectionEnd = SWYM.TextPosForLine(textarea.value, line+1);
+}
+
+SWYM.UpdateErrorLine = function()
+{
+  var outputArea = document.getElementById("output");
+  var selectedLine = SWYM.LineForTextPos(outputArea.value, outputArea.selectionStart);
+  var linestart = SWYM.TextPosForLine(outputArea.value, selectedLine);
+
+  var strstart = outputArea.value.substring(linestart, linestart+5);
+  if ( strstart === "Line " )
+  {
+    var linePos = linestart+5;
+    var cn = outputArea.value[linePos];
+    if ( cn >= '0' && cn <= '9' )
+    {
+      var numSoFar = 0;
+      do
+      {
+	    numSoFar = numSoFar*10 + (cn - '0');
+	    linePos++;
+	    cn = outputArea.value[linePos];
+      }
+      while( (cn >= '0' && cn <= '9') || cn === '.' || cn === 'e' || cn === 'E' );
+      
+      if ( numSoFar > 0 )
+      {
+        var sourceArea = document.getElementById("source");
+        sourceArea.focus();
+		SWYM.SelectLineByNumber(sourceArea, numSoFar);
+      }
+    }    
+  }
+}
+
+SWYM.UpdateSourcePos = function()
+{
+	var sourceArea = document.getElementById("source");
+	var lineNumber = SWYM.LineForTextPos(sourceArea.value, sourceArea.selectionStart);
+	var posInLine = SWYM.PosInLineForTextPos(sourceArea.value, sourceArea.selectionStart);
+
+	var linenumberElement = document.getElementById("linenumber");
+	linenumberElement.firstChild.nodeValue = "Pos "+lineNumber+":"+posInLine;
+}
+
+SWYM.OutputKeyDown = function(event)
+{
+  if ( event.keyCode === 38 || event.keyCode === 40 )
+  {
+    SWYM.UpdateErrorLine();
+  }
+}
+
+SWYM.HandleKeyPress = function(field, event)
+{
+	if ( event.keyCode == 9 ) // tab key
+	{
+		var selstart = field.selectionStart;
+		field.value = field.value.substr(0,field.selectionStart).concat("\t", field.value.substr(field.selectionEnd));
+		field.selectionStart = field.selectionEnd = selstart+1;
+		return false;
+	}
+	else if ( event.ctrlKey && event.charCode === 115 ) // ctrl-S
+	{
+		SWYM.RunToOutput();
+		return false;
+	}
+	else
+	{
+		return true;
+  }
+}
+
+var reporttable = null;
+var reporttitle;
+var reportNumFailed;
+var reportNumTested;
+var EvenNumberedRow = false;
+
+var testSources = [];
+var testTargets = [];
+
+function addReportTable(title, defaultshow)
+{
+  reporttitle = document.createElement('font');
+  reporttitle.innerHTML = '<b>'+title+'</b>';
+  
+  var newtable = document.createElement('table');
+  var newtablediv = document.createElement('div');
+  newtablediv.style.display = defaultshow? "": "none";
+
+  var showbutton = document.createElement('input');
+  showbutton.type = "button";
+  showbutton.value = "+/-";
+  showbutton.onclick = function(){
+    if( newtablediv.style.display == "none" )
+    {
+      newtablediv.style.display = "";
+    }
+    else
+    {
+      newtablediv.style.display = "none";
+    }
+  }
+
+  var newdiv = document.createElement('div');
+  newdiv.appendChild(reporttitle);
+  newdiv.appendChild(showbutton);
+
+  newdiv.appendChild(newtablediv);
+  newtablediv.appendChild(newtable);
+  newtablediv.appendChild(document.createElement('hr'));
+
+  document.body.appendChild(newdiv);
+  
+  reporttable = newtable;
+  
+  reportNumTested = 0;
+  reportNumFailed = 0;
+}
+
+function endReportTable(title)
+{
+  if( reportNumFailed === 0 )
+  {
+    if ( reportNumTested === 1 )
+    {
+      reporttitle.innerHTML += ' '+reportNumTested+' test passed. ';
+    }
+    else
+    {
+      reporttitle.innerHTML += ' All '+reportNumTested+' tests passed. ';
+    }
+  }
+  else
+    reporttitle.innerHTML += ' <b><font color=#FF0000>FAILED</font></b> '+reportNumFailed+' of '+reportNumTested+' tests! ';
+  
+  reporttable = null;
+  //document.body.appendChild(document.createElement('hr'));
+}
+
+function testReport(source)
+{
+  if (!reporttable)
+    addReportTable("Rerun", true);
+
+  var newrow = document.createElement('tr');
+  
+  // make even numbered rows a little darker than the background
+  if ( EvenNumberedRow )
+		newrow.style.backgroundColor = "#f2e8d4";
+	
+	EvenNumberedRow = !EvenNumberedRow;
+		
+  reporttable.appendChild(newrow);
+    var leftcell = document.createElement('td');
+    var rightcell = document.createElement('td');
+    newrow.appendChild(leftcell);
+    newrow.appendChild(rightcell);
+    
+    var sourcetext = document.createElement('code');
+    sourcetext.innerHTML = ' ';
+    sourcetext.firstChild.nodeValue = source;
+    leftcell.appendChild(sourcetext);
+    
+    return rightcell;
+}
+
+function rerunTest(n)
+{
+	runTest(testSources[n], testTargets[n]);
+}
+
+function runTest(source, target)
+{
+  reportNumTested++;
+  testSources.push(source);
+  testTargets.push(target);
+  lastRunSource = source;
+  lastRunTarget = target;
+
+  var output = SWYM.Eval(source);
+  
+  var passed = target === "~error~"? SWYM.errors !== "": output === target;
+  if ( passed )
+  {
+    var report = testReport(source);
+	if( target === "~error~" )
+	{
+		report.innerHTML = '<font color=#007700>PASSED</font> (correctly returned error '+output+'). ';
+	}
+	else
+	{
+		report.innerHTML = '<font color=#007700>PASSED</font> (result was '+output+'). ';
+	}
+
+    var rerunLink = document.createElement('a');
+    rerunLink.href="javascript:rerunTest("+(testSources.length-1)+")";
+    rerunLink.innerHTML = 're-run';
+    
+	report.appendChild(rerunLink);
+	report.appendChild(document.createElement('p'));
+  }
+  else
+  {
+    var report = testReport(source);
+    report.innerHTML = '<b><font color=#FF0000>FAILED</font></b> - Expected "'+target+'", got<br>';
+
+    var reportText = document.createElement('textarea');
+    reportText.rows=3;
+    reportText.cols=70;
+    reportText.value = output;
+    report.appendChild(reportText);
+
+    reportNumFailed++;
+
+	var rerunButton = document.createElement('input');
+	rerunButton.type = 'button';
+	rerunButton.value = 're-run';
+  
+	var dorerun = function(){	runTest(source, target); };
+	rerunButton.onclick = dorerun;
+
+	report.appendChild(rerunButton);
+  }
+}
+</script>
+<body bgColor=#f9f0db onload="runAllTests()">
+<center><h2>Swym Automated Testing</h2></center>
+</body>
+</html>

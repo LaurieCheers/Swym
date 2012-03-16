@@ -1,0 +1,301 @@
+<html>
+<head>
+<style type="text/css">
+	body{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+		background-color: #ecefef;
+		margin: 10px 40px 10px 40px;
+	}
+	#swymsource{
+		background-color: #FAEFE8;
+		border-style: solid;
+		border-width: 1;
+		border-color: #AAAAAA;
+	}
+	#swymoutput{
+		background-color: #CCCCCC;
+		border-style: solid;
+		border-width: 1;
+		border-color: #AAAAAA;
+	}
+</style>
+<title>Swym Canvas</title>
+<script language=javascript src="swymloader.js"></script>
+<script language=javascript>
+	var mouseX = 0;
+	var mouseY = 0;
+	var initialized = false;
+	var keyDownState = {};
+	var tickBlock = undefined;
+	var mouseCharCode = 224;
+
+	window.onload = function()
+	{
+		var regex = new RegExp( "[\\?&](.*)" );
+		var results = regex.exec( window.location.href );
+		if( results && results[1] )
+		{
+			var initialCode = unescape(results[1]);
+			
+			var interpSource = document.getElementById('swymsource');
+			interpSource.value = initialCode;
+		}
+	}
+
+	function saveURL()
+	{
+		var baseURL = window.location.href;
+		var cutIndex = baseURL.indexOf("?");
+		if( cutIndex >= 0 )
+			baseURL = baseURL.slice(0, cutIndex);
+			
+		var interpSource = document.getElementById('swymsource');
+
+		window.location.href = "SwymCanvas.html?" + escape(interpSource.value);
+	}
+
+    function init()
+	{
+		setInterval(tick,30); 
+		document.onmousemove = function(event)
+		{
+			mouseX = event.clientX;
+			mouseY = event.clientY;
+		}
+        document.onmousedown = function()
+		{
+			var symbol = String.fromCharCode(mouseCharCode);
+			keyDownState[symbol] = true;
+		}
+        document.onmouseup = function()
+		{
+			var symbol = String.fromCharCode(mouseCharCode);
+			keyDownState[symbol] = false;
+		}
+		document.onkeydown = function(event)
+		{
+			var symbol = String.fromCharCode(event.which);
+			keyDownState[symbol] = true;
+		}
+		document.onkeyup = function(event)
+		{
+			var symbol = String.fromCharCode(event.which);
+			keyDownState[symbol] = false;
+		}
+	}
+	
+	function test()
+	{
+		tickBlock = undefined;
+		var src = document.getElementById("swymsource");
+		var dest = document.getElementById("swymoutput");
+		lastRunSrc = src.value;
+		
+		dest.value = "";
+		SWYM.DisplayOutput = function(v){ dest.value += v };
+		SWYM.DisplayError = function(v){ dest.value = v };
+		SWYM.FullEval(src.value);
+	}
+
+	function autorun()
+	{
+		var oldTickBlock = tickBlock;
+		var src = document.getElementById("swymsource");
+		var dest = document.getElementById("swymoutput");
+		lastRunSrc = src.value;
+		
+		var gotError = false;
+		dest.value = "";
+		SWYM.DisplayOutput = function(v){ dest.value += v };
+		SWYM.DisplayError = function(v){ gotError = true; dest.value = v };
+		SWYM.FullEval(src.value);
+		
+		if( gotError )
+		{
+			SWYM.errors = "";
+			SWYM.halt = false;
+			tickBlock = oldTickBlock;
+		}
+	}
+	
+    function tick()
+	{
+		var canvas = document.getElementById("canvas");
+		if (!canvas.getContext)
+			return;
+		var ctx = canvas.getContext('2d');
+
+		if( SWYM && !initialized )
+		{
+			SWYM.DefaultGlobalCScope["mouse_x"] = {type:"Number"};
+			SWYM.DefaultGlobalCScope["mouse_y"] = {type:"Number"};
+			SWYM.DefaultGlobalCScope["mouse_lmb_down"] = {type:"Bool"};
+			SWYM.DefaultGlobalCScope["fn#tick"] =
+			[{
+				expectedArgs:{ "this":{index:0} },
+				customCompile:function(argTypes, cscope, executable)
+				{
+					// force compile
+					SWYM.GetOutType( argTypes[0], SWYM.VoidType );
+					executable.push("#Native");
+					executable.push(1);
+					executable.push(function(body){ tickBlock = body; });
+					return SWYM.VoidType;
+				}
+			}];
+			SWYM.DefaultGlobalCScope["fn#clearCanvas"] =
+			[{
+				expectedArgs:{}, returnType:SWYM.VoidType,
+				nativeCode:function(body)
+				{
+					ctx.fillStyle = "rgb(255,255,255)";
+					ctx.fillRect (0, 0, 500, 500);
+				}
+			}];
+			SWYM.DefaultGlobalCScope["fn#image"] =
+			[{
+				expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} }, returnType:{type:"image"},
+				nativeCode:function(filename)
+				{
+					var img = new Image();
+					img.src = SWYM.ToTerseString(filename);//"pig.png";
+					return img;
+				}
+			}];
+			SWYM.DefaultGlobalCScope["fn#draw"] =
+			[{
+				expectedArgs:{ "this":{index:0, typeCheck:{type:"image"}}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType} },
+				returnType:SWYM.VoidType,
+				nativeCode:function(img, x, y)
+				{
+					ctx.drawImage(img,x,y);
+				}
+			},
+			{
+				expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType} },
+				returnType:SWYM.VoidType,
+				nativeCode:function(str, x, y)
+				{
+					ctx.font = "40pt Calibri";
+					ctx.fillStyle = "rgb(0,0,0)";
+					ctx.fillText(SWYM.ToTerseString(str), x, y);
+				}
+			}];
+			
+			SWYM.DefaultGlobalCScope["fn#drawLine"] =
+			[{
+				expectedArgs:{ "fromX":{index:0, typeCheck:SWYM.NumberType}, "fromY":{index:1, typeCheck:SWYM.NumberType},
+							   "toX":{index:2, typeCheck:SWYM.NumberType}, "toY":{index:3, typeCheck:SWYM.NumberType}},
+				returnType:SWYM.VoidType,
+				nativeCode:function(ax,ay, bx,by)
+				{
+					ctx.beginPath();
+					ctx.moveTo(ax,ay);
+					ctx.lineTo(bx,by);
+					ctx.stroke();
+				}
+			}],
+			
+			SWYM.DefaultGlobalCScope["fn#keyDown"] =
+			[{
+				expectedArgs:{ "this":{index:0} }, returnType:SWYM.BoolType,
+				nativeCode:function(codeValue)
+				{
+					var code = SWYM.ToTerseString(codeValue);
+					return keyDownState[code] === true;
+				}
+			}];
+
+			SWYM.DefaultGlobalCScope["VK_LEFT"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(37))};
+			SWYM.DefaultGlobalCScope["VK_RIGHT"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(39))};
+			SWYM.DefaultGlobalCScope["VK_UP"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(38))};
+			SWYM.DefaultGlobalCScope["VK_DOWN"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(40))};
+			SWYM.DefaultGlobalCScope["VK_MOUSE"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(mouseCharCode))};
+			
+			SWYM.DefaultGlobalRScope["VK_LEFT"] = SWYM.DefaultGlobalCScope["VK_LEFT"].baked;
+			SWYM.DefaultGlobalRScope["VK_RIGHT"] = SWYM.DefaultGlobalCScope["VK_RIGHT"].baked;
+			SWYM.DefaultGlobalRScope["VK_UP"] = SWYM.DefaultGlobalCScope["VK_UP"].baked;
+			SWYM.DefaultGlobalRScope["VK_DOWN"] = SWYM.DefaultGlobalCScope["VK_DOWN"].baked;
+			SWYM.DefaultGlobalRScope["VK_MOUSE"] = SWYM.DefaultGlobalCScope["VK_MOUSE"].baked;
+
+			test();
+			initialized = true;
+		}
+		
+		var obj = canvas;
+		var x = mouseX, y = mouseY;
+		while (obj) {
+			y -= obj.offsetTop;
+			x -= obj.offsetLeft;
+			obj = obj.offsetParent;
+		}
+
+		SWYM.DefaultGlobalRScope["mouse_x"] = x;
+		SWYM.DefaultGlobalRScope["mouse_y"] = y;
+
+/*		SWYM.DefaultGlobalScope[".drawRect"] = {value:function(params)
+		{
+			ctx.fillStyle = "rgb(" + SWYM.indexOp(params[0].value,0).value + "," +
+							SWYM.indexOp(params[0].value,1).value + "," +
+							SWYM.indexOp(params[0].value,2).value + ")";
+			ctx.fillRect(
+				SWYM.indexOp(params[1].value,0).value,
+				SWYM.indexOp(params[1].value,1).value,
+				SWYM.indexOp(params[2].value,0).value,
+				SWYM.indexOp(params[2].value,1).value
+			);
+		}};
+		SWYM.DefaultGlobalScope[".drawCircle"] = {value:function(params)
+		{
+			ctx.fillStyle = "rgb(" + Math.floor(SWYM.indexOp(params[0].value,0).value) + "," +
+							Math.floor(SWYM.indexOp(params[0].value,1).value) + "," +
+							Math.floor(SWYM.indexOp(params[0].value,2).value) + ")";
+			ctx.beginPath();
+			ctx.arc(
+				SWYM.indexOp(params[2].value,0).value,
+				SWYM.indexOp(params[2].value,1).value,
+				params[1].value,
+				0, 2*Math.PI, true
+			);
+			ctx.fill();
+		}};*/
+		
+		var autorun_checkbox = document.getElementById("autorun_checkbox");
+		if( autorun_checkbox && autorun_checkbox.checked )
+		{
+			var src = document.getElementById("swymsource");
+			if( src.value !== lastRunSrc )
+			{
+				autorun();
+			}
+		}
+		
+		if( tickBlock )
+		{
+			SWYM.ClosureCall(tickBlock);
+		}
+	}
+
+</script>
+</head>
+<body onload="init();">
+<img src="SwymLogo3.png">
+<textarea cols=70 rows=4 id=swymoutput></textarea><br><code>Some values and functions to try -<br>
+if(keyDown(" ")){...} ... mouse_x, mouse_y, keyDown(VK_LEFT), keyDown(VK_MOUSE)</code>
+<p>
+<input type=button value="Run" style="vertical-align: top;" onclick='test();'>
+<input type=button value="Program URL" style="vertical-align: top;" onclick='saveURL();'>
+<input type=checkbox id=autorun_checkbox style="vertical-align: top;" checked><font style="vertical-align: top;">Update as you type</font><br>
+<textarea cols=60 rows=20 style="vertical-align: top;" id=swymsource>
+'logo' = image("SwymLogo1.png")
+
+tick 
+{
+  clearCanvas()
+  logo.draw( x:50, y:mouse_y-25 )
+}
+</textarea>
+<canvas id="canvas" width="400" height="500"></canvas>
+</body>
+</html>

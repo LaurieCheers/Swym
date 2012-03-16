@@ -1,0 +1,114 @@
+<html>
+<head>
+<style type="text/css">
+	body{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+		background-color: #fcffff;
+		margin: 10px 40px 10px 40px;
+	}
+	table{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+	}
+	textarea{
+		background-color: #FAEFE8;
+		border-style: solid;
+		border-width: 1;
+		border-color: #AAAAAA;
+	}
+	textarea.outputarea{
+		background-color: #CCCCCC;
+	}
+	code{
+		color: #0044AA;
+		font-style: normal;
+	}
+	div.demo{
+		background-color: #F0F0F0;
+		padding: 10px 10px 5px 10px;
+		max-width: 690;
+		clear:right;
+	}
+	div.aside{
+		font-size: 9pt;
+		font-style: italic;
+		padding: 0px 0px 0px 20px;
+	}
+	div.floatbox{
+		float:right;
+		padding: 10px 10px 10px 10px;
+	}
+	div.control{
+		float:right;
+		vertical-align: top;
+	}
+	tr.odd{
+		background-color: #F0F0F0;
+	}
+</style>
+<title>Swym Program</title>
+<script type="text/javascript" src="syntax/shCore.js"></script>
+<script type="text/javascript" src="syntax/shBrushSwym.js"></script>
+<link type="text/css" rel="stylesheet" href="syntax/shCoreSwym.css"/>
+<script language=javascript src="swymloader.js"></script>
+<script language=javascript>
+window.onload = function()
+{
+	var regex = new RegExp( "[\\?&](.*)" );
+	var results = regex.exec( window.location.href );
+	if( results && results[1] )
+	{
+		var initialCode = unescape(results[1]);
+		window.g_sourceCode = initialCode;
+		
+		var interpSource = document.getElementById('interpSource');
+		//interpSource.innerText = initialCode;
+		interpSource.textContent = initialCode;
+		
+		SyntaxHighlighter.highlight(interpSource);
+	}
+}
+
+function openEditor()
+{
+	var baseURL = window.location.href;
+	var cutIndex = baseURL.indexOf("?");
+	if( cutIndex >= 0 )
+		baseURL = baseURL.slice(cutIndex);
+	else
+		baseURL = "";
+	
+	window.location.href = "SwymInterpreter.html" + baseURL;
+}
+
+function runDemo(div)
+{
+	// call out to the main "eval" method
+	var outputBox = document.getElementById('outputbox');
+
+	outputBox.value = "...waiting...";
+
+	var result = SWYM.Eval(window.g_sourceCode);
+
+	outputBox.value = result;
+}
+
+function clearOutput(div)
+{
+	//var theDiv = document.getElementById(divId);
+	var fields = getTextfields(div);
+		
+	fields.dest.value = "";
+}
+</script>
+</head>
+<body>
+<div class=demo>
+<h3>Swym Program</h3><p>
+<input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
+<input type=button value=Edit style="vertical-align: top;" onclick='openEditor(this.parentNode);'>
+<br><textarea cols=80 rows=5 readonly="yes" class=outputarea id=outputbox>- Click Run to see the program output. -</textarea>
+<pre id="interpSource" class="brush: swym;">"Hello, World!"</pre><br>
+</div>
+</body>
