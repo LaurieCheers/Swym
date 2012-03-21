@@ -62,7 +62,10 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		{
 			executable.push("#EtcSequence");
 			executable.push(SWYM.EtcCreateGenerator(parsetree.etcSequence));
-			return SWYM.NumberType;
+			if( parsetree.etcSequence.integer )
+				return SWYM.IntType;
+			else
+				return SWYM.NumberType;
 		}
 		else
 		{
@@ -1133,6 +1136,20 @@ SWYM.CompileDeconstructor = function(argNameList, executable, cscope, argType)
 	}
 }
 
+SWYM.AddKeyAndValue = function(keyNode, valueNode, keyNodes, valueNodes)
+{
+	if( keyNode && keyNode.op && keyNode.op.text === ":" )
+	{
+		SWYM.AddKeyAndValue(keyNode.children[0], valueNode, keyNodes, valueNodes);
+		SWYM.AddKeyAndValue(keyNode.children[1], valueNode, keyNodes, valueNodes);
+	}
+	else
+	{
+		keyNodes.push(keyNode);
+		valueNodes.push(valueNode);
+	}
+}
+
 SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 {
 	if( node && node.op && (node.op.text === "," || node.op.text === ";" || node.op.text === "(blank_line)") )
@@ -1142,8 +1159,7 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 	}
 	else if( node && node.op && node.op.text === ":" )
 	{
-		keyNodes.push(node.children[0]);
-		valueNodes.push(node.children[1]);
+		SWYM.AddKeyAndValue(node.children[0], node.children[1], keyNodes, valueNodes);
 	}
 	else if( node )
 	{
@@ -1166,8 +1182,8 @@ SWYM.CompileTable = function(node, cscope, executable)
 	var elementExecutable = [];
 	var bakedKeys = [];
 	var bakedValues = [];
-	var commonKeyType = {type:"novalues"};
-	var commonValueType = {type:"novalues"};
+	var commonKeyType = SWYM.NoValuesType;
+	var commonValueType = SWYM.NoValuesType;
 	var elseExecutable = undefined;
 	var elseValue = undefined;
 	
@@ -1229,26 +1245,104 @@ SWYM.CompileTable = function(node, cscope, executable)
 		if( valueType && valueType.multivalueOf !== undefined )
 			SWYM.LogError(0, "Error: json-style object declarations may not contain multi-values.");
 	}
+
+	bakedKeys = SWYM.jsArray(bakedKeys);
 	
-	if ( bakedValues )
+	if( SWYM.TypeMatches(SWYM.StringType, commonKeyType) )
 	{
-		var bakedTable = {type:"table", ofClass:SWYM.TableClass, run:function(key)
+		var constructor = function(values, els)
 		{
-			for( var idx = 0; idx < this.keys.length; ++idx )
+			var table = {};
+			for( var Idx = 0; Idx < values.length; ++Idx )
 			{
-				if( SWYM.IsEqual(this.keys.run(idx), key) )
-				{
-					return this.values[idx];
-				}
+				table[ SWYM.ToTerseString(bakedKeys[Idx]) ] = values.run(Idx);
 			}
-			// FIXME: should give an out of bounds error
-			return elseValue;
-		}, keys:SWYM.jsArray(bakedKeys), values:bakedValues};
-		
+			
+			return {type:"table",
+				run:function(key)
+				{
+					var result = this.jsTable[ SWYM.ToTerseString(key) ];				
+					if( result !== undefined )
+						return result;
+
+					if( this.elseValue !== undefined )
+						return this.elseValue;
+					else
+						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+				},
+				keys:bakedKeys,
+				jsTable:table,
+				elseValue:els
+			}
+		};
+	}
+	else if( SWYM.TypeMatches(SWYM.NumberType, commonKeyType) )
+	{
+		var constructor = function(values, els)
+		{
+			var table = {};
+			for( var Idx = 0; Idx < values.length; ++Idx )
+			{
+				table[bakedKeys[Idx]] = values.run(Idx);
+			}
+			
+			return {type:"table",
+				run:function(key)
+				{
+					var result = this.jsTable[key];				
+					if( result !== undefined )
+						return result;
+					
+					if( this.elseValue !== undefined )
+						return this.elseValue;
+					else
+						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+				},
+				keys:bakedKeys,
+				jsTable:table,
+				elseValue:els
+			}
+		};
+	}
+	else
+	{
+		bakedKeys = SWYM.jsArray(bakedKeys);
+		var constructor = function(values, els)
+		{
+			return {type:"table",
+				run:function(key)
+				{
+					// not very happy with this. Can't we do better?
+					for( var idx = 0; idx < this.keys.length; ++idx )
+					{
+						if( SWYM.IsEqual(this.keys.run(idx), key) )
+						{
+							return this.values[idx];
+						}
+					}
+					// FIXME: should give an out of bounds error
+					if( this.elseValue !== undefined )
+						return this.elseValue;
+					else
+						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+				},
+				keys:bakedKeys,
+				values:values,
+				elseValue:els
+			}
+		};
+	}
+	
+	if ( bakedValues && (elseType === undefined || elseType.baked !== undefined) )
+	{
+		var bakedTable = constructor(SWYM.jsArray(bakedValues), elseValue);
+
 		executable.push("#Literal");
 		executable.push(bakedTable);
 		
-		return {type:"swymObject", ofClass:SWYM.TableClass, argType:commonKeyType, outType:commonValueType, baked:bakedTable};
+		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType);
+		resultType.baked = bakedTable;
+		return resultType;
 	}
 	else if ( elseExecutable )
 	{
@@ -1260,23 +1354,8 @@ SWYM.CompileTable = function(node, cscope, executable)
 		{
 			var args = Array.prototype.slice.call(arguments);
 			var elseValue = args[0];
-			args = args.slice(1);
-			return {type:"swymObject",
-				ofClass:SWYM.TableClass,
-				run:function(element)
-				{
-					var result = this.data[element];
-					if( result === undefined )
-					{
-						return elseValue;
-					}
-					else
-					{
-						return result;
-					}
-				},
-				data:SWYM.MakeTable({}, bakedKeys, args)
-			};
+			args.shift();
+			return constructor(SWYM.jsArray(args), elseValue);
 		});
 		
 		return SWYM.TableTypeFromTo(commonKeyType, commonValueType);
@@ -1288,20 +1367,8 @@ SWYM.CompileTable = function(node, cscope, executable)
 		executable.push(bakedKeys.length);
 		executable.push(function()
 		{
-			return {type:"swymObject", ofClass:SWYM.TableClass, run:function(key)
-					{
-						for( var idx = 0; idx < this.keys.length; ++idx )
-						{
-							if( SWYM.IsEqual(this.keys.run(idx), key) )
-							{
-								return this.values[idx];
-							}
-						}
-						// FIXME: should give an out of bounds error
-						return elseValue;
-					},
-					keys:SWYM.jsArray(bakedKeys), values:SWYM.jsArray(arguments)
-				};
+			var args = Array.prototype.slice.call(arguments);
+			return constructor(SWYM.jsArray(args), undefined);
 		});
 		
 		return SWYM.TableTypeFromTo(commonKeyType, commonValueType);
@@ -1375,9 +1442,20 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		var bodyType = SWYM.CompileNode(parsetree.body, cscope, etcExecutable);
 	}
-		
-	var initialValue = parsetree.op.behaviour.identity;
-	var composer = parsetree.op.behaviour.infix;
+	
+	if( parsetree.op.type === "fnnode" )
+	{
+		var initialValue = parsetree.op.identity;
+		var composerExecutable = [];
+		SWYM.CompileFunctionCall(parsetree.op, cscope, composerExecutable);
+		// TODO: now what?
+		var composer = parsetree.op.behaviour.infix;
+	}
+	else
+	{
+		var initialValue = parsetree.op.behaviour.identity;
+		var composer = parsetree.op.behaviour.infix;	
+	}
 	var postProcessor = function(v){return v;}; // null postprocessor
 	var returnType = parsetree.op.behaviour.returnType;
 	
@@ -1451,7 +1529,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	executable.push(stepExecutable);
 	executable.push(initialValue); // initial value
 	executable.push(composer);
-	executable.push(postProcessor); // no postprocess needed
+	executable.push(postProcessor);
 	return returnType;
 }
 

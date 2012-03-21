@@ -670,6 +670,28 @@ SWYM.operators = {
 	"^bitwise": {precedence:96, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.NumberType, infix:function(a,b){return a^b} },
 	"~bitwise": {precedence:96, argTypes:[SWYM.NumberType], returnType:SWYM.NumberType, prefix:function(v){return ~v} },
 
+/*	"-": {precedence:102, returnType:{type:"Number"}, prefix:true, infix:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			if( lhs !== undefined )
+			{
+				return {type:"fnnode", body:undefined, isDecl:false,
+					name:"-",
+					etc:op.etc,
+					children:[rhs, lhs],
+					argNames:["__", "this"]
+				};
+			}
+			else
+			{
+				return {type:"fnnode", body:undefined, isDecl:false,
+					name:"-",
+					etc:op.etc,
+					children:[rhs],
+					argNames:["__"]
+				};
+			}
+		}},*/
 	"-": {precedence:101, argTypes:[SWYM.NumberType,SWYM.NumberType],
 		getReturnType:function(a,b)
 		{
@@ -681,7 +703,18 @@ SWYM.operators = {
 		infix:function(a,b){return a-b}, prefix:function(v){return -v}
 	},
 
-	"+": {precedence:102, returnType:{type:"Number"}, infix:function(a,b){return a+b; }, identity:function(){return 0;},
+	"+": {precedence:102, returnType:{type:"Number"}, infix:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			return {type:"fnnode", body:undefined, isDecl:false,
+				name:"+",
+				etc:op.etc,
+				children:[rhs, lhs],
+				argNames:["__", "this"]
+			};
+		}},
+		
+/*	"+": {precedence:102, returnType:{type:"Number"}, infix:function(a,b){return a+b; }, identity:function(){return 0;},
 			customCompile:function(node, cscope, executable)
 			{
 				var executable1 = [];
@@ -771,6 +804,8 @@ SWYM.operators = {
 				}
 			}
 		},
+*/
+		
 	"*": {precedence:103, argTypes:[SWYM.NumberType,SWYM.NumberType],
 		getReturnType:function(a,b)
 		{
@@ -1079,6 +1114,18 @@ SWYM.DefaultGlobalCScope =
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
+	
+	"fn#+":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
+		nativeCode:function(a,b){ return a+b; },
+		getReturnType:function(argTypes){ return SWYM.TypeUnify( argTypes[0], argTypes[1] ); }
+	},
+	{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType}, "rhs":{index:1, typeCheck:SWYM.ArrayType} },
+		nativeCode:function(a,b){  return SWYM.Concat(a,b);  },
+		getReturnType:function(argTypes){ return SWYM.ArrayTypeContaining(SWYM.TypeUnify(SWYM.GetOutType(argTypes[0]), SWYM.GetOutType(argTypes[1]))); }
+	}],
 	
 	"fn#Struct":
 	[{
@@ -1496,14 +1543,6 @@ SWYM.DefaultGlobalCScope =
 		returnType:{type:"variable", template:["@ArgTypeNamed",0,"@Ref"]},
 		customCompile:function(argTypes, cscope, executable) {} // no-op!
 	}],
-
-	"fn#at":[{  expectedArgs:{ 
-			"this":{index:0, typeCheck:SWYM.TableType}, "that":{index:1, typeCheck:SWYM.AnyType}
-			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
-		},
-		customCompile:function(argTypes, cscope, executable) { executable.push("#At"); return SWYM.GetOutType(argTypes[0]); },
-		multiCustomCompile:function(argTypes, cscope, executable) { executable.push("#MultiAt"); return SWYM.GetOutType(argTypes[0]); },
-	}],
 	
 	"fn#random":[{  expectedArgs:{ "this":{index:0} },
 		getReturnType:function(argTypes)
@@ -1756,9 +1795,13 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 			
-			if( argTypes[0] )
+			if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.keys )
 			{
-				return SWYM.ArrayTypeContaining(argTypes[0].argType);
+				return argTypes[0].memberTypes.keys;
+			}
+			else
+			{
+				return SWYM.ArrayType;
 			}
 		}
 	}],
@@ -1816,7 +1859,10 @@ Array.'#st' {.at(#-1)};\
 Array.'#nd' {.at(#-1)};\
 Array.'#rd' {.at(#-1)};\
 Array.'#th' {.at(#-1)};\
+Table.'at'('key') = key.(this);\
+Table.'at'('key','else') = .if{ key.in(.keys) }{ .at(key) } else (else);\
 Array.'at'('key','else') = .if{key >=0 && key < .length}{.at(key)} else (else);\
+Array.'atEach'('keys':Int.Array) = [ keys.each.if{>=0 && it<this.length}.(this) ];\
 Array.'#st'('else') {.at(#-1) else(else)};\
 Array.'#nd'('else') {.at(#-1) else(else)};\
 Array.'#rd'('else') {.at(#-1) else(else)};\
@@ -1837,7 +1883,6 @@ Value.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
 'forEach_lazy'('list')('fn') = array(length:.length){ list.at(it).(fn) };\
-Array.'At'('keys') = [ .at(keys.each) ];\
 'if'('cond':Bool, 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
 'if'('cond':Bool, 'then') = 404.if{ cond }{ do(then) } else {};\
 Value.'if'('test':Callable, 'then') = .if(test)(then) else {it};\
@@ -1860,29 +1905,29 @@ Array.'none' = !(.1st || .2nd || etc);\
 'every'('list')('test') = list.every(test);\
 'no'('list')('test') = !list.some(test);\
 'none'('list')('test') = !list.some(test);\
-Array.'starting'('n') = .At[0..<n];\
-Array.'ending'('n') = .At[.length-n ..< .length];\
-Array.'slice'('start') = .At[start ..< .length];\
-Array.'slice'('length') = .At[0..<length];\
-Array.'slice'('end') = .At[0..<end];\
-Array.'slice'('last') = .At[0..last];\
-Array.'slice'('start','end') = .At[start..<end];\
-Array.'slice'('start','last') = .At[start..last];\
-Array.'slice'('start','length') = .At[start..<start+length];\
-Array.'slice'('length','end') = .At[end-length..<end];\
-Array.'slice'('length', 'last') = .At[last-length-1..last];\
-Array.'slice'('start','trimEnd') = .At[start ..< .length-trimEnd];\
-Array.'slice'('length','trimEnd') = .At[.length-length-fromEnd ..< .length-trimEnd];\
-Array.'trimStart'('n') = .At[n ..< .length];\
-Array.'trimEnd'('n') = .At[0 ..< .length-n];\
+Array.'starting'('n') = .atEach[0..<n];\
+Array.'ending'('n') = .atEach[ (.length-n).clamp(min:0) ..< .length];\
+Array.'slice'('start') = .atEach[start ..< .length];\
+Array.'slice'('length') = .atEach[0..<length];\
+Array.'slice'('end') = .atEach[0..<end];\
+Array.'slice'('last') = .atEach[0..last];\
+Array.'slice'('start','end') = .atEach[start..<end];\
+Array.'slice'('start','last') = .atEach[start..last];\
+Array.'slice'('start','length') = .atEach[start..<start+length];\
+Array.'slice'('length','end') = .atEach[end-length..<end];\
+Array.'slice'('length', 'last') = .atEach[last-length-1..last];\
+Array.'slice'('start','trimEnd') = .atEach[start ..< .length-trimEnd];\
+Array.'slice'('length','trimEnd') = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
+Array.'trimStart'('n') = .atEach[n ..< .length];\
+Array.'trimEnd'('n') = .atEach[0 ..< .length-n];\
 Array.'startsWith'('list') = .length >= list.length && .starting(list.length) == list;\
 Array.'endsWith'('list') = .length >= list.length && .ending(list.length) == list;\
 Array.'splitAt'('n') = [ .starting(n), .trimStart(n) ];\
 Array.'splitAtEnd'('n') = [ .trimEnd(n), .ending(n) ];\
-Array.'tail' = .At[1 ..< .length];\
-Array.'stem' = .At[0 ..< .length-1];\
-Array.'middle' = .At[1 ..< .length-1];\
-Array.'reversed' = .At[.length-1 .. 0];\
+Array.'tail' = .atEach[1 ..< .length];\
+Array.'stem' = .atEach[0 ..< .length-1];\
+Array.'middle' = .atEach[1 ..< .length-1];\
+Array.'reversed' = .atEach[.length-1 .. 0];\
 Array.'withBounds'('bound') = array(length:.length) 'key'->{ this.at(key) else (key.(bound)) };\
 Array.'safeBounds' = .withBounds{novalues};\
 Array.'cyclic' = .withBounds{ this.at( it%this.length ) };\

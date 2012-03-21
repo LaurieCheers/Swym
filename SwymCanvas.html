@@ -128,9 +128,10 @@
 
 		if( SWYM && !initialized )
 		{
-			SWYM.DefaultGlobalCScope["mouse_x"] = {type:"Number"};
-			SWYM.DefaultGlobalCScope["mouse_y"] = {type:"Number"};
-			SWYM.DefaultGlobalCScope["mouse_lmb_down"] = {type:"Bool"};
+			SWYM.ImageType = {type:"type", nativeType:"image", debugName:"Image"};
+			SWYM.DefaultGlobalCScope["mouse_x"] = SWYM.NumberType;
+			SWYM.DefaultGlobalCScope["mouse_y"] = SWYM.NumberType;
+			SWYM.DefaultGlobalCScope["mouse_lmb_down"] = SWYM.BoolType;
 			SWYM.DefaultGlobalCScope["fn#tick"] =
 			[{
 				expectedArgs:{ "this":{index:0} },
@@ -155,7 +156,7 @@
 			}];
 			SWYM.DefaultGlobalCScope["fn#image"] =
 			[{
-				expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} }, returnType:{type:"image"},
+				expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} }, returnType:SWYM.ImageType,
 				nativeCode:function(filename)
 				{
 					var img = new Image();
@@ -165,7 +166,7 @@
 			}];
 			SWYM.DefaultGlobalCScope["fn#draw"] =
 			[{
-				expectedArgs:{ "this":{index:0, typeCheck:{type:"image"}}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType} },
+				expectedArgs:{ "this":{index:0, typeCheck:SWYM.ImageType}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType} },
 				returnType:SWYM.VoidType,
 				nativeCode:function(img, x, y)
 				{
@@ -207,11 +208,11 @@
 				}
 			}];
 
-			SWYM.DefaultGlobalCScope["VK_LEFT"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(37))};
-			SWYM.DefaultGlobalCScope["VK_RIGHT"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(39))};
-			SWYM.DefaultGlobalCScope["VK_UP"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(38))};
-			SWYM.DefaultGlobalCScope["VK_DOWN"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(40))};
-			SWYM.DefaultGlobalCScope["VK_MOUSE"] = {type:"swymObject", ofClass:SWYM.StringClass, argType:SWYM.NumberType, baked:SWYM.StringWrapper(String.fromCharCode(mouseCharCode))};
+			SWYM.DefaultGlobalCScope["VK_LEFT"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(37)));
+			SWYM.DefaultGlobalCScope["VK_RIGHT"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(39)));
+			SWYM.DefaultGlobalCScope["VK_UP"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(38)));
+			SWYM.DefaultGlobalCScope["VK_DOWN"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(40)));
+			SWYM.DefaultGlobalCScope["VK_MOUSE"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(mouseCharCode)));
 			
 			SWYM.DefaultGlobalRScope["VK_LEFT"] = SWYM.DefaultGlobalCScope["VK_LEFT"].baked;
 			SWYM.DefaultGlobalRScope["VK_RIGHT"] = SWYM.DefaultGlobalCScope["VK_RIGHT"].baked;

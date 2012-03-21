@@ -415,7 +415,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		}
 				
 		// check for nested etc expressions
-		result = SWYM.FindAndProcessEtc(result, etcId+1);
+		//result = SWYM.FindAndProcessEtc(result, etcId+1);
 			
 		return {type:"etc", op:etcOp, body:result, rhs:collected.finalExample[0], etcId:etcId};
 	}
@@ -426,24 +426,26 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	if( !parsetree )
 		return;
 
-	if( parsetree.type === "node" && parsetree.op.text === resultSoFar.op.text )
+	if( (parsetree.type === "node" && parsetree.op.text === resultSoFar.op.text) ||
+		(resultSoFar.op.type === "fnnode" && parsetree.name === resultSoFar.op.name))
 	{
 		for( var Idx = 0; Idx < parsetree.children.length; Idx++ )
 		{			
 			SWYM.CollectEtcRec(parsetree.children[Idx], resultSoFar);
-
-			if( Idx === 0 && parsetree.op.etc )
-			{
-				if( resultSoFar.afterEtc )
-					SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
-
-				if( parsetree.op.etc === "etc" )
-					resultSoFar.stopCollecting = true;
-
-				resultSoFar.afterEtc = true;
-			}
 		}
-		
+
+		if((parsetree.op && parsetree.op.etc) || (parsetree.type === "fnnode" && parsetree.etc))
+		{
+			if( resultSoFar.afterEtc )
+				SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
+
+			if( parsetree.op && parsetree.op.etc === "etc" )
+				resultSoFar.stopCollecting = true;
+			else if( parsetree.type === "fnnode" && parsetree.etc === "etc" )
+				resultSoFar.stopCollecting = true;
+
+			resultSoFar.afterEtc = true;
+		}
 	}
 	else if ( parsetree.type === "etc" )
 	{
@@ -471,7 +473,9 @@ SWYM.FindAndProcessEtcRec = function(parsetree, etcId)
 
 	if( parsetree.type === "node" || parsetree.type === "fnnode" )
 	{
-		if( parsetree.op && parsetree.op.etc )
+		if( parsetree.etc )
+			return parsetree;
+		else if(parsetree.op && parsetree.op.etc)
 			return parsetree.op; //found an etc node! Notify the caller.
 
 		var etcOp;
@@ -483,6 +487,11 @@ SWYM.FindAndProcessEtcRec = function(parsetree, etcId)
 				if( parsetree.op && etcOp.text === parsetree.op.text )
 				{
 					// this continues an etc node! Notify the caller.
+					return etcOp;
+				}
+				else if ( parsetree.type === "fnnode" && etcOp.name === parsetree.name)
+				{
+					// this continues an etc function! Notify the caller.
 					return etcOp;
 				}
 				else
@@ -523,54 +532,67 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 
 SWYM.EtcCreateGenerator = function(sequence)
 {
+	var base = sequence[0];
+
 	if( sequence.length === 1 )
 	{
-		if( sequence.finalExample !== undefined && sequence.finalExample < sequence[0] )
+		sequence.integer = base%1==0;
+		
+		if( sequence.finalExample !== undefined && sequence.finalExample < base )
 		{
 			sequence.direction = "descending";
-			return function(index){ return sequence[0] - index; };
+			return function(index){ return base - index; };
 		}
 		else
 		{
 			sequence.direction = "ascending";
-			return function(index){ return sequence[0] + index; };
+			return function(index){ return base + index; };
 		}
 	}
 		
-	var arithmetic = function(index){ return sequence[0] + (sequence[1]-sequence[0])*index; };
+	var next = sequence[1];
+	var arithmetic = function(index){ return base + (next-base)*index; };
 	
 	if ( SWYM.EtcTryGenerator(sequence, arithmetic) )
 	{
-		if( sequence[1] > sequence[0] )
+		if( next > base )
 			sequence.direction = "ascending";
-		else if ( sequence[1] < sequence[0] )
+		else if ( next < base )
 			sequence.direction = "descending";
+			
+		sequence.integer = base%1==0 && next%1==0;
 
 		return arithmetic;
 	}
 
-	if (sequence[0] != 0 )
+	if (base != 0 )
 	{
-		var geometric = function(index){ return sequence[0] * Math.pow(sequence[1]/sequence[0], index); };
+		var geometric = function(index){ return base * Math.pow(next/base, index); };
 
 		if (SWYM.EtcTryGenerator(sequence, geometric ))
 		{
-			if( sequence[1] > sequence[0] )
+			if( next > base )
 				sequence.direction = "ascending";
-			else if ( sequence[1] < sequence[0] )
+			else if ( next < base )
 				sequence.direction = "descending";
+				
+			sequence.integer = base%1==0 && (next/base)%1==0;
+			
 			return geometric;
 		}
 	}
+	
+	var second = sequence[1];
+	var third = sequence[2];
   
 	if( sequence.length >= 4 )
 	{	
 		// quadratic requires 4 examples, because literally all 3-value sequences fit a parabola.
 		// Goodbye error detection...
-		var firstDiff = sequence[1]-sequence[0];
-		var pDiff = (sequence[2]-sequence[1]) - firstDiff;
+		var firstDiff = second-base;
+		var pDiff = (third-second) - firstDiff;
 		var quadratic = function(index){
-			return sequence[0] + firstDiff*index + pDiff*index*(index-1)/2;
+			return base + firstDiff*index + pDiff*index*(index-1)/2;
 		};
 
 		if (SWYM.EtcTryGenerator(sequence, quadratic))
@@ -579,6 +601,8 @@ SWYM.EtcCreateGenerator = function(sequence)
 				sequence.direction = "ascending";
 			else if ( firstDiff <= 0 && pDiff <= 0 )
 				sequence.direction = "descending";
+				
+			sequence.integer = base%1==0 && firstDiff%1==0 && pDiff%1==0;
 
 			return quadratic;
 		}

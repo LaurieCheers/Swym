@@ -147,9 +147,10 @@ function runAllTests()
   //runTest("Value.'ttl' {result:Number.var = 0; result += .each; result}; [1,3,7,0].ttl",			"11");
   runTest("'list'=[1,2,3]; [9,list.each,[8],list,7]",			"[9,1,2,3,[8],[1,2,3],7]");
   runTest("\"Hello\".1st", "\"H\"");
-  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h]]", "\"HHHHHH\"");
-  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h,h]]", "[\"H\",\"H\",\"H\",\"H\",\"H\",\"HH\"]");
+  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h]]", "[\"H\",\"H\",\"H\",[\"H\"],\"H\",\"H\"]");
+  runTest("'h'=\"H\".1st; [h,h,[h],[[h]],h,[h,h]]", "[\"H\",\"H\",\"H\",[\"H\"],\"H\",\"HH\"]");
   runTest("'h'=1st(\"H\"); [h,h,h,h,h]", "\"HHHHH\"");
+  runTest("'h'=1st(\"H\"); [h,h,h,h+h]", "[\"H\",\"H\",\"H\",\"HH\"]");
   runTest("'h'=1st(\"H\"); [h,h,h,h,1]", "[\"H\",\"H\",\"H\",\"H\",1]");
   runTest("'h'=1st(\"H\"); [[h,h,h,h],1]", "[\"HHHH\",1]");
   runTest("[\"Hello\".each]", "\"Hello\"");
@@ -186,8 +187,15 @@ function runAllTests()
   runTest("{\"x\":10, \"y\":20}.at(\"z\")", "~error~");
   runTest("Table.'getx' = .at(\"x\"); getx{\"x\":10, \"y\":20}", "10");
   runTest("0.{else:1}", "1");
+  runTest("{else:1}.keys", "[]");
   runTest("{\"xx\":10, \"y\":20}.keys", "[\"xx\",\"y\"]");
   runTest("{\"x\":10, \"y\":20}.length", "~error~");
+  runTest("\"1\".{\"1\":$1, \"2\":$2}", "\"1\"");
+  runTest("\"2\".{\"1\":$1, \"2\":$2}", "\"2\"");
+  runTest("\"3\".{\"1\":$1, \"2\":$2}", "~error~");
+  runTest("\"1\".{\"1\":$1, \"2\":$2, else:$3}", "\"1\"");
+  runTest("\"2\".{\"1\":$1, \"2\":$2, else:$3}", "\"2\"");
+  runTest("\"3\".{\"1\":$1, \"2\":$2, else:$3}", "\"3\"");
   runTest("table[1..10]{^2}", "{1:1, 2:4, 3:9, 4:16, 5:25, 6:36, 7:49, 8:64, 9:81, 10:100}");
 //  runTest("[x:10, y:10].at(\"x\")+1", "11");
   endReportTable();

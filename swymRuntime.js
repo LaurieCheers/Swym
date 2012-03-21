@@ -606,7 +606,20 @@ SWYM.ForEachPairing = function(multiArgs, body)
 SWYM.jsArray = function(array)
 {
 	array.type = "jsArray";
-	array.run = function(idx){ return this[idx]; };
+	array.run = function(idx)
+	{
+		if( idx >= 0 && idx < this.length )
+		{
+			return this[idx];
+		}
+		else if( SWYM.g_etcState.depth > 0 )
+		{
+			SWYM.g_etcState.halt = true;
+			SWYM.halt = true;
+		}
+		else
+			SWYM.LogError(-1, "Array index "+idx+" was out of bounds on array "+SWYM.ToDebugString(this));
+	};
 	return array;
 }
 

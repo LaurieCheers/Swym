@@ -39,6 +39,7 @@ SWYM.IsOfType = function(value, typeCheck)
 		switch(typeCheck.nativeType)
 		{
 			case "Void": return false;
+			case "NoValues": return true; break;
 			case "Type":     if(value.type !== "type") return false; break;
 			case "Number":   if(typeof value !== "number") return false; break;
 			case "String":   if(typeof value !== "string") return false; break;
@@ -453,12 +454,12 @@ SWYM.ArrayTypeContaining = function(elementType)
 	}
 	
 	var outType = SWYM.ToSinglevalueType(elementType);
-	return {type:"type", nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:outType.debugName+".Array"};
+	return {type:"type", nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
 }
 
 SWYM.TableTypeFromTo = function(keyType, valueType)
 {
-	return {type:"type", memberTypes:{keys:keyType}, argType:keyType, outType:valueType, debugName:"Table("+keyType.debugName+"->"+valueType.debugName+")"};
+	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:SWYM.ValueType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
 }
 
 SWYM.BakedValue = function(value)
@@ -554,7 +555,7 @@ SWYM.GetOutType = function(callableType, argType)
 	
 	if( callableType.argType )
 	{
-		SWYM.TypeCoerce(callableType.argType, argType, "Block argument");
+		SWYM.TypeCoerce(callableType.argType, argType, "Argument to 'do'("+SWYM.TypeToString(callableType)+")");
 	}
 
 	return callableType.outType;
