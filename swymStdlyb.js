@@ -1603,7 +1603,12 @@ SWYM.DefaultGlobalCScope =
 	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ToMultivalueType(SWYM.GetOutType(argTypes[0])); } // each is basically a no-op!
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ToMultivalueType(SWYM.GetOutType(argTypes[0])); }, // each is basically a no-op!
+		multiCustomCompile:function(argTypes, cscope, executable)
+		{
+      executable.push("#Flatten");
+      return SWYM.ToMultivalueType(SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[0])));
+    }
 	}],
 	
 	"fn#accumulate":[
