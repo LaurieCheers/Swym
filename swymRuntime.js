@@ -1235,11 +1235,8 @@ SWYM.ToDebugString = function(value)
 				return "[]";
 			else if( value.length === 1 )
 				return "["+value.run(0)+"]";
-<<<<<<< HEAD
 			else if( value.length === 2 )
 				return "["+value.run(0)+","+value.run(1)+"]";
-=======
->>>>>>> cd782e7... Signed-off-by: unknown <Laurie@Laurie-PC.(none)>
 			else
 				return "["+value.run(0)+".."+value.run(value.length-1)+"]";
 		}

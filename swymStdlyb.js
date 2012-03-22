@@ -1805,11 +1805,7 @@ SWYM.DefaultGlobalCScope =
 			}
 			else if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.length !== undefined )
 			{
-<<<<<<< HEAD
 				return SWYM.IntArrayType;
-=======
-				return SWYM.NumberArrayType;
->>>>>>> cd782e7... Signed-off-by: unknown <Laurie@Laurie-PC.(none)>
 			}
 			else
 			{
