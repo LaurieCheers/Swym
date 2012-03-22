@@ -41,7 +41,7 @@ SWYM.NextClassID = 8001;
 // 'Nat' = Number & MultipleOf(1) & GreaterOrEq(0)
 
 SWYM.AnyType = {type:"type", debugName:"Value"};
-SWYM.BoolType = {type:"type", enumValues:[true, false], debugName:"Bool"};
+SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
 SWYM.IntType = {type:"type", nativeType:"Number", multipleOf:1, debugName:"Int"};
@@ -62,6 +62,7 @@ SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharTyp
 SWYM.CallableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Callable"};
 SWYM.BlockType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
 SWYM.PredicateType = {type:"type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Predicate"};
+SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Int.Array"};
 SWYM.NumberArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.NumberType, memberTypes:{"length":SWYM.IntType}, debugName:"Number.Array"};
 SWYM.StringArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringType, memberTypes:{"length":SWYM.IntType}, debugName:"String.Array"};
 SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"StringChar.Array"};
@@ -282,7 +283,7 @@ SWYM.operators = {
 				}
 
 				// If this just declared a class, name the class after this variable name
-				if( typecheck && typecheck.baked && typecheck.type === "type" && !typecheck.baked.debugName )
+				if( typecheck && typecheck.baked && typecheck.baked.type === "type" && !typecheck.baked.debugName )
 				{
 					typecheck.baked.debugName = node.children[0].value;
 				}
@@ -1153,7 +1154,7 @@ SWYM.DefaultGlobalCScope =
 				var memberTypes = SWYM.CompileClassBody(argTypes[0].needsCompiling[0].bodyNode, innerCScope, defaultNodes);
 			}
 			
-			var newStruct = {type:"type", memberTypes:memberTypes};
+			var newStruct = {type:"type", nativeType:"Struct", memberTypes:memberTypes};
 			
 			for( var memberName in memberTypes )
 			{
@@ -1804,12 +1805,29 @@ SWYM.DefaultGlobalCScope =
 			}
 			else if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.length !== undefined )
 			{
+<<<<<<< HEAD
+				return SWYM.IntArrayType;
+=======
 				return SWYM.NumberArrayType;
+>>>>>>> cd782e7... Signed-off-by: unknown <Laurie@Laurie-PC.(none)>
 			}
 			else
 			{
 				return SWYM.ArrayType;
 			}
+		}
+	}],
+	
+  "fn#values":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.EnumType} },
+		customCompile:function(argTypes, cscope, executable)
+		{
+      if( !argTypes[0] || !argTypes[0].baked || !argTypes[0].baked.enumValues )
+      {
+        SWYM.LogError(0, "Fsckup: Enum values must be known at compile time!?");
+      }
+			executable.push("#Literal");
+			executable.push(argTypes[0].baked.enumValues);
+			return SWYM.ArrayTypeContaining(argTypes[0].baked);
 		}
 	}],
 	
@@ -1941,7 +1959,7 @@ Array.'cyclic' = .withBounds{ this.at( it%this.length ) };\
 Array.'total' = .1st + .2nd + etc;\
 Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
-Value.'in'('array') { this==array.1st || this==array.2nd || etc };\
+Value.'in'('array') { ==any array };\
 Number.'clamp'('min':Number) = if(this < min){ min } else { this };\
 Number.'clamp'('max':Number) = if(this > max){ max } else { this };\
 Number.'clamp'('min':Number, 'max':Number) = .clamp(min:min).clamp(max:max);\

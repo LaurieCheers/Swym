@@ -637,19 +637,12 @@ SWYM.ForEachPairing = function(multiArgs, body)
 SWYM.jsArray = function(array)
 {
 	array.type = "jsArray";
-	array.run = function(idx)
+	array.run = function(index)
 	{
-		if( idx >= 0 && idx < this.length )
-		{
-			return this[idx];
-		}
-		else if( SWYM.g_etcState.depth > 0 )
-		{
-			SWYM.g_etcState.halt = true;
-			SWYM.halt = true;
-		}
+		if( index >= 0 && index < this.length )
+			return this[index];
 		else
-			SWYM.LogError(-1, "Array index "+idx+" was out of bounds on array "+SWYM.ToDebugString(this));
+      SWYM.ReportOutOfBounds(this,index);
 	};
 	return array;
 }
@@ -666,16 +659,9 @@ SWYM.rangeArray = function(base, length)
     run:function(index)
     {
       if( index >= 0 && index < this.length )
-      {
         return base+index;
-      }
-      else if( SWYM.g_etcState.depth > 0 )
-      {
-        SWYM.g_etcState.halt = true;
-        SWYM.halt = true;
-      }
       else
-        SWYM.LogError(-1, "Array index "+idx+" was out of bounds on array "+SWYM.ToDebugString(this));
+        SWYM.ReportOutOfBounds(this, index);
     }
   }
 }
@@ -685,7 +671,30 @@ SWYM.StringWrapper = function(str)
 	if( str === undefined )
 		return undefined;
 	else
-		return {type:"string", run: function(idx){ if(idx >= 0 && idx < str.length) return SWYM.StringWrapper(this.data[idx]); }, length:str.length, data:str};
+		return {type:"string",
+      run: function(index)
+      {
+        if(index >= 0 && index < str.length)
+          return SWYM.StringWrapper(this.data[index]);
+        else
+          SWYM.ReportOutOfBounds(this, index);
+      },
+      length:str.length,
+      data:str
+    };
+}
+
+SWYM.ReportOutOfBounds = function(array, index)
+{
+  if( SWYM.g_etcState.depth > 0 )
+  {
+    SWYM.g_etcState.halt = true;
+    SWYM.halt = true;
+  }
+  else
+  {
+    SWYM.LogError(-1, "Array index "+index+" was out of bounds on array "+SWYM.ToDebugString(array));
+  }
 }
 
 SWYM.ArrayContains = function(array, value)
@@ -1226,6 +1235,11 @@ SWYM.ToDebugString = function(value)
 				return "[]";
 			else if( value.length === 1 )
 				return "["+value.run(0)+"]";
+<<<<<<< HEAD
+			else if( value.length === 2 )
+				return "["+value.run(0)+","+value.run(1)+"]";
+=======
+>>>>>>> cd782e7... Signed-off-by: unknown <Laurie@Laurie-PC.(none)>
 			else
 				return "["+value.run(0)+".."+value.run(value.length-1)+"]";
 		}

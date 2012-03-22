@@ -46,6 +46,7 @@ SWYM.IsOfType = function(value, typeCheck)
 			case "JSArray":  if(value.type !== "jsArray") return false; break;
 			case "JSObject": if(value.type !== "jsObject") return false; break;
 			case "Variable": if(value.type !== "variable") return false; break;
+			case "Struct": if(value.type !== "struct") return false; break;
 			default:
 			{
 				SWYM.LogError(0, "Fsckup: Unrecognized native type '"+typeCheck.nativeType+"'");
