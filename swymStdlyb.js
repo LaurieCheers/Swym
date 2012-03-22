@@ -709,8 +709,9 @@ SWYM.operators = {
 			return {type:"fnnode", body:undefined, isDecl:false,
 				name:"+",
 				etc:op.etc,
-				children:[rhs, lhs],
-				argNames:["__", "this"]
+				identity:0,
+				children:[lhs, rhs],
+				argNames:["this", "__"]
 			};
 		}},
 		
@@ -1783,15 +1784,12 @@ SWYM.DefaultGlobalCScope =
 			executable.push(function(table)
 			{
 				if( table.keys )
+				{
 					return table.keys;
+				}
 				else if( table.length )
 				{
-					var result = [];
-					for( var Idx = 0; Idx < table.length; ++Idx )
-					{
-						result.push(Idx);
-					}
-					return SWYM.jsArray(result);
+					return SWYM.rangeArray(0, table.length);
 				}
 				else
 				{
@@ -1800,9 +1798,13 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 			
-			if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.keys )
+			if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.keys !== undefined )
 			{
 				return argTypes[0].memberTypes.keys;
+			}
+			else if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.length !== undefined )
+			{
+				return SWYM.NumberArrayType;
 			}
 			else
 			{

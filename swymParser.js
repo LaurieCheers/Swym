@@ -357,7 +357,7 @@ SWYM.FunctionesqueParseTreeNode = function(name)
 
 		op.behaviour = SWYM.operators[name];
 
-		return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+		return SWYM.ParseTreeNode(lhs, op, rhs);
 	}
 }
 

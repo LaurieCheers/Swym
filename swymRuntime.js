@@ -375,6 +375,37 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 				stack.push( SWYM.ExecWithScope("IfNo", executable[PC+2], rscope) );
 			PC += 3;
 			break;
+			
+		case "#EtcSimple":
+			var etcLimit = executable[PC+1];
+			var etcStepExecutable = executable[PC+2];
+
+			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope);
+
+			var etcData = {index:0};
+			rscope["<etcData>"] = etcData;
+
+			SWYM.g_etcState.depth++;
+			SWYM.g_etcState.halt = false;
+
+			for( var etcIndex = 0; etcIndex < limit; ++etcIndex )
+			{
+				etcData.index = etcIndex;
+				
+				SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope);
+
+				if( SWYM.g_etcState.halt )
+					break;
+			}
+
+			if( SWYM.g_etcState.halt && SWYM.halt && !SWYM.errors )
+			{
+				SWYM.halt = false;
+			}
+
+			SWYM.g_etcState.depth--;
+			PC += 3;
+			break;
 		
 		case "#Etc":
 			var etcLimit = executable[PC+1];
@@ -659,6 +690,11 @@ SWYM.StringWrapper = function(str)
 
 SWYM.ArrayContains = function(array, value)
 {
+	if( array.contains !== undefined )
+	{
+		return array.contains(value);
+	}
+	
 	for( var Idx = 0; Idx < array.length; Idx++ )
 	{
 		if( SWYM.IsEqual( array[Idx], value ) )
@@ -1063,11 +1099,9 @@ SWYM.ToTerseString = function(value)
 		case "novalues":
 			return "";
 		case "jsArray":
-			if( value.length === 0 )
-				return "";
-			
-			var result = SWYM.ToTerseString(value.run(0));
-			for( var Idx = 1; Idx < value.length; Idx++ )
+		case "rangeArray":
+			var result = "";
+			for( var Idx = 0; Idx < value.length; Idx++ )
 			{
 				result += SWYM.ToTerseString(value.run(Idx));
 			}
@@ -1184,6 +1218,16 @@ SWYM.ToDebugString = function(value)
 				result += memberName+":"+SWYM.ToDebugString(value.members[memberName]);
 			}
 			return value.structType.debugName+"("+result+")";
+		}
+		
+		case "rangeArray":
+		{
+			if( value.length === 0 )
+				return "[]";
+			else if( value.length === 1 )
+				return "["+value.run(0)+"]";
+			else
+				return "["+value.run(0)+".."+value.run(value.length-1)+"]";
 		}
 
 		default:

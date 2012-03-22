@@ -912,6 +912,18 @@ SWYM.NextArgTypeID = 501;
 SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 {
 	var debugName = SWYM.GetSource(braceNode.op.pos, braceNode.op.endSourcePos+1);
+	if( argNode !== undefined )
+	{
+		if( argNode.op !== undefined && argNode.op.endSourcePos !== undefined )
+		{
+			debugName = SWYM.GetSource(argNode.op.pos, argNode.op.endSourcePos+1) + "->" + debugName;
+		}
+		else
+		{
+			debugName = argNode.text + "->" + debugName;
+		}
+	}
+
 	var executableBlock = { debugName:debugName };
 
 	executable.push("#Closure");
@@ -1445,11 +1457,31 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	
 	if( parsetree.op.type === "fnnode" )
 	{
-		var initialValue = parsetree.op.identity;
-		var composerExecutable = [];
-		SWYM.CompileFunctionCall(parsetree.op, cscope, composerExecutable);
-		// TODO: now what?
-		var composer = parsetree.op.behaviour.infix;
+		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a node.
+		// we need to set the argument "this" to <etcSoFar>, representing the output from the etc
+		// expression we've processed so far, and set the anonymous argument to be the body node.
+		var etcScope = object(cscope);
+		etcScope["<etcSoFar>"] = SWYM.NumberType; // FIXME
+
+		parsetree.op.children[0] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
+		parsetree.op.children[1] = parsetree.body;
+
+		var etcExecutable = [];
+		var returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable);
+		etcExecutable.push("#Overwrite");
+		etcExecutable.push("<etcSoFar>");
+
+		executable.push("#Literal");
+		executable.push(parsetree.op.identity);
+		executable.push("#Store");
+		executable.push("<etcSoFar>");
+		executable.push("#EtcSimple");
+		executable.push(["#Literal", 1000]); //TODO: handle limits properly
+		executable.push(etcExecutable);
+		executable.push("#Load");
+		executable.push("<etcSoFar>");
+		
+		return returnType;
 	}
 	else
 	{
