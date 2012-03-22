@@ -538,7 +538,7 @@ SWYM.operators = {
 				}
 				else
 				{
-					SWYM.LogError("Inconsistent arguments for '..' operator: "+type0.debugName+" and "+type1.debugName);
+					SWYM.LogError("Inconsistent arguments for '..' operator: "+SWYM.TypeToString(type0)+" and "+SWYM.TypeToString(type1));
 					return;
 				}
 			}

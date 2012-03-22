@@ -623,6 +623,32 @@ SWYM.jsArray = function(array)
 	return array;
 }
 
+SWYM.rangeArray = function(base, length)
+{
+  return {
+    type:"rangeArray",
+    length:length,
+    contains:function(value)
+    {
+      return value >= base && value < base+length && value%1==0;
+    },
+    run:function(index)
+    {
+      if( index >= 0 && index < this.length )
+      {
+        return base+index;
+      }
+      else if( SWYM.g_etcState.depth > 0 )
+      {
+        SWYM.g_etcState.halt = true;
+        SWYM.halt = true;
+      }
+      else
+        SWYM.LogError(-1, "Array index "+idx+" was out of bounds on array "+SWYM.ToDebugString(this));
+    }
+  }
+}
+
 SWYM.StringWrapper = function(str)
 {
 	if( str === undefined )
@@ -777,7 +803,16 @@ SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
 		var current = start;
 	else
 		var current = start+step;
-		
+
+  if( step === 1 )
+  {
+    var length = end-current;
+    if( includeEnd )
+      length++;
+    
+    return SWYM.rangeArray(current, length);
+  }
+
 	var result = SWYM.jsArray([]);
 	if( step > 0 )
 	{
