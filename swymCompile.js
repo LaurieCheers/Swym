@@ -1226,6 +1226,10 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 	{
 		SWYM.AddKeyAndValue(node.children[0], node.children[1], keyNodes, valueNodes);
 	}
+	else if( node && node.type === "decl" )
+	{
+		SWYM.AddKeyAndValue(node, undefined, keyNodes, valueNodes);
+	}
 	else if( node )
 	{
 		SWYM.LogError(node.pos, "Error: each element of a table must be a 'key:value' declaration.");
@@ -1463,21 +1467,27 @@ SWYM.CompileClassBody = function(node, cscope, defaultNodes)
 			SWYM.LogError(node.pos, "Invalid member declaration "+keyNodes[idx]);
 		}
 		
-		if( valueNodes[idx] && valueNodes[idx].op && valueNodes[idx].op.text === "=" )
+		if( valueNodes[idx] === undefined )
+		{
+			memberTypes[keyNodes[idx].value] = SWYM.AnyType;
+		}
+		else if( valueNodes[idx].op && valueNodes[idx].op.text === "=" )
 		{
 			defaultNodes[keyNodes[idx].value] = valueNodes[idx].children[1];
 			valueNodes[idx] = valueNodes[idx].children[0];
 		}
-
-		var valueType = SWYM.CompileNode(valueNodes[idx], cscope, unusedExecutable);
-		
-		if( !valueType || !valueType.baked || valueType.baked.type !== "type" )
-		{
-			SWYM.LogError(node.pos, "Invalid member declaration "+keyNodes[idx]);
-		}
 		else
 		{
-			memberTypes[keyNodes[idx].value] = valueType.baked;
+			var valueType = SWYM.CompileNode(valueNodes[idx], cscope, unusedExecutable);
+
+			if( !valueType || !valueType.baked || valueType.baked.type !== "type" )
+			{
+				SWYM.LogError(node.pos, "Invalid member declaration "+keyNodes[idx]);
+			}
+			else
+			{
+				memberTypes[keyNodes[idx].value] = valueType.baked;
+			}
 		}
 	}
 	

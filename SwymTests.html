@@ -380,7 +380,7 @@ function runAllTests()
   runTest("'T'=Struct{}; 'obj'=new~T; obj.is~T",				"true");
   runTest("'T'=Struct{}; 'obj'=new~T; obj == obj",				"true");
   runTest("'T'=Struct{}; 'obj1'=new~T; 'obj2'=new~T; obj1 == obj2", "false");
-  runTest("'A'=Struct{}; 'B'=Struct{}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new, B.new, A.new].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
+  runTest("'A'=Struct{'a':Int}; 'B'=Struct{'b':Int}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
   runTest("'T'=Struct{'x'}; T.new(x:5).x", "5");
   runTest("'T'=Struct{'x':Number}; T.new(x:5).x", "5");
   runTest("'T'=Struct{'last':Number}; T.new(last:10).last + [1..10].last",	"20");
