@@ -52,6 +52,7 @@ function runAllTests()
   addReportTable("Basic Logic:");
   runTest("true || false", "true");
   runTest("true && false", "false");
+  runTest("1 && 2", "~error~");
   runTest("3>2", "true");
   runTest("3>3", "false");
   runTest("3>4", "false");
@@ -179,6 +180,8 @@ function runAllTests()
   runTest("Int.'b'{\"$(.{0:\"no more\",else:this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
   			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n");
   runTest("\"Foo\".each.length.[]", "[1,1,1]");
+  runTest("(1..10).if{>4}{ 1 } else { 2 }.[]", "[2,2,2,2,1,1,1,1,1,1]");
+  runTest("(1..10).if{>4}{ novalues } else { ==2 }", "false\ntrue\nfalse\nfalse");
   endReportTable();
 
    addReportTable("JSON");

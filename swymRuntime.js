@@ -52,7 +52,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var varname = executable[PC+1];
 			if( rscope[varname] !== undefined )
 			{
-				SWYM.LogError(0, "Variable "+varname+" already defined");
+				SWYM.LogError(0, "Fsckup: Variable "+varname+" already defined");
 				return;
 			}
 			var storingValue = stack.pop();
@@ -67,7 +67,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 
 			if( rscope[varname] === undefined )
 			{
-				SWYM.LogError(0, "Variable "+varname+" not defined");
+				SWYM.LogError(0, "Fsckup: Variable "+varname+" not defined");
 				return;
 			}
 			var targetScope = rscope;
@@ -83,7 +83,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var varname = executable[PC+1];
 			if( rscope[varname] === undefined )
 			{
-				SWYM.LogError(0, "Variable "+varname+" is undefined");
+				SWYM.LogError(0, "Fsckup: Variable "+varname+" is undefined");
 				return;
 			}
 			stack.push( rscope[varname] );
@@ -403,6 +403,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 				SWYM.halt = false;
 			}
 
+			SWYM.g_etcState.halt = false;
 			SWYM.g_etcState.depth--;
 			PC += 3;
 			break;
@@ -450,6 +451,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 				SWYM.halt = false;
 			}
 
+			SWYM.g_etcState.halt = false;
 			SWYM.g_etcState.depth--;
 			stack.push( etcPostProcessor(etcResult) );
 			PC += 7;
@@ -484,13 +486,13 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope);
 			if( !SWYM.halt )
 			{
-				SWYM.LogError(0, "Function failed to return at all!?");
+				SWYM.LogError(0, "Fsckup: Function failed to return at all!?");
 			}
 			else if( returnData.halt )
 			{
 				if( returnData.value === undefined )
 				{
-					SWYM.LogError(0, "Function failed to return a value!?");
+					SWYM.LogError(0, "Fsckup: Function failed to return a value!?");
 				}
 				else
 				{
@@ -521,7 +523,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			
 		default:
 			//error!
-			SWYM.LogError(0, "Error, SWYM.Exec can't understand opcode "+executable[PC]);
+			SWYM.LogError(0, "Fsckup: SWYM.Exec can't understand opcode "+executable[PC]);
 			return;
 		}
 	}
@@ -616,13 +618,34 @@ SWYM.ForEachPairing = function(multiArgs, body)
 			}
 		}
 	}
+	else if( multiArgs.length === 4 )
+	{
+		// optimization for the 4 arg case
+		var multivalueA = multiArgs[0];
+		var multivalueB = multiArgs[1];
+		var multivalueC = multiArgs[2];
+		var multivalueD = multiArgs[3];
+		for( var IdxA = 0; IdxA < multivalueA.length; IdxA++ )
+		{
+			for( var IdxB = 0; IdxB < multivalueB.length; IdxB++ )
+			{
+				for( var IdxC = 0; IdxC < multivalueC.length; IdxC++ )
+				{
+					for( var IdxD = 0; IdxD < multivalueD.length; IdxD++ )
+					{
+						result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC), multivalueD.run(IdxD)]) );
+					}
+				}
+			}
+		}
+	}
 	else
 	{
 		// the general (slowest?) case: apply recursively
 		var multivalue = multiArgs[0];
 		for( var Idx = 0; Idx < multivalue.length; Idx++ )
 		{
-			var value = multivalue[Idx];
+			var value = multivalue.run(Idx);
 			SWYM.ForEachPairing(multiArgs.slice(1), function(otherArgs)
 			{
 				var args = [value];

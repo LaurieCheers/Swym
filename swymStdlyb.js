@@ -449,10 +449,10 @@ SWYM.operators = {
 		{
 			var executable2 = [];
 			var type1 = SWYM.CompileNode( node.children[1], cscope, executable2 );
-			type1 = SWYM.TypeCoerce(SWYM.BoolType, type0, "&& operator arguments");
+			type1 = SWYM.TypeCoerce(SWYM.BoolType, type1, "&& operator arguments");
 
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
-			type0 = SWYM.TypeCoerce(SWYM.BoolType, type1, "&& operator arguments");
+			type0 = SWYM.TypeCoerce(SWYM.BoolType, type0, "&& operator arguments");
 
 			executable.push("#IfElse");
 			executable.push(executable2); // then
@@ -497,7 +497,7 @@ SWYM.operators = {
 			}
 			else if( SWYM.TypeMatches({type:"closure", returnType:SWYM.BoolType}, type1) )
 			{
-				// negate closure
+				// negate closure... is this useful/wise?
 				if( type1.multivalueOf !== undefined )
 					executable.push("#MultiNative");
 				else
@@ -1350,25 +1350,28 @@ SWYM.DefaultGlobalCScope =
 	"fn#if":
 	[{
 		expectedArgs:{
-			"this":{index:0, indexName:null},
+			"this":{index:0},
 			"test":{index:1, typeCheck:SWYM.CallableType},
 			"then":{index:2, typeCheck:SWYM.CallableType},
 			"else":{index:3, typeCheck:SWYM.CallableType}
 		},
 		customCompile:function(argTypes, cscope, executable)
 		{
-			var selfType = argTypes[0];
-			var condType = SWYM.GetOutType(argTypes[1], selfType);
+			var isMulti = argTypes[0].multivalueOf !== undefined || argTypes[1].multivalueOf !== undefined || 
+						argTypes[2].multivalueOf !== undefined || argTypes[3].multivalueOf !== undefined;
+			
+			var selfType = SWYM.ToSinglevalueType(argTypes[0]);
+			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType);
 			
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
 				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked);
 			}
-			var thenType = SWYM.GetOutType(argTypes[2], bodyType);
+			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType);
 			
 			// TODO: do some kind of type-subtract so we can pass selfType minus bodyType in here.
-			var elseType = SWYM.GetOutType(argTypes[3], selfType);
+			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType);
 			SWYM.TypeCoerce(SWYM.BoolType, condType, "if");
 			
 			// optimizations needed -
@@ -1395,7 +1398,7 @@ SWYM.DefaultGlobalCScope =
 				thenType = SWYM.ToMultivalueType(thenType);
 			}
 
-			executable.push("#Native");
+			executable.push(isMulti? "#MultiNative": "#Native");
 			executable.push(4);
 			executable.push(function(self, test, then, els)
 			{

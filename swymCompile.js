@@ -1101,7 +1101,9 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 					++numClosureReferences;
 				}
 			}
-			else if( closureBody[Idx] === "#Store" || closureBody[Idx] === "#Closure" || closureBody[Idx] === "#Etc"|| closureBody[Idx] === "#EtcSequence" || closureBody[Idx] === "#Return" )
+			else if( closureBody[Idx] === "#Store" || closureBody[Idx] === "#Closure" ||
+				closureBody[Idx] === "#Etc"|| closureBody[Idx] === "#EtcSequence" ||
+				closureBody[Idx] === "#Return" || closureBody[Idx] === "#IfElse" )
 			{
 				cannotInline = true;
 			}
@@ -1573,6 +1575,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 
 		case "&&":
+			SWYM.TypeCoerce(SWYM.BoolType, bodyType, "&&etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
 				composer = function(tru, v){ var result = SWYM.ResolveBool_Every(v); if(!result){ SWYM.g_etcState.halt = true; }; return result; };
 			else
@@ -1580,6 +1583,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 
 		case "||":
+			SWYM.TypeCoerce(SWYM.BoolType, bodyType, "||etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
 				composer = function(fals, v){ var result = SWYM.ResolveBool_Some(v); if(result){ SWYM.g_etcState.halt = true; }; return result; };
 			else
@@ -1591,8 +1595,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		var limitTimes = [];
 		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimes);
-		if( !SWYM.TypeMatches( {type:"Number"}, limitType ) )
-			SWYM.LogError(0, "Error - etc** expects a number for number of times to repeat; got "+limitType? limitType.type: limitType);
+		SWYM.TypeCoerce(SWYM.IntType, limitType, "etc** number of times");
 	}
 	else
 	{

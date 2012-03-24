@@ -232,6 +232,26 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 			}
 		}
 	}
+	
+	if( typeCheck.enumValues )
+	{
+		// "baked" was already handled above
+		if( valueInfo.enumValues === undefined )
+		{
+			return false;
+		}
+		
+		if( valueInfo.enumValues !== typeCheck.enumValues )
+		{
+			for( var Idx = 0; Idx < valueInfo.enumValues.length; ++Idx )
+			{
+				if( !SWYM.ArrayContains(typeCheck.enumValues, valueInfo.enumValues.run(Idx)) )
+				{
+					return false;
+				}
+			}
+		}
+	}
 
 	return true;
 }
@@ -518,7 +538,12 @@ SWYM.GetOutType = function(callableType, argType)
 	if( !callableType )
 	{
 		SWYM.LogError(0, "GetOutType - Expected a callable, got: "+callableType);
-		return {type:"novalues"};
+		return SWYM.NoValuesType;
+	}
+	
+	if( callableType === SWYM.NoValuesType )
+	{
+    return SWYM.NoValuesType;
 	}
 	
 	if( callableType.needsCompiling )
