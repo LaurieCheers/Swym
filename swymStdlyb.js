@@ -1019,7 +1019,7 @@ SWYM.operators = {
 				
 				executable.push("#Literal");
 				executable.push(emptyList);
-				return {type:"swymObject", ofClass:SWYM.ArrayClass, outType:SWYM.NoValuesType, baked:emptyList};
+				return SWYM.BakedValue(emptyList);
 			}
 //			else if ( node.op.isParamBlock )
 //			{
@@ -1113,8 +1113,9 @@ SWYM.DefaultGlobalCScope =
 	"Int": SWYM.BakedValue(SWYM.IntType),
 	"Value": SWYM.BakedValue(SWYM.AnyType),
 
-	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
-	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
+	// these two should be indistinguishable from a user's perspective, but internally they work differently.
+	// The only reason they're both here is for testing purposes.
+	"novalues": {type:"type", multivalueOf:SWYM.NoValuesType, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
 	
 	"fn#+":
@@ -1942,6 +1943,7 @@ Array.'slice'('length','end') = .atEach[end-length..<end];\
 Array.'slice'('length', 'last') = .atEach[last-length-1..last];\
 Array.'slice'('start','trimEnd') = .atEach[start ..< .length-trimEnd];\
 Array.'slice'('length','trimEnd') = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
+Array.'slices'('length':Int) = array(.length+1-length) 'start'->{ this.slice(start:start, end:start+length) };\
 Array.'trimStart'('n') = .atEach[n ..< .length];\
 Array.'trimEnd'('n') = .atEach[0 ..< .length-n];\
 Array.'startsWith'('list') = .length >= list.length && .starting(list.length) == list;\
@@ -1971,7 +1973,7 @@ Array.'whereMin' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b =
 Array.'whereMax' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st < b.1st){ b } else if(a.1st > b.1st){ a } else { a+b } };\
 Array.'whereMin'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) > b.1st.(property)){ b } else if(a.1st.(property) < b.1st.(property)){ a } else { a+b } };\
 Array.'whereMax'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) < b.1st.(property)){ b } else if(a.1st.(property) > b.1st.(property)){ a } else { a+b } };\
-Array.'firstWhere'('test') = .each.if(test).{ return it };\
+Array.'firstWhere'('test') = .each.if(test){ return it };\
 Array.'firstWhere'('test', 'else') { .each.if(test).{ return it }; return .(else) };\
 Array.'firstWhere'('test', 'then', 'else') { .each.if(test).{ return .(then) }; return .(else) };\
 Array.'firstWhereKey'('test') = .keys.each.if(test).{ return .(this) };\

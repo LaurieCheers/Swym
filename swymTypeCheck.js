@@ -529,7 +529,7 @@ SWYM.BakedValue = function(value)
 	}
 
 	result.baked = value;
-	result.debugName = SWYM.ToDebugString(value);
+	result.debugName = SWYM.ToDebugString(value)+".Literal";
 	return result;
 }
 
