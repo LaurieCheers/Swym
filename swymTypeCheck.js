@@ -10,8 +10,12 @@ SWYM.TypeCoerce = function(typeCheck, valueInfo, errorContext)
 
 SWYM.TypeToString = function(type)
 {
-	if( type !== undefined )
+	if( type === undefined )
+		return "<missing type>"
+	else if( type.debugName !== undefined )
 		return type.debugName;
+	else if ( type.needsCompiling !== undefined )
+		return "Block";
 	else
 		return ""+type;
 }
@@ -46,6 +50,16 @@ SWYM.IsOfType = function(value, typeCheck)
 			case "JSArray":  if(value.type !== "jsArray") return false; break;
 			case "JSObject": if(value.type !== "jsObject") return false; break;
 			case "Variable": if(value.type !== "variable") return false; break;
+			case "Callable":
+			{
+				if(value.type !== "jsArray" && value.type !== "rangeArray" &&
+					value.type !== "string" && value.type !== "table" &&
+					value.type !== "closure" && value.type !== "type")
+				{
+					return false;
+				}
+				break;
+			}
 			case "Struct": if(value.type !== "struct") return false; break;
 			default:
 			{
@@ -141,8 +155,15 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 	{
 		return false;
 	}
-		
-	if( typeCheck.nativeType !== undefined && typeCheck.nativeType !== valueInfo.nativeType )
+	
+	if( typeCheck.nativeType === "Callable" )
+	{
+		if( valueInfo.needsCompiling === undefined && valueInfo.outType === undefined )
+		{
+			return false;
+		}
+	}
+	else if( typeCheck.nativeType !== undefined && typeCheck.nativeType !== valueInfo.nativeType )
 	{
 		return false;
 	}
@@ -529,7 +550,7 @@ SWYM.BakedValue = function(value)
 	}
 
 	result.baked = value;
-	result.debugName = SWYM.ToDebugString(value);
+	result.debugName = SWYM.ToDebugString(value)+".Literal";
 	return result;
 }
 

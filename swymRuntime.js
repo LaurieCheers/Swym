@@ -665,7 +665,7 @@ SWYM.jsArray = function(array)
 		if( index >= 0 && index < this.length )
 			return this[index];
 		else
-      SWYM.ReportOutOfBounds(this,index);
+			SWYM.ReportOutOfBounds(this,index);
 	};
 	return array;
 }
@@ -729,7 +729,7 @@ SWYM.ArrayContains = function(array, value)
 	
 	for( var Idx = 0; Idx < array.length; Idx++ )
 	{
-		if( SWYM.IsEqual( array[Idx], value ) )
+		if( SWYM.IsEqual( array.run(Idx), value ) )
 			return true;
 	}
 	

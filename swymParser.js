@@ -363,7 +363,7 @@ SWYM.FunctionesqueParseTreeNode = function(name)
 
 SWYM.IsTableNode = function(paramnode)
 {
-	while( paramnode && paramnode.op && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
+	while( paramnode && paramnode.children && paramnode.op && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
 		if( paramnode.children[0] )
 		{
@@ -485,7 +485,7 @@ SWYM.BuildDotNode = function(lhs, op, rhs, wrapper)
 	// foo.{<block>} is interpreted as running the 'do' function.
 	if( rhs && rhs.op && (rhs.op.text === "{" || rhs.op.text === "[" || rhs.op.text === "(" || rhs.op.text === "~") )
 	{
-		rhs = {type:"fnnode", body:undefined, isDecl:false, name:"do", children:[rhs], argNames:["fn"]};
+		rhs = {type:"fnnode", body:undefined, isDecl:false, name:"do", children:[rhs], argNames:["__"]};
 	}
 
 	// order matters! Put the rhs arguments into the list first, they're the ones that can be matched positionally.

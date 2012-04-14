@@ -353,6 +353,8 @@ function runAllTests()
   runTest("11 !=any [1..10]", "true");
   runTest("10 ==any [1..10]", "true");
   runTest("11 ==any [1..10]", "false");
+  runTest("\"e\" ==any \"Hello\"", "true");
+  runTest("\"x\" ==any \"Hello\"", "false");
   runTest("no[10..20]{ ==any [1..10] }", "false");
   runTest("no[11..20]{ ==any [1..10] }", "true");
   endReportTable();

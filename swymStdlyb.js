@@ -59,7 +59,7 @@ SWYM.NoValuesType = {type:"type", nativeType:"NoValues", debugName:"NoValues"};
 SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"Array"};
 SWYM.TableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Table"};
 SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"String"};
-SWYM.CallableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Callable"};
+SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Callable"};
 SWYM.BlockType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
 SWYM.PredicateType = {type:"type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Predicate"};
 SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Int.Array"};
@@ -403,7 +403,7 @@ SWYM.operators = {
 		},
 		
 	// the 'repeat' operator. 10**3 -> 10,10,10
-	"**": {precedence:104, infix:true, argTypes:[SWYM.AnyType, SWYM.NumberType],
+	"**": {precedence:104, infix:true, argTypes:[SWYM.AnyType, SWYM.IntType],
 		customCompile:function(node, cscope, executable)
 		{
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
@@ -1123,11 +1123,11 @@ SWYM.DefaultGlobalCScope =
 		nativeCode:function(a,b){ return a+b; },
 		getReturnType:function(argTypes){ return SWYM.TypeUnify( argTypes[0], argTypes[1] ); }
 	},
-	{
+/*	{
 		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType}, "rhs":{index:1, typeCheck:SWYM.ArrayType} },
 		nativeCode:function(a,b){  return SWYM.Concat(a,b);  },
 		getReturnType:function(argTypes){ return SWYM.ArrayTypeContaining(SWYM.TypeUnify(SWYM.GetOutType(argTypes[0]), SWYM.GetOutType(argTypes[1]))); }
-	}],
+	}*/],
 	
 	"fn#Struct":
 	[{
@@ -1155,20 +1155,21 @@ SWYM.DefaultGlobalCScope =
 			}
 			
 			var newStruct = {type:"type", nativeType:"Struct", memberTypes:memberTypes};
+			var targetCScope = SWYM.MainCScope !== undefined? SWYM.MainCScope: SWYM.DefaultGlobalCScope;
 			
 			for( var memberName in memberTypes )
 			{
 				if( memberTypes.hasOwnProperty(memberName) )
 				{
 					// declare a member accessor function
-					SWYM.DeclareAccessor(memberName, newStruct, memberTypes[memberName], SWYM.MainCScope);//SWYM.DefaultGlobalCScope);
+					SWYM.DeclareAccessor(memberName, newStruct, memberTypes[memberName], targetCScope);
 				}
 			}
 			
 			executable.push("#Literal");
 			executable.push(newStruct);
 
-			SWYM.DeclareNew(newStruct, defaultNodes, SWYM.MainCScope);//SWYM.DefaultGlobalCScope);
+			SWYM.DeclareNew(newStruct, defaultNodes, targetCScope);//SWYM.DefaultGlobalCScope);
 						
 			return SWYM.BakedValue(newStruct);
 		}
@@ -1561,7 +1562,7 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 
-	"fn#do":[{  expectedArgs:{ "this":{index:0}, "fn":{index:1}},
+	"fn#do":[{  expectedArgs:{ "this":{index:0}, "fn":{index:1, typeCheck:SWYM.CallableType}},
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, argExecutables)
 		{
@@ -1611,7 +1612,7 @@ SWYM.DefaultGlobalCScope =
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ToMultivalueType(SWYM.GetOutType(argTypes[0])); }, // each is basically a no-op!
 		multiCustomCompile:function(argTypes, cscope, executable)
 		{
-      executable.push("#Flatten");
+//      executable.push("#Flatten");
       return SWYM.ToMultivalueType(SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[0])));
     }
 	}],
@@ -1697,13 +1698,13 @@ SWYM.DefaultGlobalCScope =
 	}],
 	
 	"fn#array":[{  expectedArgs:{
-			"length":{index:0, typeCheck:SWYM.NumberType},
+			"length":{index:0, typeCheck:SWYM.IntType},
 			"at":{index:1, typeCheck:SWYM.CallableType}
 			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
 		},
 		customCompile:function(argTypes, cscope, executable)
 		{
-			var elementType = SWYM.GetOutType(argTypes[1], SWYM.NumberType);
+			var elementType = SWYM.GetOutType(argTypes[1], SWYM.IntType);
 			executable.push("#Native");
 			executable.push(2);
 			if( elementType && elementType.multivalueOf !== undefined )
@@ -1878,6 +1879,7 @@ SWYM.stdlyb =
 //'random', 'length', 'do', 'each', 'sin', 'cos', 'sqrt', 'floor', 'array', etc)\n\
 //plus a few special constants that cannot be bootstrapped ('true', 'false' and\n\
 //'novalues'), are not defined here.\n\
+Array.'+'('arr':Array) = [.each, arr.each];\
 Array.'atEnd'('idx') {.at(.length-1-idx)};\
 Array.'#st' {.at(#-1)};\
 Array.'#nd' {.at(#-1)};\
@@ -1905,6 +1907,12 @@ Value.'print' = output($this);\
 Value.'println' = output(\"$this\\n\");\
 Value.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
+'Cell' = Struct{'key','context'};\
+Cell.'value' = .key.(.context);\
+Table.'cells' = array(.keys.length) 'key'->{ Cell.new(this.keys.at(key), this) };\
+Cell.Array.'table' = table[.each.key](.1st.context);\
+Cell.Array.'cellKeys' = [.each.key];\
+Cell.Array.'cellValues' = [.each.value];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
 'forEach_lazy'('list')('fn') = array(length:.length){ list.at(it).(fn) };\
 'if'('cond':Bool, 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
@@ -1929,25 +1937,30 @@ Array.'none' = !(.1st || .2nd || etc);\
 'every'('list')('test') = list.every(test);\
 'no'('list')('test') = !list.some(test);\
 'none'('list')('test') = !list.some(test);\
-Array.'starting'('n') = .atEach[0..<n];\
-Array.'ending'('n') = .atEach[ (.length-n).clamp(min:0) ..< .length];\
-Array.'slice'('start') = .atEach[start ..< .length];\
-Array.'slice'('length') = .atEach[0..<length];\
-Array.'slice'('end') = .atEach[0..<end];\
-Array.'slice'('last') = .atEach[0..last];\
-Array.'slice'('start','end') = .atEach[start..<end];\
-Array.'slice'('start','last') = .atEach[start..last];\
-Array.'slice'('start','length') = .atEach[start..<start+length];\
-Array.'slice'('length','end') = .atEach[end-length..<end];\
-Array.'slice'('length', 'last') = .atEach[last-length-1..last];\
-Array.'slice'('start','trimEnd') = .atEach[start ..< .length-trimEnd];\
-Array.'slice'('length','trimEnd') = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
-Array.'trimStart'('n') = .atEach[n ..< .length];\
-Array.'trimEnd'('n') = .atEach[0 ..< .length-n];\
-Array.'startsWith'('list') = .length >= list.length && .starting(list.length) == list;\
-Array.'endsWith'('list') = .length >= list.length && .ending(list.length) == list;\
-Array.'splitAt'('n') = [ .starting(n), .trimStart(n) ];\
-Array.'splitAtEnd'('n') = [ .trimEnd(n), .ending(n) ];\
+Array.'starting'('n':Int) = .atEach[0..<n];\
+Array.'ending'('n':Int) = .atEach[ (.length-n).clamp(min:0) ..< .length];\
+Array.'slice'('start':Int) = .atEach[start ..< .length];\
+Array.'slice'('length':Int) = .atEach[0..<length];\
+Array.'slice'('end':Int) = .atEach[0..<end];\
+Array.'slice'('last':Int) = .atEach[0..last];\
+Array.'slice'('trimEnd':Int) = .atEach[0 ..< .length-trimEnd];\
+Array.'slice'('start':Int,'end':Int) = .atEach[start..<end];\
+Array.'slice'('start':Int,'last':Int) = .atEach[start..last];\
+Array.'slice'('start':Int,'length':Int) = .atEach[start..<start+length];\
+Array.'slice'('length':Int,'end':Int) = .atEach[end-length..<end];\
+Array.'slice'('length':Int, 'last':Int) = .atEach[last-length-1..last];\
+Array.'slice'('start':Int,'trimEnd':Int) = .atEach[start ..< .length-trimEnd];\
+Array.'slice'('length':Int,'trimEnd':Int) = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
+Array.'trimStart'('n':Int) = .atEach[n ..< .length];\
+Array.'trimEnd'('n':Int) = .atEach[0 ..< .length-n];\
+Array.'startsWith'('list':Array) = .length >= list.length && .starting(list.length) == list;\
+Array.'endsWith'('list':Array) = .length >= list.length && .ending(list.length) == list;\
+Array.'splitAt'('n':Int) = [ .slice(end:n), .slice(start:n) ];\
+Array.'splitAt'('keys':Int.Array) = [0, keys.each, .length].{[this.slice(start:.1st, end:.2nd), this.slice(start:.2nd, end:.3rd), etc]};\
+Array.'splitWhere'('test':Callable) = .splitAt[key~of~each(.cells.where{.value.(test)})];\
+Array.'splitOut'('keys':Int.Array) = [0, keys.each, .length].{[this.slice(start:.1st+1, end:.2nd), this.slice(start:.2nd+2, end:.3rd)]};\
+Array.'splitOutWhere'('test':Callable) = .splitOut[key~of~each(.cells.where{.value.(test)})];\
+Array.'splitAtEnd'('n':Int) = [ .slice(trimEnd:n), .ending(n) ];\
 Array.'tail' = .atEach[1 ..< .length];\
 Array.'stem' = .atEach[0 ..< .length-1];\
 Array.'middle' = .atEach[1 ..< .length-1];\
@@ -1987,6 +2000,8 @@ Number.'radToDeg' = this*180/PI;\
 Number.'abs' = if(this>=0){it} else { -this};\
 Number.'differenceFrom'('n') = abs(this-n);\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
+String.'lines' = .splitOutWhere{==\"\\n\"};\
+String.'words' = .splitOutWhere{==any \" \\t\\n\"};\
 Value.'case'('body':Table) = body.at(this);\
 Array.'tabulate'('body') = table(this)(body);\
 'case'('key')('body') = body.at(key);\n\

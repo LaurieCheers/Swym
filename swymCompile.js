@@ -312,7 +312,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		
 	for( var Idx = 0; Idx < overloads.length; ++Idx )
 	{
-		var overloadResult = SWYM.CompileFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables);
+		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables);
 		
 		if( overloadResult.error === undefined )
 		{
@@ -342,47 +342,52 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		SWYM.LogError(0, bestError);
 		return;
 	}
-	else if( validOverloads.length == 1 )
-	{
-		SWYM.pushEach( validOverloads[0].executable, executable );
-		return validOverloads[0].returnType;
-	}
 
-	// Try to choose the strictest overload
-	var bestIdx = 0;
-	var bestTypeChecks = validOverloads[0].typeChecks;
-	for( var Idx = 1; Idx < validOverloads.length; ++Idx )
-	{
-		var curTypeChecks = validOverloads[Idx].typeChecks;
-		
-		if( SWYM.TypeChecksStricter(curTypeChecks, bestTypeChecks) )
-		{
-			bestIdx = Idx;
-			bestTypeChecks = curTypeChecks;
-		}
-	}
+	var chosenOverload = undefined;
 	
-	// Sanity check: is this one stricter than all the others?
-	var isStricter = true;
-	for( var Idx = 0; Idx < validOverloads.length; ++Idx )
+	if( validOverloads.length === 1 )
 	{
-		if( bestIdx != Idx && !SWYM.TypeChecksStricter(bestTypeChecks, validOverloads[Idx].typeChecks) )
-		{
-			isStricter = false;
-			break;
-		}
-	}
-	
-	if( isStricter )
-	{
-		SWYM.pushEach( validOverloads[bestIdx].executable, executable );
-		return validOverloads[bestIdx].returnType;
+		chosenOverload = validOverloads[0];
 	}
 	else
 	{
-		SWYM.LogError(0, "Too many valid overloads for "+fnName+"! (we don't do dynamic dispatch yet.)");
+		// Try to choose the strictest overload
+		var bestIdx = 0;
+		var bestTypeChecks = validOverloads[0].typeChecks;
+		for( var Idx = 1; Idx < validOverloads.length; ++Idx )
+		{
+			var curTypeChecks = validOverloads[Idx].typeChecks;
+			
+			if( SWYM.TypeChecksStricter(curTypeChecks, bestTypeChecks) )
+			{
+				bestIdx = Idx;
+				bestTypeChecks = curTypeChecks;
+			}
+		}
+		
+		// Sanity check: is this one stricter than all the others?
+		var isStricter = true;
+		for( var Idx = 0; Idx < validOverloads.length; ++Idx )
+		{
+			if( bestIdx != Idx && !SWYM.TypeChecksStricter(bestTypeChecks, validOverloads[Idx].typeChecks) )
+			{
+				isStricter = false;
+				break;
+			}
+		}
+		
+		if( isStricter )
+		{
+			chosenOverload = validOverloads[bestIdx];
+		}
+		else
+		{
+			SWYM.LogError(0, "Too many valid overloads for "+fnName+"! (we don't do dynamic dispatch yet.)");
+			return;
+		}
 	}
-	return;
+
+	return SWYM.CompileFunctionOverload( fnName, chosenOverload, cscope, executable );
 }
 
 SWYM.TypeChecksStricter = function(curTypeChecks, bestTypeChecks)
@@ -407,7 +412,7 @@ SWYM.TypeChecksStricter = function(curTypeChecks, bestTypeChecks)
 }
 
 // returns {error:<an error>, executable:<an executable>, returnType:<a return type>}
-SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables)
+SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables)
 {
 	var overloadResult = {theFunction:theFunction, error:undefined, executable:[], typeChecks:{}, returnType:undefined, quality:0};
 
@@ -507,24 +512,38 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 			return overloadResult;
 		}
 	}
+	
+	overloadResult.inputArgNameList = inputArgNameList;
+	overloadResult.expectedArgNamesByIndex = expectedArgNamesByIndex;
+	overloadResult.inputArgTypes = inputArgTypes;
+	overloadResult.inputArgExecutables = inputArgExecutables;
+	overloadResult.theFunction = theFunction;
+	overloadResult.isMulti = isMulti;
+	return overloadResult;
+}
 
+//(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables)
+SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
+{
 	var finalArgTypes = [];
 	var argIndices = [];
 	var customArgExecutables = [];
 	var numArgsPassed = 0;
 	var argNamesPassed = [];
 	var argTypesPassed = [];
+	var isMulti = data.isMulti;
+	var theFunction = data.theFunction;
 
-	for( var Idx = 0; Idx < inputArgNameList.length; Idx++ )
+	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
 	{
-		var inputArgName = inputArgNameList[Idx];
+		var inputArgName = data.inputArgNameList[Idx];
 		if( inputArgName === undefined )
 		{
 			// default parameter, presumably
 			continue;
 		}
-		var expectedArgName = expectedArgNamesByIndex[Idx];
-		var tempType = inputArgTypes[inputArgName];
+		var expectedArgName = data.expectedArgNamesByIndex[Idx];
+		var tempType = data.inputArgTypes[inputArgName];
 
 		argIndices[Idx] = Idx;
 		finalArgTypes[Idx] = tempType;
@@ -535,16 +554,16 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 		
 		if( theFunction.customCompileWithoutArgs )
 		{
-			customArgExecutables[Idx] = inputArgExecutables[inputArgName];
+			customArgExecutables[Idx] = data.inputArgExecutables[inputArgName];
 		}
 		else
 		{
-			SWYM.pushEach(inputArgExecutables[inputArgName], overloadResult.executable);
+			SWYM.pushEach(data.inputArgExecutables[inputArgName], executable);
 			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, "calling '"+fnName+"', argument "+expectedArgName);
 
 			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
 			{
-				overloadResult.executable.push("#ToMultivalue");
+				executable.push("#ToMultivalue");
 			}
 		}
 	}
@@ -554,34 +573,34 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 	{
 		if( !isMulti && theFunction.customCompile )
 		{
-			resultType = theFunction.customCompile(finalArgTypes, cscope, overloadResult.executable, customArgExecutables);
+			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
 		else if( isMulti && theFunction.multiCustomCompile )
 		{
 			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input, and
 			// generates multivalues as output. But for consistency with other compile modes,
 			// its result_type_ is still expected to be a single value.
-			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, overloadResult.executable, customArgExecutables);
+			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
 		else if( isMulti && theFunction.customCompile && !theFunction.multiCustomCompile )
 		{
 			//var singularTypes = SWYM.Each(finalArgTypes, SWYM.ToSinglevalueType);
-			resultType = theFunction.customCompile(finalArgTypes, cscope, overloadResult.executable, customArgExecutables);
+			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
 		
 		if( theFunction.nativeCode )
 		{
 			if( isMulti )
 			{
-				overloadResult.executable.push("#MultiNative");
-				overloadResult.executable.push(numArgsPassed);
-				overloadResult.executable.push(theFunction.nativeCode);
+				executable.push("#MultiNative");
+				executable.push(numArgsPassed);
+				executable.push(theFunction.nativeCode);
 			}
 			else
 			{
-				overloadResult.executable.push("#Native");
-				overloadResult.executable.push(numArgsPassed);
-				overloadResult.executable.push(theFunction.nativeCode);
+				executable.push("#Native");
+				executable.push(numArgsPassed);
+				executable.push(theFunction.nativeCode);
 			}
 		}
 
@@ -631,17 +650,17 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 	
 		if( isMulti )
 		{
-			overloadResult.executable.push("#MultiFnCall");
-			overloadResult.executable.push(fnName);
-			overloadResult.executable.push(argNamesPassed);
-			overloadResult.executable.push(precompiled.executable);
+			executable.push("#MultiFnCall");
+			executable.push(fnName);
+			executable.push(argNamesPassed);
+			executable.push(precompiled.executable);
 		}
 		else
 		{
-			overloadResult.executable.push("#FnCall");
-			overloadResult.executable.push(fnName);
-			overloadResult.executable.push(argNamesPassed);
-			overloadResult.executable.push(precompiled.executable);
+			executable.push("#FnCall");
+			executable.push(fnName);
+			executable.push(argNamesPassed);
+			executable.push(precompiled.executable);
 		}
 	}
 	
@@ -653,7 +672,7 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 		}
 		else
 		{
-			resultType = SWYM.GetFunctionReturnType(finalArgTypes, argIndices, theFunction);
+			resultType = SWYM.GetFunctionReturnType(finalArgTypes, argIndices, data.theFunction);
 		}
 	}
 	
@@ -661,20 +680,18 @@ SWYM.CompileFunctionOverload = function(fnName, args, cscope, theFunction, isMul
 	{
 		if(resultType && resultType.multivalueOf !== undefined)
 		{
-			overloadResult.executable.push("#Flatten");
-			overloadResult.returnType = resultType;
+			executable.push("#Flatten");
+			return resultType;
 		}
 		else
 		{
-			overloadResult.returnType = SWYM.ToMultivalueType(resultType);
+			return SWYM.ToMultivalueType(resultType);
 		}
 	}
 	else
 	{
-		overloadResult.returnType = resultType;
+		return resultType;
 	}
-	
-	return overloadResult;
 }
 
 SWYM.GetPrecompiled = function(theFunction, argTypes)
@@ -977,7 +994,7 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 		}
 	}
 
-	var executableBlock = { debugName:debugName };
+	var executableBlock = { type:"closure", debugName:debugName };
 
 	executable.push("#Closure");
 	executable.push(executableBlock);
@@ -1741,7 +1758,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					{
 						members[memberNames[Idx]] = arguments[Idx];
 					}
-					return {type:"struct", structType:newStruct, members:members};
+					return {type:"struct", debugName:SWYM.TypeToString(argTypes[0].baked), structType:newStruct, members:members};
 				});
 				
 				var memberTypes = {};
@@ -1750,7 +1767,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					memberTypes[memberNames[Idx]] = argTypes[Idx+1];
 				}
 				
-				return {type:"type", nativeType:"Struct", memberTypes:memberTypes};
+				return {type:"type", debugName:SWYM.TypeToString(argTypes[0].baked), nativeType:"Struct", memberTypes:memberTypes};
 			},
 			
 			multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
@@ -1761,10 +1778,10 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					{
 						SWYM.pushEach(argExecutables[Idx], executable);
 
-            if( argTypes[Idx].multivalueOf === undefined )
-            {
-              executable.push("#ToMultivalue");
-            }
+						if( argTypes[Idx].multivalueOf === undefined )
+						{
+						  executable.push("#ToMultivalue");
+						}
 					}
 					else
 					{
@@ -1781,7 +1798,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					{
 						members[memberNames[Idx]] = arguments[Idx];
 					}
-					return {type:"struct", structType:newStruct, members:members};
+					return {type:"struct", debugName:SWYM.TypeToString(argTypes[0].baked), structType:newStruct, members:members};
 				});
 				
 				var memberTypes = {};
