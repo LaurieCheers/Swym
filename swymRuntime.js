@@ -582,7 +582,7 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		var multivalue = multiArgs[0];
 		if( multivalue )
 		{
-			for( var Idx = 0; Idx < multivalue.length; Idx++ )
+			for( var Idx = 0; Idx < multivalue.length && !SWYM.halt; Idx++ )
 			{
 				result.push( body([multivalue.run(Idx)]) );
 			}
@@ -593,9 +593,9 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		// optimization for the 2 arg case
 		var multivalueA = multiArgs[0];
 		var multivalueB = multiArgs[1];
-		for( var IdxA = 0; IdxA < multivalueA.length; IdxA++ )
+		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length; IdxB++ )
+			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
 			{
 				result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB)]) );
 			}
@@ -607,11 +607,11 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		var multivalueA = multiArgs[0];
 		var multivalueB = multiArgs[1];
 		var multivalueC = multiArgs[2];
-		for( var IdxA = 0; IdxA < multivalueA.length; IdxA++ )
+		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length; IdxB++ )
+			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
 			{
-				for( var IdxC = 0; IdxC < multivalueC.length; IdxC++ )
+				for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
 				{
 					result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC)]) );
 				}
@@ -625,13 +625,13 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		var multivalueB = multiArgs[1];
 		var multivalueC = multiArgs[2];
 		var multivalueD = multiArgs[3];
-		for( var IdxA = 0; IdxA < multivalueA.length; IdxA++ )
+		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length; IdxB++ )
+			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
 			{
-				for( var IdxC = 0; IdxC < multivalueC.length; IdxC++ )
+				for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
 				{
-					for( var IdxD = 0; IdxD < multivalueD.length; IdxD++ )
+					for( var IdxD = 0; IdxD < multivalueD.length && !SWYM.halt; IdxD++ )
 					{
 						result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC), multivalueD.run(IdxD)]) );
 					}
@@ -641,9 +641,9 @@ SWYM.ForEachPairing = function(multiArgs, body)
 	}
 	else
 	{
-		// the general (slowest?) case: apply recursively
+		// the general (slowest) case: apply recursively
 		var multivalue = multiArgs[0];
-		for( var Idx = 0; Idx < multivalue.length; Idx++ )
+		for( var Idx = 0; Idx < multivalue.length && !SWYM.halt; Idx++ )
 		{
 			var value = multivalue.run(Idx);
 			SWYM.ForEachPairing(multiArgs.slice(1), function(otherArgs)
@@ -672,21 +672,45 @@ SWYM.jsArray = function(array)
 
 SWYM.rangeArray = function(base, length)
 {
-  return {
-    type:"rangeArray",
-    length:length,
-    contains:function(value)
-    {
-      return value >= base && value < base+length && value%1==0;
-    },
-    run:function(index)
-    {
-      if( index >= 0 && index < this.length )
-        return base+index;
-      else
-        SWYM.ReportOutOfBounds(this, index);
-    }
-  }
+	if( base === 0 )
+	{
+		var result = {
+			type:"rangeArray",
+			length:length,
+			contains:function(value)
+			{
+				return value >= 0 && value < length && value%1==0;
+			},
+			run:function(index)
+			{
+				if( index >= 0 && index < length )
+					return index;
+				else
+					SWYM.ReportOutOfBounds(this, index);
+			}
+		}
+		
+		result.keys = result; // for the special case base = 0, the array is its own keys
+		return result;
+	}
+	else
+	{
+		return {
+			type:"rangeArray",
+			length:length,
+			contains:function(value)
+			{
+				return value >= base && value < base+length && value%1==0;
+			},
+			run:function(index)
+			{
+				if( index >= 0 && index < this.length )
+					return base+index;
+				else
+					SWYM.ReportOutOfBounds(this, index);
+			}
+		}
+	}
 }
 
 SWYM.StringWrapper = function(str)

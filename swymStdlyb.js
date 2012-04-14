@@ -1951,6 +1951,7 @@ Array.'slice'('length':Int,'end':Int) = .atEach[end-length..<end];\
 Array.'slice'('length':Int, 'last':Int) = .atEach[last-length-1..last];\
 Array.'slice'('start':Int,'trimEnd':Int) = .atEach[start ..< .length-trimEnd];\
 Array.'slice'('length':Int,'trimEnd':Int) = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
+Array.'slices'('length':Int) = array(.length+1-length) 'start'->{ this.slice(start:start, end:start+length) };\
 Array.'trimStart'('n':Int) = .atEach[n ..< .length];\
 Array.'trimEnd'('n':Int) = .atEach[0 ..< .length-n];\
 Array.'startsWith'('list':Array) = .length >= list.length && .starting(list.length) == list;\
@@ -1984,11 +1985,11 @@ Array.'whereMin' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b =
 Array.'whereMax' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st < b.1st){ b } else if(a.1st > b.1st){ a } else { a+b } };\
 Array.'whereMin'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) > b.1st.(property)){ b } else if(a.1st.(property) < b.1st.(property)){ a } else { a+b } };\
 Array.'whereMax'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) < b.1st.(property)){ b } else if(a.1st.(property) > b.1st.(property)){ a } else { a+b } };\
-Array.'firstWhere'('test') = .each.if(test).{ return it };\
-Array.'firstWhere'('test', 'else') { .each.if(test).{ return it }; return .(else) };\
-Array.'firstWhere'('test', 'then', 'else') { .each.if(test).{ return .(then) }; return .(else) };\
-Array.'firstWhereKey'('test') = .keys.each.if(test).{ return .(this) };\
-Array.'firstWhereKey'('test', 'else') { .keys.each.if(test).{ return .(this) }; return .(else) };\
+Array.'firstWhere'('test') = .each.if(test){ return it };\
+Array.'firstWhere'('test', 'else') { .each.if(test){ return it }; return .(else) };\
+Array.'firstWhere'('test', 'then', 'else') { .each.if(test){ return .(then) }; return .(else) };\
+Array.'firstWhereKey'('test') = .keys.each.if(test){ return .(this) };\
+Array.'firstWhereKey'('test', 'else') { .keys.each.if(test){ return .(this) }; return .(else) };\
 Number.'s_plural' = if(this==1) {\"\"} else {\"s\"};\
 'var'('init') = Value.var(init);\
 'Empty' = {.length == 0};\
