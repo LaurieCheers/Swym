@@ -124,7 +124,7 @@ SWYM.operators = {
 			var yieldType = SWYM.CompileNode(node.children[1], cscope, executable);
 			if( !yieldType || yieldType.multivalueOf === undefined )
 			{
-				executable.push("#ToMultivalue");
+				executable.push("#SingletonArray");
 			}
 
 			SWYM.pushEach(["#ConcatArrays", 2, "#Overwrite", "Yielded", "#Pop"], executable);
@@ -211,7 +211,7 @@ SWYM.operators = {
 						isMulti = true;
 						for( var Jdx = 0; Jdx < Idx; ++Jdx )
 						{
-							executables[Jdx].push("#ToMultivalue");
+							executables[Jdx].push("#SingletonArray");
 						}
 						
 						if( resultType !== undefined )
@@ -222,7 +222,7 @@ SWYM.operators = {
 				}
 				else if ( isMulti )
 				{
-					executableN.push("#ToMultivalue");
+					executableN.push("#SingletonArray");
 					typeN = SWYM.ToMultivalueType(typeN);
 				}
 
@@ -707,6 +707,7 @@ SWYM.operators = {
 	"+": {precedence:102, returnType:{type:"Number"}, infix:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
+			// The + operator just ends up calling the + function. ("fn#+", below.)
 			return {type:"fnnode", body:undefined, isDecl:false,
 				name:"+",
 				etc:op.etc,
@@ -769,13 +770,13 @@ SWYM.operators = {
 					{
 						if ( !(type2 && type2.multivalueOf !== undefined) )
 						{
-							executable2.push("#ToMultivalue");
+							executable2.push("#SingletonArray");
 							type2 = SWYM.ToMultivalueType(type2);
 							var resultType = SWYM.ToMultivalueType(SWYM.ArrayTypeContaining(SWYM.TypeUnify(type1.multivalueOf.outType, type2.outType, "+ operator arguments")));
 						}
 						else if ( !(type1 && type1.multivalueOf !== undefined) )
 						{
-							executable1.push("#ToMultivalue");
+							executable1.push("#SingletonArray");
 							type1 = SWYM.ToMultivalueType(type1);
 							var resultType = SWYM.ToMultivalueType(SWYM.ArrayTypeContaining(SWYM.TypeUnify(type1.outType, type2.multivalueOf.outType, "+ operator arguments")));
 						}
@@ -1040,7 +1041,7 @@ SWYM.operators = {
 				if( !type || type.multivalueOf === undefined )
 				{
 					// wrap single values in a list
-					executable.push( "#ToMultivalue" );
+					executable.push( "#SingletonArray" );
 				}
 				return SWYM.ArrayTypeContaining(type);
 			}
@@ -1572,15 +1573,20 @@ SWYM.DefaultGlobalCScope =
 		},
 		multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
 		{
+			var isLazy = false;
 			for( var Idx = 0; Idx < argExecutables.length; ++Idx )
 			{
 				SWYM.pushEach(argExecutables[Idx], executable);
 				if( !argTypes[Idx] || argTypes[Idx].multivalueOf === undefined )
 				{
-					executable.push("#ToMultivalue");
+					executable.push("#SingletonArray");
+				}
+				else if( argTypes[Idx] && argTypes[Idx].isLazy )
+				{
+					isLazy = true;
 				}
 			}
-			executable.push("#MultiClosureCall");
+			executable.push(isLazy? "#LazyClosureCall": "#MultiClosureCall");
 			return SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]) );
 		}
 	},
@@ -1609,12 +1615,18 @@ SWYM.DefaultGlobalCScope =
 	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ToMultivalueType(SWYM.GetOutType(argTypes[0])); }, // each is basically a no-op!
-		multiCustomCompile:function(argTypes, cscope, executable)
-		{
-//      executable.push("#Flatten");
-      return SWYM.ToMultivalueType(SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[0])));
-    }
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); },
+	}],
+
+	"fn#lazy":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // basically a no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); },
+	}],
+
+	"fn#eager":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // basically a no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); },
 	}],
 	
 	"fn#accumulate":[
@@ -1958,20 +1970,40 @@ Array.'startsWith'('list':Array) = .length >= list.length && .starting(list.leng
 Array.'endsWith'('list':Array) = .length >= list.length && .ending(list.length) == list;\
 Array.'splitAt'('n':Int) = [ .slice(end:n), .slice(start:n) ];\
 Array.'splitAt'('keys':Int.Array) = [0, keys.each, .length].{[this.slice(start:.1st, end:.2nd), this.slice(start:.2nd, end:.3rd), etc]};\
-Array.'splitWhere'('test':Callable) = .splitAt[key~of~each(.cells.where{.value.(test)})];\
-Array.'splitOut'('keys':Int.Array) = [0, keys.each, .length].{[this.slice(start:.1st+1, end:.2nd), this.slice(start:.2nd+2, end:.3rd)]};\
-Array.'splitOutWhere'('test':Callable) = .splitOut[key~of~each(.cells.where{.value.(test)})];\
+Cell.Array.'split' = .1st.context.splitAt(.cellKeys);\
+Array.'splitWhere'('test':Callable) = .cells.where{.value.(test)}.split;\
+Array.'splitOut'('keys':Int.Array) = [-1, keys.each, .length].{[this.slice(start:.1st+1, end:.2nd), this.slice(start:.2nd+1, end:.3rd), etc]};\
+Cell.Array.'splitOut' = .1st.context.splitOut(.cellKeys);\
+Array.'splitOutWhere'('test':Callable) = .cells.where{.value.(test)}.splitOut;\
 Array.'splitAtEnd'('n':Int) = [ .slice(trimEnd:n), .ending(n) ];\
 Array.'tail' = .atEach[1 ..< .length];\
 Array.'stem' = .atEach[0 ..< .length-1];\
 Array.'middle' = .atEach[1 ..< .length-1];\
-Array.'reversed' = .atEach[.length-1 .. 0];\
+Array.'reverse' = .atEach[.length-1 .. 0];\
+Array.'emptyOr'('body':Callable) = .if{==[]}{[]} else (body);\
+Array.'singletonOr'('body':Callable) = .if{.length <= 1}{this} else (body);\n\
+Array.'sort' = .singletonOr\n\
+{\n\
+  'v' = .1st;\n\
+  .tail.where{<v}.sort + [this.1st] + .tail.where{>=v}.sort\n\
+};\n\
+Array.'sortBy'('property') = .singletonOr\n\
+{\n\
+  'p' = .1st.(property);\n\
+  .tail.where{.(property)<p}.sortBy(property) + [.1st] + .tail.where{.(property)>=p}.sortBy(property)\n\
+};\n\
+Array.'whereDistinct'('property') = .singletonOr\n\
+{\n\
+  'p' = .1st.(property);\n\
+  [.1st] + .tail.where{.(property) != p}.whereDistinct(property)\n\
+};\n\
 Array.'withBounds'('bound') = array(length:.length) 'key'->{ this.at(key) else (key.(bound)) };\
 Array.'safeBounds' = .withBounds{novalues};\
 Array.'cyclic' = .withBounds{ this.at( it%this.length ) };\
 Array.'total' = .1st + .2nd + etc;\
 Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
+Array.'map'('body') = [.each.(body)];\
 Value.'in'('array') { ==any array };\
 Number.'clamp'('min':Number) = if(this < min){ min } else { this };\
 Number.'clamp'('max':Number) = if(this > max){ max } else { this };\
@@ -2034,7 +2066,7 @@ if( .contains(Non~Digit) )
 }
 else
 {
-  .reversed.forEach{ it-"0" }.call
+  .reverse.forEach{ it-"0" }.call
   {
     .1st*1 + .2nd*10 + .3rd*100 + etc
   }

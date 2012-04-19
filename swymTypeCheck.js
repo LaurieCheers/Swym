@@ -53,6 +53,7 @@ SWYM.IsOfType = function(value, typeCheck)
 			case "Callable":
 			{
 				if(value.type !== "jsArray" && value.type !== "rangeArray" &&
+					value.type !== "lazyArray" &&
 					value.type !== "string" && value.type !== "table" &&
 					value.type !== "closure" && value.type !== "type")
 				{
@@ -487,6 +488,14 @@ SWYM.TypeUnify = function(typeA, typeB)
 	return result;
 }
 
+SWYM.LazyArrayTypeContaining = function(elementType)
+{
+	var result = SWYM.ArrayTypeContaining(elementType);
+	result.isLazy = true;
+	result.debugName += ".Lazy";
+	return result;
+}
+
 SWYM.ArrayTypeContaining = function(elementType)
 {
 	if( !elementType )
@@ -494,9 +503,29 @@ SWYM.ArrayTypeContaining = function(elementType)
 		SWYM.LogError(0, "ArrayTypeContaining - Expected an element type, got: "+elementType);
 		return SWYM.ArrayType;
 	}
-	
+
 	var outType = SWYM.ToSinglevalueType(elementType);
+
+	if( elementType.multivalueOf !== undefined && elementType.isLazy )
+	{
+		return SWYM.LazyArrayTypeContaining(outType);
+	}
+	
 	return {type:"type", nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
+}
+
+SWYM.ArrayToMultivalueType = function(arrayType)
+{
+	if( arrayType.isLazy )
+	{
+		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType));
+		result.isLazy = true;
+		return result;
+	}
+	else
+	{
+		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType));
+	}
 }
 
 SWYM.TableTypeFromTo = function(keyType, valueType)
@@ -646,6 +675,13 @@ SWYM.GetFunctionReturnType = function(argTypes, argNames, theFunction)
 		return SWYM.ToMultivalueType(theFunction.returnType);
 	else
 		return theFunction.returnType;
+}
+
+SWYM.ToLazyMultivalueType = function(type)
+{
+	var result = SWYM.ToMultivalueType(SWYM.ToSinglevalueType(type))
+	result.isLazy = true;
+	return result;
 }
 
 SWYM.ToMultivalueType = function(type)

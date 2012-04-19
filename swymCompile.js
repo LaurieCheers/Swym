@@ -133,21 +133,32 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 			type1 = SWYM.TypeCoerce(argTypes[1], type1, "operator '"+parsetree.op.text+"'");
 			++numArgs;
 		}
+		
 		if( (type0 && type0.multivalueOf !== undefined) || (type1 && type1.multivalueOf !== undefined) )
 		{
+			var isLazy = false;
+			
 			SWYM.pushEach(tempexecutable0, executable);
 			if( parsetree.children[0] && (!type0 || type0.multivalueOf === undefined) )
 			{
-				executable.push("#ToMultivalue");
+				executable.push("#SingletonArray");
 			}
-
+			else if( type0 && type0.isLazy )
+			{
+				isLazy = true;
+			}
+			
 			SWYM.pushEach(tempexecutable1, executable);
 			if( parsetree.children[1] && (!type1 || type1.multivalueOf === undefined) )
 			{
-				executable.push("#ToMultivalue");
+				executable.push("#SingletonArray");
 			}
-
-			executable.push("#MultiNative");
+			else if( type1 && type1.isLazy )
+			{
+				isLazy = true;
+			}
+			
+			executable.push(isLazy? "#LazyNative": "#MultiNative");
 			executable.push(numArgs);
 			executable.push(opFunction);
 			if( parsetree.op.behaviour.returnType )
@@ -532,6 +543,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	var argNamesPassed = [];
 	var argTypesPassed = [];
 	var isMulti = data.isMulti;
+	var isLazy = false;
 	var theFunction = data.theFunction;
 
 	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
@@ -551,7 +563,12 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		argTypesPassed[numArgsPassed] = SWYM.ToSinglevalueType(tempType);
 		argNamesPassed[numArgsPassed] = expectedArgName;
 		++numArgsPassed;
-		
+
+		if( isMulti && tempType && tempType.multivalueOf !== undefined && tempType.isLazy )
+		{
+			isLazy = true;
+		}
+			
 		if( theFunction.customCompileWithoutArgs )
 		{
 			customArgExecutables[Idx] = data.inputArgExecutables[inputArgName];
@@ -563,7 +580,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 
 			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
 			{
-				executable.push("#ToMultivalue");
+				executable.push("#SingletonArray");
 			}
 		}
 	}
@@ -592,7 +609,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		{
 			if( isMulti )
 			{
-				executable.push("#MultiNative");
+				executable.push(isLazy? "#LazyNative": "#MultiNative");
 				executable.push(numArgsPassed);
 				executable.push(theFunction.nativeCode);
 			}
@@ -678,7 +695,15 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	
 	if( isMulti )
 	{
-		if(resultType && resultType.multivalueOf !== undefined)
+		if( isLazy )
+		{
+			if(resultType && resultType.multivalueOf !== undefined)
+			{
+				executable.push("#LazyFlatten");
+			}
+			return SWYM.ToLazyMultivalueType(resultType);
+		}
+		else if(resultType && resultType.multivalueOf !== undefined)
 		{
 			executable.push("#Flatten");
 			return resultType;
@@ -1081,7 +1106,7 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	// FIXME: for now, all closures return a multivalue. (Horrible.)
 //	if( !returnType || !returnType.multivalue )
 //	{
-//		bodyExecutable.push("#ToMultivalue");
+//		bodyExecutable.push("#SingletonArray");
 //		returnType = SWYM.ToMultivalueType(returnType);
 //	}
 
@@ -1780,7 +1805,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 
 						if( argTypes[Idx].multivalueOf === undefined )
 						{
-						  executable.push("#ToMultivalue");
+						  executable.push("#SingletonArray");
 						}
 					}
 					else

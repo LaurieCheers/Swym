@@ -22,7 +22,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			PC += 2;
 			break;
 
-		case "#ToMultivalue":
+		case "#SingletonArray":
 			var newValue = SWYM.jsArray([stack.pop()]);
 			stack.push( newValue );
 			PC += 1;
@@ -48,6 +48,17 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			PC += 3;
 			break;
 			
+		case "#LazyNative":
+			var multiArgs = SWYM.CollectArgs(stack, executable[PC+1]);
+			var operatorBody = executable[PC+2];
+			var result = SWYM.CrossLazyArrays(multiArgs, function(args)
+			{
+				return operatorBody.apply(undefined,args);
+			});
+			stack.push(result);
+			PC += 3;
+			break;
+					
 		case "#Store":
 			var varname = executable[PC+1];
 			if( rscope[varname] !== undefined )
@@ -194,10 +205,26 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			stack.push( result );
 			PC += 1;
 			break;
+
+		case "#LazyClosureCall":
+			var multiArgs = SWYM.CollectArgs(stack, 2);
+			var result = SWYM.CrossLazyArrays(multiArgs, function(args)
+			{
+				return SWYM.ClosureCall(args[1], args[0]);
+			});
+			stack.push( result );
+			PC += 1;
+			break;
 			
 		case "#Flatten":
 			var list = stack.pop();
 			stack.push( SWYM.Flatten(list) );
+			PC += 1;
+			break;
+
+		case "#LazyFlatten":
+			var list = stack.pop();
+			stack.push( SWYM.LazyFlatten(list) );
 			PC += 1;
 			break;
 
@@ -657,6 +684,39 @@ SWYM.ForEachPairing = function(multiArgs, body)
 	return SWYM.jsArray(result);
 }
 
+SWYM.CrossLazyArrays = function(multiArgs, body)
+{
+	var len = 1;
+	for( var Idx = 0; Idx < multiArgs.length; ++Idx )
+	{
+		len *= multiArgs[Idx].length;
+	}
+	
+	return {
+		type:"lazyArray",
+		length: len,
+		children:multiArgs,
+		run:function(index)
+		{
+			var elements = [];
+			SWYM.SelectCrossElements(this.children.length-1, index, this.children, elements);
+			return body(elements);
+		}
+	};
+}
+
+SWYM.SelectCrossElements = function(start, index, multiArgs, elements)
+{
+	var len = multiArgs[start].length;
+	
+	elements.unshift( multiArgs[start].run(index%len) );
+	
+	if( start > 0 )
+	{
+		SWYM.SelectCrossElements(start-1, Math.floor(index/len), multiArgs, elements);
+	}
+}
+
 SWYM.jsArray = function(array)
 {
 	array.type = "jsArray";
@@ -833,6 +893,46 @@ SWYM.Flatten = function(array)
 	}
 	
 	return SWYM.jsArray(result);
+}
+
+SWYM.LazyFlatten = function(arrayOfArrays)
+{
+	return {
+		type:"lazyArray",
+		cached:[],
+		nextAIndex:0,
+		nextBIndex:0,
+		run:function(index)
+		{
+			while(this.cached.length <= index)
+			{
+				if( arrayOfArrays.length <= this.nextAIndex )
+				{
+					SWYM.ReportOutOfBounds(this, index);
+					return;
+				}
+				
+				var array = arrayOfArrays.run(this.nextAIndex);
+								
+				while(this.cached.length <= index)
+				{
+					if( array === undefined || array.length <= this.nextBIndex )
+					{
+						// exhausted this subarray
+						this.nextAIndex += 1;
+						this.nextBIndex = 0;
+						break;
+					}
+
+					var v = array.run(this.nextBIndex);
+					this.cached.push(v);
+					this.nextBIndex += 1;
+				}
+			}
+
+			return this.cached[index];
+		}
+	};	
 }
 
 SWYM.TableMatches = function(table, tablePattern)
@@ -1156,6 +1256,7 @@ SWYM.ToTerseString = function(value)
 			return "";
 		case "jsArray":
 		case "rangeArray":
+		case "lazyArray":
 			var result = "";
 			for( var Idx = 0; Idx < value.length; Idx++ )
 			{
@@ -1274,6 +1375,16 @@ SWYM.ToDebugString = function(value)
 				result += memberName+":"+SWYM.ToDebugString(value.members[memberName]);
 			}
 			return value.structType.debugName+"("+result+")";
+		}
+
+		case "lazyArray":
+		{
+			var result = SWYM.ToDebugString(value.run(0));
+			for( var Idx = 1; Idx < value.length && Idx < 3; ++Idx )
+			{
+				result += ","+SWYM.ToDebugString(value.run(Idx));
+			}
+			return "[" + result + ",...]";
 		}
 		
 		case "rangeArray":
