@@ -1,0 +1,202 @@
+<style>
+span.errorLabel
+{
+  background-color:#FFAA99;
+  border-color:#FF5533;
+  border-style:inset;
+  border-width:thin;
+  border-radius:8px;
+  padding:0px 5px;
+}
+
+span.errorHere
+{
+  background-color:#FFAA99;
+  border-color:#FF5533;
+  border-style:inset;
+  border-width:thin;
+}
+
+span.selected
+{
+  background-color:#FFFF88;
+}
+
+span.clickable
+{
+  color:#0000FF;
+  text-decoration:underline;
+}
+
+div.selected
+{
+  background-color:#DDDDEE;
+}
+
+span.tooltip
+{
+  position:absolute;
+  background-color:#FFFF00;
+  border-color:#FFAA00;
+  border-style:solid;
+  border-width:thin;
+  border-radius:8px;
+  padding:0px 5px;
+}
+
+span.showingTooltip
+{
+  border-color:#000000;
+  border-style:dotted;
+  border-width:thin;
+}
+</style>
+<script>
+var tooltipElement;
+var tooltipNode;
+
+function onLoad()
+{
+  var threeNode = { children:["3"] };
+  var ageDeclNode = { children:["'age'"], tooltip:"Number" };
+  var ageAssignNode = { children:[ageDeclNode, " = ", threeNode] };
+  var ageNode = { children:["age"], link:threeNode, tooltip:"Number" };
+  var eighteenNode = { children:["18"] };
+  var lessNode = { children:[ageNode, "<", eighteenNode] };
+  var isMinorDeclNode = { children:["'isMinor'"], tooltip:"Bool" };
+  var isMinorAssignNode = { children:[isMinorDeclNode, " = ", lessNode] };
+  var zeroNode = { children:["0"] };
+  var isMinorNode = { children:["isMinor"], link:lessNode, tooltip:"Bool" };
+  var addNode = { children:["add"] };
+  var addCallNode = { children:[addNode, "(", zeroNode, ", ", isMinorNode, ")"] };
+  var xNode = { children:["x"], link:zeroNode, tooltip:"Number" };
+  var plusNode = { children:["+"] };
+  var yNode = { children:["y"], link:isMinorNode, tooltip:"Bool", error:"Error: Expected Number, got Bool" };
+  var addBodyNode = { children:[xNode, plusNode, yNode] };
+  var addDeclNode = { children:["'add'('x','y') = ", addBodyNode] };
+  var lines = [addDeclNode, " ", ageAssignNode, isMinorAssignNode, addCallNode];
+  
+  addNode.link = addBodyNode;
+  
+  for(var Idx = 0; Idx < lines.length; ++Idx )
+  {
+    var newDiv = document.createElement('div');
+	newDiv.appendChild(buildElement(lines[Idx], newDiv));
+    document.body.appendChild(newDiv);
+  }
+
+  displayError(yNode, "Error: Expected Number, got Bool");
+  
+  tooltipElement = document.getElementById("tooltip");
+  tooltipElement.style.visibility = "hidden";
+}
+
+function displayError(node, message)
+{
+  node.element.className = "errorHere";
+
+  var errorSpan = document.createElement('span');
+  errorSpan.innerText = message;
+  errorSpan.className = "errorLabel";
+
+  var errorDiv = document.createElement('div');
+  errorDiv.appendChild(errorSpan);
+  node.lineElement.appendChild(errorDiv);
+}
+
+function buildElement(node, line)
+{
+  if( typeof node === "string" )
+  {
+    var stringElement = document.createElement('span');
+	stringElement.innerText = node;
+	return stringElement;
+  }
+  else if( node.element === undefined )
+  {
+    node.element = document.createElement('span');
+	node.lineElement = line;
+    
+    for(var Idx = 0; Idx < node.children.length; ++Idx )
+    {
+      node.element.appendChild(buildElement(node.children[Idx], line));
+    }
+    
+    if( node.link !== undefined )
+    {
+      node.element.onclick = function(){ setSelected(node.link); }
+    }
+	
+	if( node.tooltip !== undefined )
+	{
+      node.element.onmouseover = function(){ showTooltip(node); }
+      node.element.onmouseout = function(){ hideTooltip(node); }
+	}
+  }
+  
+  return node.element;
+}
+
+function showTooltip(node)
+{
+  var pos = getElementOffset( node.element );
+  tooltipElement.style.left = pos.x+"px";
+  tooltipElement.style.top = (pos.y+node.element.offsetHeight)+"px";
+  tooltipElement.style.visibility = "visible";
+  tooltipElement.innerText = node.tooltip;
+
+  if( tooltipNode && tooltipNode.className === "clickable" )
+  {
+	tooltipNode.element.className = "";
+  }
+
+  tooltipNode = node;
+  
+  if( tooltipNode && tooltipNode.link && tooltipNode.element.className !== "errorHere" )
+  {
+	tooltipNode.element.className = "clickable";
+  }
+}
+
+function hideTooltip(node)
+{
+  if( tooltipNode === node )
+  {
+    tooltipElement.style.visibility="hidden";
+
+    if( tooltipNode && tooltipNode.element.className === "clickable" )
+    {
+	  tooltipNode.element.className = "";
+    }
+	tooltipNode = undefined;
+  }
+}
+
+var selectedNode = undefined;
+
+function setSelected(node)
+{
+  if( selectedNode !== undefined )
+  {
+    selectedNode.element.className = "";
+    selectedNode.lineElement.className = "";
+  }
+  selectedNode = node;
+  node.element.className = "selected";
+  node.lineElement.className = "selected";
+}
+
+function getElementOffset( el ) {
+    var _x = 0;
+    var _y = 0;
+    while( el && !isNaN( el.offsetLeft ) && !isNaN( el.offsetTop ) ) {
+        _x += el.offsetLeft - el.scrollLeft;
+        _y += el.offsetTop - el.scrollTop;
+        el = el.offsetParent;
+    }
+    return { x: _x, y: _y };
+}
+</script>
+<body onload="onLoad()">
+<span id=tooltip class=tooltip>tooltip</span>
+</body>

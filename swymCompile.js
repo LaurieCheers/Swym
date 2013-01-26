@@ -28,7 +28,7 @@ SWYM.Compile = function(parsetree)
 	return executable;
 }
 
-// The "base" node compiler, which gets called by CompileNode.
+// The "base" node compiler, which gets called by CompileNode (below).
 SWYM.CompileLValue = function(parsetree, cscope, executable)
 {
 	if( parsetree === undefined )
@@ -69,7 +69,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		}
 		else
 		{
-			SWYM.LogError(parsetree.pos, "Unexpected literal <"+parsetree.value+">.");
+			SWYM.LogError(parsetree, "Unexpected literal <"+parsetree.value+">.");
 		}
 	}
 	else if ( parsetree.type === "name" )
@@ -80,7 +80,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		
 		if( scopeEntry === undefined )
 		{
-			SWYM.LogError(parsetree.pos, "Unknown identifier \""+parsetree.text+"\".");
+			SWYM.LogError(parsetree, "Unknown identifier \""+parsetree.text+"\".");
 		}
 		else
 		{
@@ -133,8 +133,27 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 			type1 = SWYM.TypeCoerce(argTypes[1], type1, "operator '"+parsetree.op.text+"'");
 			++numArgs;
 		}
+
+		SWYM.pushEach(tempexecutable0, executable);
+		SWYM.pushEach(tempexecutable1, executable);
 		
-		if( (type0 && type0.multivalueOf !== undefined) || (type1 && type1.multivalueOf !== undefined) )
+		if( type0 && type0.multivalueOf !== undefined )
+		{
+			SWYM.pushEach(["#DoMultiple", 0, numArgs, type0.quantifier === undefined? 1: type0.quantifier.length], executable);
+			oldExecutable = executable;
+			executable = [];
+			oldExecutable.push(executable);
+		}
+
+		if( type1 && type1.multivalueOf !== undefined )
+		{
+			SWYM.pushEach(["#DoMultiple", numArgs-1, numArgs, type1.quantifier === undefined? 1: type1.quantifier.length], executable);
+			oldExecutable = executable;
+			executable = [];
+			oldExecutable.push(executable);
+		}
+		
+/*		if( (type0 && type0.multivalueOf !== undefined) || (type1 && type1.multivalueOf !== undefined) )
 		{
 			var isLazy = false;
 			
@@ -179,31 +198,43 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		{
 			SWYM.pushEach(tempexecutable0, executable);
 			SWYM.pushEach(tempexecutable1, executable);
-			if( typeof(opFunction) !== 'function' )
+*/			if( typeof(opFunction) !== 'function' )
 			{
-				SWYM.LogError(parsetree.op.pos, "Illegal use of operator "+parsetree.op.text);
+				SWYM.LogError(parsetree.op, "Illegal use of operator "+parsetree.op.text);
 			}
 			executable.push("#Native");
 			executable.push(numArgs);
 			executable.push(opFunction);
 			if( parsetree.op.behaviour.returnType )
 			{
-				return parsetree.op.behaviour.returnType;
+				returnType = parsetree.op.behaviour.returnType;
 			}
 			else if( parsetree.op.behaviour.getReturnType )
 			{
-				return parsetree.op.behaviour.getReturnType(type0, type1);
+				returnType = parsetree.op.behaviour.getReturnType(SWYM.ToSinglevalueType(type0), SWYM.ToSinglevalueType(type1));
 			}
 			else
 			{
-				SWYM.LogError(0, "Fsckup: Undefined return type for operator "+parsetree.op.text);
-				return {type:"value"};
+				SWYM.LogError(parsetree, "Fsckup: Undefined return type for operator "+parsetree.op.text);
+				returnType = {type:"value"};
 			}
+//		}
+
+		if( type1 && type1.multivalueOf !== undefined )
+		{
+			returnType = SWYM.ToMultivalueType(returnType, type1.quantifier);
 		}
+
+		if( type0 && type0.multivalueOf !== undefined )
+		{
+			returnType = SWYM.ToMultivalueType(returnType, type0.quantifier);
+		}
+		
+		return returnType;
 	}
 	else
 	{
-		SWYM.LogError(parsetree.pos, "Symbol \""+parsetree.text+"\" is illegal here.");
+		SWYM.LogError(parsetree, "Symbol \""+parsetree.text+"\" is illegal here.");
 	}
 }
 
@@ -211,10 +242,67 @@ SWYM.CompileNode = function(node, cscope, executable)
 {
 	var resultType = SWYM.CompileLValue(node, cscope, executable);
 	
-	while( resultType && resultType.nativeType === "Variable" )
+	while(true)
 	{
-		executable.push("#VariableContents");
-		resultType = resultType.contentType;
+		if( !resultType )
+		{
+			break;
+		}
+		else if(resultType.multivalueOf !== undefined && resultType.quantifier !== undefined && resultType.quantifier.length >= 2 &&
+			resultType.quantifier[0] === "EACH" && resultType.quantifier[1] === "EACH")
+		{
+			executable.push("#Flatten");
+			resultType = {type:resultType.type, multivalueOf:resultType.multivalueOf, quantifier:resultType.quantifier.slice(1)};
+		}
+/* // autoresolving quantifiers that produce boolean values (bad idea)
+		else if( resultType.multivalueOf !== undefined && resultType.quantifier !== undefined && resultType.quantifier[0] !== "EACH" && resultType.multivalueOf === SWYM.BoolType )
+		{
+			// Insert the instruction(s) to resolve this quantifier into a single value
+
+			var qexecutable = [];
+			for( var Idx = resultType.quantifier.length-1; Idx >= 0; --Idx )
+			{
+				var q = resultType.quantifier[Idx];
+				
+				if( q === "OR" )
+				{
+					qexecutable.push("#ORQuantifier");
+				}
+				else if( q === "AND" )
+				{
+					qexecutable.push("#ANDQuantifier");
+				}
+				else if( q === "NOR" )
+				{
+					qexecutable.push("#NORQuantifier");
+				}
+				else if( q === "NAND" )
+				{
+					qexecutable.push("#NANDQuantifier");
+				}
+				
+				if( Idx > 0 )
+				{
+					qexecutable = ["#DoMultiple", 0, 1, 1, qexecutable];
+				}
+			}
+			SWYM.pushEach( qexecutable, executable );
+			resultType = SWYM.BoolType;
+		}
+*/		else if( resultType.nativeType === "Variable" && !resultType.isReference )
+		{
+			executable.push("#VariableContents");
+			resultType = resultType.contentType;
+		}
+		else if( resultType.multivalueOf !== undefined && resultType.multivalueOf.nativeType === "Variable" && !resultType.multivalueOf.isReference )
+		{
+			executable.push("#MultiVariableContents");
+			resultType = SWYM.ToMultivalueType(resultType.multivalueOf.contentType);
+		}
+		else
+		{
+			break;
+		}
 	}
 	
 	var testType = resultType;
@@ -227,7 +315,7 @@ SWYM.CompileNode = function(node, cscope, executable)
 	// NB: Semantically, both String and StringChar behave as arrays of StringChars. So exclude them explicitly.
 	if( testType && testType !== SWYM.StringType && testType !== SWYM.StringCharType &&
 		testType.baked === undefined && testType.outType &&	testType.outType === SWYM.StringCharType &&
-		testType.memberTypes && testType.memberTypes.length )
+		testType.memberTypes && testType.memberTypes.length && !testType.isLazy )
 	{
 		if( resultType.multivalueOf !== undefined )
 		{
@@ -274,28 +362,56 @@ SWYM.GetPositionalName = function(theFunction, expectedArgName)
 
 SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 {
+	var fnName = fnNode.name;
+	
+	if( fnName === "ref" )
+	{
+		// ugly special case - the ref keyword/function cannot be overloaded. It always just does this:
+		var refArgType = undefined;
+		if( fnNode.children.length === 0 )
+		{
+			SWYM.LogError(fnNode, "Cannot call 'ref' with no arguments (expected 1).");
+		}
+		else if( fnNode.children.length > 1 )
+		{
+			SWYM.LogError(fnNode, "Too many arguments to the 'ref' function (expected 1, got "+fnNode.children.length+").");
+		}
+		else
+		{
+			refArgType = SWYM.CompileLValue( fnNode.children[0], cscope, executable );
+			SWYM.TypeCoerce(SWYM.VariableType, refArgType, "ref function");
+			return SWYM.RefType(refArgType);
+		}
+		return;
+	}
+	
 	var numAnonymous = 0;
 	var args = {};
+	var argNames = [];
 	for( var Idx = 0; Idx < fnNode.argNames.length; ++Idx )
 	{
 		if( fnNode.argNames[Idx] === "__" )
 		{
-			args["__"+numAnonymous] = fnNode.children[Idx];
+			var argName = "__"+numAnonymous;
 			++numAnonymous;
 		}
 		else
 		{
-			args[ fnNode.argNames[Idx] ] = fnNode.children[Idx];
+			var argName = fnNode.argNames[Idx];
 		}
+
+		args[argName] = fnNode.children[Idx];
+		argNames.push(argName);
 	}
 
 	var isMulti = false;
 	var inputArgTypes = {};
 	var inputArgExecutables = {};
 	
-	for( var inputArgName in args )
+	for( Idx = 0; Idx < argNames.length; ++Idx )
 	{
 		var inputExecutable = [];
+		var inputArgName = argNames[Idx];
 		var inputType = SWYM.CompileNode( args[inputArgName], cscope, inputExecutable );
 		
 		if( inputType && inputType.multivalueOf !== undefined )
@@ -308,12 +424,11 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 	}
 
 	
-	var fnName = fnNode.name;
 	var fnScopeName = "fn#"+fnName;
 	var overloads = cscope[fnScopeName];
 	if( !overloads )
 	{
-		SWYM.LogError(0, "Unknown function "+fnName);
+		SWYM.LogError(fnNode, "Unknown function "+fnName);
 		return;
 	}
 	
@@ -350,7 +465,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 	
 	if( validOverloads.length === 0 )
 	{
-		SWYM.LogError(0, bestError);
+		SWYM.LogError(fnNode, bestError);
 		return;
 	}
 
@@ -393,7 +508,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		}
 		else
 		{
-			SWYM.LogError(0, "Too many valid overloads for "+fnName+"! (we don't do dynamic dispatch yet.)");
+			SWYM.LogError(fnNode, "Too many valid overloads for "+fnName+"! (we don't do dynamic dispatch yet.)");
 			return;
 		}
 	}
@@ -523,7 +638,8 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 			return overloadResult;
 		}
 	}
-	
+
+	// this function has been split into two halves - the logic continues in CompileFunctionOverload (below), using the following data.
 	overloadResult.inputArgNameList = inputArgNameList;
 	overloadResult.expectedArgNamesByIndex = expectedArgNamesByIndex;
 	overloadResult.inputArgTypes = inputArgTypes;
@@ -544,7 +660,16 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	var argTypesPassed = [];
 	var isMulti = data.isMulti;
 	var isLazy = false;
+	var isQuantifier = false;
 	var theFunction = data.theFunction;
+
+	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
+	{
+		var inputArgName = data.inputArgNameList[Idx];
+		var tempType = data.inputArgTypes[inputArgName];
+	}
+	
+	var numArgsPushed = 0;
 
 	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
 	{
@@ -561,12 +686,19 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		finalArgTypes[Idx] = tempType;
 		
 		argTypesPassed[numArgsPassed] = SWYM.ToSinglevalueType(tempType);
-		argNamesPassed[numArgsPassed] = expectedArgName;
+		argNamesPassed[numArgsPassed] = theFunction.expectedArgs[expectedArgName].finalName;
 		++numArgsPassed;
 
-		if( isMulti && tempType && tempType.multivalueOf !== undefined && tempType.isLazy )
+		if( tempType && tempType.multivalueOf !== undefined )
 		{
-			isLazy = true;
+			if( isMulti && tempType.isLazy )
+			{
+				isLazy = true;
+			}
+			if( tempType.quantifier !== undefined )
+			{
+				isQuantifier = true;
+			}
 		}
 			
 		if( theFunction.customCompileWithoutArgs )
@@ -575,28 +707,67 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		}
 		else
 		{
+			++numArgsPushed;
 			SWYM.pushEach(data.inputArgExecutables[inputArgName], executable);
 			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, "calling '"+fnName+"', argument "+expectedArgName);
 
-			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
-			{
-				executable.push("#SingletonArray");
-			}
+//			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
+//			{
+//				executable.push("#SingletonArray");
+//			}
 		}
+	}
+	
+	if( isMulti && !theFunction.customCompileWithoutArgs )
+	{
+		var argPositionOnStack = 0;
+		for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
+		{
+			var inputArgName = data.inputArgNameList[Idx];
+			if( inputArgName !== undefined )
+			{
+				var tempType = data.inputArgTypes[inputArgName];
+
+				if( tempType && tempType.multivalueOf !== undefined )
+				{
+					finalArgTypes[Idx] = SWYM.ToSinglevalueType(tempType);
+					SWYM.pushEach(["#DoMultiple", argPositionOnStack, numArgsPushed, tempType.quantifier? tempType.quantifier.length: 1], executable);
+					oldExecutable = executable;
+					executable = [];
+					oldExecutable.push(executable);
+				}
+
+				++argPositionOnStack;
+			}
+		}		
 	}
 
 	var resultType;
-	if ( theFunction.customCompile || theFunction.nativeCode )
+	if( theFunction.customCompileWithoutArgs )
 	{
-		if( !isMulti && theFunction.customCompile )
+		if( !isMulti )
 		{
 			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
-		else if( isMulti && theFunction.multiCustomCompile )
+		else
 		{
-			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input, and
-			// generates multivalues as output. But for consistency with other compile modes,
-			// its result_type_ is still expected to be a single value.
+			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input,
+			// and generates multivalues as output. But for consistency with other compile modes,
+			// its result_type_ is still expected to be a single value type.
+			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, customArgExecutables);
+		}
+	}
+	else if ( theFunction.customCompile || theFunction.nativeCode )
+	{
+		if( theFunction.customCompile )
+		{
+			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
+		}
+/*		else if( isMulti && theFunction.multiCustomCompile )
+		{
+			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input,
+			// and generates multivalues as output. But for consistency with other compile modes,
+			// its result_type_ is still expected to be a single value type.
 			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
 		else if( isMulti && theFunction.customCompile && !theFunction.multiCustomCompile )
@@ -604,10 +775,10 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			//var singularTypes = SWYM.Each(finalArgTypes, SWYM.ToSinglevalueType);
 			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
 		}
-		
-		if( theFunction.nativeCode )
+*/
+		else if( theFunction.nativeCode )
 		{
-			if( isMulti )
+/*			if( isMulti )
 			{
 				executable.push(isLazy? "#LazyNative": "#MultiNative");
 				executable.push(numArgsPassed);
@@ -615,10 +786,10 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			}
 			else
 			{
-				executable.push("#Native");
+*/				executable.push("#Native");
 				executable.push(numArgsPassed);
 				executable.push(theFunction.nativeCode);
-			}
+//			}
 		}
 
 		if( theFunction.getReturnType )
@@ -640,7 +811,11 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		
 		if( precompiled.executable === undefined )
 		{
-			var bodyCScope = SWYM.MakeTable(SWYM.MainCScope, argNamesPassed, argTypesPassed);
+			var bodyCScope = object(SWYM.MainCScope);
+			for( var Idx = 0; Idx < argNamesPassed.length; Idx++ )
+			{
+				bodyCScope[argNamesPassed[Idx]] = SWYM.DerefType( argTypesPassed[Idx] );
+			}
 			bodyCScope["__default"] = {redirect:"this"};
 
 			precompiled.executable = [];
@@ -665,7 +840,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 
 		resultType = precompiled.returnType;
 	
-		if( isMulti )
+/*		if( isMulti )
 		{
 			executable.push("#MultiFnCall");
 			executable.push(fnName);
@@ -674,11 +849,11 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		}
 		else
 		{
-			executable.push("#FnCall");
+*/			executable.push("#FnCall");
 			executable.push(fnName);
 			executable.push(argNamesPassed);
 			executable.push(precompiled.executable);
-		}
+//		}
 	}
 	
 	if( resultType === undefined )
@@ -690,33 +865,26 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		else
 		{
 			resultType = SWYM.GetFunctionReturnType(finalArgTypes, argIndices, data.theFunction);
-		}
+		}	
 	}
-	
-	if( isMulti )
+		
+	if( isMulti || isQuantifier )
 	{
-		if( isLazy )
+		for( var Idx = data.inputArgNameList.length-1; Idx >= 0; --Idx )
 		{
-			if(resultType && resultType.multivalueOf !== undefined)
+			var inputArgName = data.inputArgNameList[Idx];
+			if( inputArgName !== undefined )
 			{
-				executable.push("#LazyFlatten");
-			}
-			return SWYM.ToLazyMultivalueType(resultType);
-		}
-		else if(resultType && resultType.multivalueOf !== undefined)
-		{
-			executable.push("#Flatten");
-			return resultType;
-		}
-		else
-		{
-			return SWYM.ToMultivalueType(resultType);
+				var tempType = data.inputArgTypes[inputArgName];
+				if( tempType && tempType.multivalueOf !== undefined )
+				{
+					resultType = SWYM.ToMultivalueType(resultType, tempType.quantifier);
+				}
+			}			
 		}
 	}
-	else
-	{
-		return resultType;
-	}
+
+	return resultType;
 }
 
 SWYM.GetPrecompiled = function(theFunction, argTypes)
@@ -746,8 +914,9 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 			{
 				for( var AIdx = 0; AIdx < cur.types.length; ++AIdx )
 				{
-					if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx]) ||
-						!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx]) )
+					if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
+						!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) ||
+						!argTypes[AIdx].isReference != !cur.types[AIdx].isReference )
 					{
 						matched = false;
 						break;
@@ -769,6 +938,12 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 
 SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, cscope, executable)
 {
+	if( fnName === "fn#ref" )
+	{
+		SWYM.LogError(body, "The 'ref' function cannot be redefined.");
+		return;
+	}
+	
 //	var bodyCScope = object(cscope);
 	var bodyExecutable = [];
 	var bodyScope = object(cscope);
@@ -808,7 +983,7 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 
 			if( typeCheckType === undefined && argNode !== undefined )
 			{
-				SWYM.LogError(argNode.pos, "Invalid type expression");
+				SWYM.LogError(argNode, "Invalid type expression");
 			}
 
 			expectedArgs[finalName] = {finalName:finalName, index:argIdx, typeCheck:typeCheckType};
@@ -833,11 +1008,46 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 		expectedArgs:expectedArgs,
 		executable:bodyExecutable,
 //		bodyCScope:bodyCScope, // used by implicit member definitions, like 'Yielded'.
-		toString: function(){ return str; },
+		toString: function(){ return "'"+fnName+"'"; },
 		returnType: {type:"incomplete"}
 	};
 
 	SWYM.AddFunctionDeclaration(fnName, cscope, cscopeFunction);
+	
+	var negateExecutable = ["#Native",1,function(v){return !v}];
+
+	if( fnName === "fn#<" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, negateExecutable);
+		SWYM.AddSwappedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, undefined);
+		SWYM.AddSwappedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, negateExecutable);
+	}
+	else if( fnName === "fn#>" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, negateExecutable);
+		SWYM.AddSwappedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, undefined);
+		SWYM.AddSwappedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, negateExecutable);
+	}
+	else if( fnName === "fn#<=" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, negateExecutable);
+		SWYM.AddSwappedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, undefined);
+		SWYM.AddSwappedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, negateExecutable);
+	}
+	else if( fnName === "fn#>=" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, negateExecutable);
+		SWYM.AddSwappedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, undefined);
+		SWYM.AddSwappedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, negateExecutable);
+	}
+	else if( fnName === "fn#==" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#!=", fnName, cscope, cscopeFunction, negateExecutable);
+	}
+	else if( fnName === "fn#!=" )
+	{
+		SWYM.AddModifiedFunctionDeclaration("fn#==", fnName, cscope, cscopeFunction, negateExecutable);
+	}
 }
 
 SWYM.AddFunctionDeclaration = function(fnName, cscope, cscopeFunction)
@@ -849,12 +1059,60 @@ SWYM.AddFunctionDeclaration = function(fnName, cscope, cscopeFunction)
 	else if( !cscope.hasOwnProperty(fnName) )
 	{
 		// FIXME: this is technically wrong, we ought to go through the __proto__ chain adding a placeholder to every level of the scope.
+		// there must be a better way to handle overloads...
 		var temp = cscope[fnName];
 		cscope[fnName] = [];
 		cscope[fnName].more = temp;
 	}
 
 	cscope[fnName].push( cscopeFunction );
+}
+
+SWYM.AddModifiedFunctionDeclaration = function(fnName, baseName, cscope, baseFunction, postExec)
+{
+	var negatedFunction = {
+		bodyNode:baseFunction.bodyNode,
+		expectedArgs:baseFunction.expectedArgs,
+		executable:[],
+		postExec:postExec,
+		toString: function(){ return "'"+fnName+"'"; },
+		returnType:object(baseFunction.returnType)
+	};
+
+	SWYM.AddFunctionDeclaration(fnName, cscope, negatedFunction);
+}
+
+SWYM.AddSwappedFunctionDeclaration = function(fnName, baseName, cscope, baseFunction, postExec)
+{
+	var swappedArgs = object(baseFunction.expectedArgs);
+	var arg0;
+	var arg1;
+	
+	for( var argName in baseFunction.expectedArgs )
+	{
+		if( baseFunction.expectedArgs[argName].index === 0 )
+		{
+			arg0 = argName;
+		}
+		else if( baseFunction.expectedArgs[argName].index === 1 )
+		{
+			arg1 = argName;
+		}
+	}
+	
+	swappedArgs[arg0] = baseFunction.expectedArgs[arg1];
+	swappedArgs[arg1] = baseFunction.expectedArgs[arg0];
+	
+	var swappedFunction = {
+		bodyNode:baseFunction.bodyNode,
+		expectedArgs:swappedArgs,
+		executable:[],
+		postExec:postExec,
+		toString: function(){ return "'"+fnName+"'"; },
+		returnType:object(baseFunction.returnType)
+	};
+
+	SWYM.AddFunctionDeclaration(fnName, cscope, swappedFunction);
 }
 
 SWYM.GetTypeFromExpression = function(node, cscope)
@@ -875,18 +1133,18 @@ SWYM.GetTypeFromExpression = function(node, cscope)
 	}
 	else
 	{
-		SWYM.LogError(node.pos, "Invalid type expression: "+node);
+		SWYM.LogError(node, "Invalid type expression: "+node);
 		return;
 	}
 
 	if( outType === undefined )
 	{
-		SWYM.LogError(node.pos, "Unknown type name "+debugName);
+		SWYM.LogError(node, "Unknown type name "+debugName);
 		return;
 	}
 	else if ( outType.baked === undefined || outType.baked.type !== "type" )
 	{
-		SWYM.LogError(node.pos, "Name "+debugName+" does not describe a type.");
+		SWYM.LogError(node, "Name "+debugName+" does not describe a type.");
 		return;
 	}
 	
@@ -934,7 +1192,7 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 
 				if( defaultValueType && theArg.typeCheck )
 				{
-					SWYM.TypeCoerce(theArg.typeCheck, defaultValueType, "default value for parameter '"+argName+"'");
+					SWYM.TypeCoerce(theArg.typeCheck, defaultValueType, theArg.defaultValueNode);
 				}
 			}
 			else
@@ -944,16 +1202,18 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 		}
 	}
 	
-	var bodyReturnType = SWYM.CompileNode(theFunction.bodyNode, cscope, bodyExecutable);
+	var bodyReturnType = SWYM.CompileLValue(theFunction.bodyNode, cscope, bodyExecutable);
 	
 	if( theCurrentFunction.returnsValue && theCurrentFunction.returnsNoValue )
 	{
-		SWYM.LogError(0, "Not all returns from "+fnName+" return a value");
+		SWYM.LogError(theFunction.bodyNode, "Not all returns from "+fnName+" return a value");
 	}
 	else if( theCurrentFunction.returnsValue && theCurrentFunction.yields )
 	{
-		SWYM.LogError(0, "Function "+fnName+" cannot both yield and return values");
+		SWYM.LogError(theFunction.bodyNode, "Function "+fnName+" cannot both yield and return values");
 	}
+	
+	var returnType;
 
 	if( theCurrentFunction.yields )
 	{
@@ -966,18 +1226,19 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 
 		SWYM.pushEach(["#ClearStack", "#Load", "Yielded"], executable);
 		// yield keyword will set the return type 
-		return theCurrentFunction.returnType;
+		returnType = theCurrentFunction.returnType;
 	}
 	else if( theCurrentFunction.returnsValue )
 	{
 		SWYM.pushEach(["#ReceiveReturnValue", bodyExecutable], executable);
 		// return keyword will set the return type
-		return theCurrentFunction.returnType;
+		returnType = theCurrentFunction.returnType;
 	}
 	else if( theCurrentFunction.returnsNoValue )
 	{
 		SWYM.pushEach(["#ReceiveReturnNoValue", bodyExecutable], executable);
-		cscopeFunction.returnType = {type:"void"};
+		theCurrentFunction.returnType = SWYM.VoidType;
+		returnType = SWYM.VoidType;
 	}
 //	else if( bodyReturnType && bodyReturnType.multivalue )
 //	{
@@ -988,8 +1249,15 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 	else
 	{
 		SWYM.pushEach(bodyExecutable, executable);
-		return bodyReturnType;
+		returnType = bodyReturnType;
 	}
+	
+	if( theFunction.postExec !== undefined )
+	{
+		SWYM.pushEach(theFunction.postExec, executable);
+	}
+	
+	return returnType;
 }
 
 SWYM.CScopeRedirect = function(cscope, argName)
@@ -1085,7 +1353,7 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	}
 	else
 	{
-		SWYM.LogError(argNode.pos, "Don't understand argument name "+argNode);
+		SWYM.LogError(argNode, "Don't understand argument name "+argNode);
 		return {type:"novalues"};
 	}
 	
@@ -1276,7 +1544,7 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 	}
 	else if( node )
 	{
-		SWYM.LogError(node.pos, "Error: each element of a table must be a 'key:value' declaration.");
+		SWYM.LogError(node, "Error: each element of a table must be a 'key:value' declaration.");
 	}
 }
 
@@ -1289,7 +1557,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 
 	if( keyNodes.length != valueNodes.length )
 	{
-		SWYM.LogError(node.pos, "Fsckup: inconsistent numbers of keys and values in table!?");
+		SWYM.LogError(node, "Fsckup: inconsistent numbers of keys and values in table!?");
 	}
 	
 	var elementExecutable = [];
@@ -1322,7 +1590,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 			}
 			else
 			{
-				SWYM.LogError(keyNodes[idx].pos, "Table has too many 'else' clauses.");
+				SWYM.LogError(keyNodes[idx], "Table has too many 'else' clauses.");
 			}
 		}
 
@@ -1332,7 +1600,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 
 		if( keyType === undefined || keyType.baked === undefined )
 		{
-			SWYM.LogError(keyNodes[idx].pos, "Table keys must be compile-time constants (at the moment).");
+			SWYM.LogError(keyNodes[idx], "Table keys must be compile-time constants (at the moment).");
 		}
 		else
 		{
@@ -1356,7 +1624,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 		}
 
 		if( valueType && valueType.multivalueOf !== undefined )
-			SWYM.LogError(0, "Error: json-style object declarations may not contain multi-values.");
+			SWYM.LogError(valueNodes[idx], "Error: json-style object declarations may not contain multi-values.");
 	}
 
 	bakedKeys = SWYM.jsArray(bakedKeys);
@@ -1498,7 +1766,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultNodes)
 
 	if( keyNodes.length != valueNodes.length )
 	{
-		SWYM.LogError(node.pos, "Fsckup: inconsistent numbers of keys and values in table!?");
+		SWYM.LogError(node, "Fsckup: inconsistent numbers of keys and values in table!?");
 	}
 	
 	var memberTypes = {};
@@ -1508,7 +1776,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultNodes)
 	{		
 		if( !keyNodes[idx] || keyNodes[idx].type !== "decl" )
 		{
-			SWYM.LogError(node.pos, "Invalid member declaration "+keyNodes[idx]);
+			SWYM.LogError(node, "Invalid member declaration "+keyNodes[idx]);
 		}
 		
 		if( valueNodes[idx] === undefined )
@@ -1526,7 +1794,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultNodes)
 
 			if( !valueType || !valueType.baked || valueType.baked.type !== "type" )
 			{
-				SWYM.LogError(node.pos, "Invalid member declaration "+keyNodes[idx]);
+				SWYM.LogError(node, "Invalid member declaration "+keyNodes[idx]);
 			}
 			else
 			{
@@ -1789,7 +2057,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 				var memberTypes = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
-					memberTypes[memberNames[Idx]] = argTypes[Idx+1];
+					memberTypes[memberNames[Idx]] = SWYM.DerefType( argTypes[Idx+1] );
 				}
 				
 				return {type:"type", debugName:SWYM.TypeToString(argTypes[0].baked), nativeType:"Struct", memberTypes:memberTypes};
@@ -1829,7 +2097,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 				var memberTypes = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
-					memberTypes[memberNames[Idx]] = SWYM.ToSinglevalueType(argTypes[Idx+1]);
+					memberTypes[memberNames[Idx]] = SWYM.DerefType( SWYM.ToSinglevalueType(argTypes[Idx+1]) );
 				}
 				
 				return {type:"type", nativeType:"Struct", debugName:SWYM.TypeToString(argTypes[0].baked), memberTypes:memberTypes};

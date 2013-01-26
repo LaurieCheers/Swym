@@ -2,7 +2,7 @@ SWYM.TypeCoerce = function(typeCheck, valueInfo, errorContext)
 {
 	if( !SWYM.TypeMatches(typeCheck, valueInfo) )
 	{
-		SWYM.LogError(0, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo)+". Context: "+errorContext);
+		SWYM.LogError(errorContext, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo)+". Context: "+errorContext);
 	}
 	
 	return valueInfo;
@@ -20,7 +20,7 @@ SWYM.TypeToString = function(type)
 		return ""+type;
 }
 
-SWYM.IsOfType = function(value, typeCheck)
+SWYM.IsOfType = function(value, typeCheck, errorContext)
 {
 	if( typeCheck.baked !== undefined )
 	{
@@ -31,7 +31,7 @@ SWYM.IsOfType = function(value, typeCheck)
 	{
 		for( var memberName in typeCheck.memberTypes )
 		{
-			if( value[memberName] === undefined || !SWYM.IsOfType(value[memberName], typeCheck.memberTypes[memberName]) )
+			if( value[memberName] === undefined || !SWYM.IsOfType(value[memberName], typeCheck.memberTypes[memberName], errorContext) )
 			{
 				return false;
 			}
@@ -62,9 +62,10 @@ SWYM.IsOfType = function(value, typeCheck)
 				break;
 			}
 			case "Struct": if(value.type !== "struct") return false; break;
+			case "image": if(value.type !== "image") return false; break;
 			default:
 			{
-				SWYM.LogError(0, "Fsckup: Unrecognized native type '"+typeCheck.nativeType+"'");
+				SWYM.LogError(errorContext, "Fsckup: Unrecognized native type '"+typeCheck.nativeType+"'");
 				return true;
 			}
 		}
@@ -104,7 +105,7 @@ SWYM.IsOfType = function(value, typeCheck)
 		{
 			for(var Idx = 0; Idx < value.length; ++Idx )
 			{
-				if( !SWYM.IsOfType(value[Idx], typeCheck.outType) )
+				if( !SWYM.IsOfType(value[Idx], typeCheck.outType, errorContext) )
 				{
 					return false;
 				}
@@ -128,7 +129,7 @@ SWYM.IsOfType = function(value, typeCheck)
 	return true;
 }
 
-SWYM.TypeMatches = function(typeCheck, valueInfo)
+SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 {
 	// Types are only undefined if there was an error earlier - in which case, we don't care.
 	if( !valueInfo || !typeCheck || typeCheck === valueInfo || valueInfo.nativeType === "NoValues" )
@@ -140,11 +141,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 	{
 		if( typeCheck.multivalueOf !== undefined )
 		{
-			return SWYM.TypeMatches(typeCheck.multivalueOf, valueInfo.multivalueOf);
+			return SWYM.TypeMatches(typeCheck.multivalueOf, valueInfo.multivalueOf, exact);
 		}
 		else
 		{
-			return SWYM.TypeMatches(typeCheck, valueInfo.multivalueOf);
+			return SWYM.TypeMatches(typeCheck, valueInfo.multivalueOf, exact);
 		}
 	}
 	
@@ -153,6 +154,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 		return SWYM.IsOfType(valueInfo.baked, typeCheck);
 	}
 	else if( typeCheck.baked !== undefined )
+	{
+		return false;
+	}
+	
+	if( exact && !!typeCheck.isReference !== !!valueInfo.isReference )
 	{
 		return false;
 	}
@@ -219,7 +225,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 	if( typeCheck.outType )
 	{
 		//TODO: take the typeCheck.argType into account when determining valueInfo.outType.
-		if( !SWYM.TypeMatches(typeCheck.outType, valueInfo.outType) )
+		if( !SWYM.TypeMatches(typeCheck.outType, valueInfo.outType, exact) )
 		{
 			return false;
 		}
@@ -228,7 +234,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 	if( typeCheck.argType )
 	{
 		// NB, backwards! We're checking that the value can accept all values the typeCheck declares. (covariant)
-		if( !SWYM.TypeMatches(valueInfo.argType, typeCheck.argType) )
+		if( !SWYM.TypeMatches(valueInfo.argType, typeCheck.argType, exact) )
 		{
 			return false;
 		}
@@ -248,7 +254,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 				return false;
 			}
 			
-			if( !SWYM.TypeMatches(typeCheck.memberTypes[memberName], valueInfo.memberTypes[memberName]) )
+			if( !SWYM.TypeMatches(typeCheck.memberTypes[memberName], valueInfo.memberTypes[memberName], exact) )
 			{
 				return false;
 			}
@@ -278,7 +284,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo)
 	return true;
 }
 
-SWYM.TypeIntersect = function(typeA, typeB)
+SWYM.TypeIntersect = function(typeA, typeB, errorContext)
 {
 	if( typeA === typeB )
 	{
@@ -287,13 +293,13 @@ SWYM.TypeIntersect = function(typeA, typeB)
 	
 	if( (typeA.multivalueOf !== undefined) !== (typeB.multivalueOf !== undefined) )
 	{
-		SWYM.LogError(0, "Fsckup: cannot intersect a multivalue with a non multivalue!");
+		SWYM.LogError(errorContext, "Fsckup: cannot intersect a multivalue with a non multivalue!");
 		return undefined;
 	}
 
 	if( typeA.multivalueOf !== undefined )
 	{
-		return SWYM.ToMultivalueType(SWYM.TypeIntersect(typeA.multivalueOf, typeB.multivalueOf));
+		return SWYM.ToMultivalueType(SWYM.TypeIntersect(typeA.multivalueOf, typeB.multivalueOf, errorContext));
 	}
 	
 	if( SWYM.TypeMatches(typeA, typeB) )
@@ -320,7 +326,7 @@ SWYM.TypeIntersect = function(typeA, typeB)
 	return typeB;
 }
 
-SWYM.TypeUnify = function(typeA, typeB)
+SWYM.TypeUnify = function(typeA, typeB, errorContext)
 {
 	if ( typeA === typeB )
 	{
@@ -329,7 +335,7 @@ SWYM.TypeUnify = function(typeA, typeB)
 
 	if( (typeA !== undefined && typeA.multivalueOf !== undefined) !== (typeB !== undefined && typeB.multivalueOf !== undefined) )
 	{
-		SWYM.LogError(0, "Fsckup: cannot unify types with inconsistent multivaluedness");
+		SWYM.LogError(errorContext, "Fsckup: cannot unify types with inconsistent multivaluedness");
 		return undefined;
 	}
 
@@ -441,6 +447,11 @@ SWYM.TypeUnify = function(typeA, typeB)
 		result.outType = SWYM.TypeUnify(typeA.outType, typeB.outType);
 	}
 
+	if ( typeA.contentType || typeB.contentType )
+	{
+		result.contentType = SWYM.TypeUnify(typeA.contentType, typeB.contentType);
+	}
+
 	//TODO: unifying argtypes is not really this simple.
 	if ( typeA.argType || typeB.argType )
 	{
@@ -478,6 +489,7 @@ SWYM.TypeUnify = function(typeA, typeB)
 	if( typeA.baked && typeB.baked && SWYM.IsEqual(typeA.baked, typeB.baked) )
 	{
 		result.baked = typeA.baked;
+		result.debugName = typeA.debugName;
 	}
 		
 	if( toCompile !== undefined )
@@ -496,11 +508,11 @@ SWYM.LazyArrayTypeContaining = function(elementType)
 	return result;
 }
 
-SWYM.ArrayTypeContaining = function(elementType)
+SWYM.ArrayTypeContaining = function(elementType, errorContext)
 {
 	if( !elementType )
 	{
-		SWYM.LogError(0, "ArrayTypeContaining - Expected an element type, got: "+elementType);
+		SWYM.LogError(errorContext, "ArrayTypeContaining - Expected an element type, got: "+elementType);
 		return SWYM.ArrayType;
 	}
 
@@ -514,17 +526,17 @@ SWYM.ArrayTypeContaining = function(elementType)
 	return {type:"type", nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
 }
 
-SWYM.ArrayToMultivalueType = function(arrayType)
+SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 {
 	if( arrayType.isLazy )
 	{
-		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType));
+		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier);
 		result.isLazy = true;
 		return result;
 	}
 	else
 	{
-		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType));
+		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier);
 	}
 }
 
@@ -533,7 +545,7 @@ SWYM.TableTypeFromTo = function(keyType, valueType)
 	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:SWYM.ValueType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
 }
 
-SWYM.BakedValue = function(value)
+SWYM.BakedValue = function(value, errorContext)
 {
 	var t = typeof value;
 	var result;
@@ -574,7 +586,7 @@ SWYM.BakedValue = function(value)
 	}
 	else
 	{
-		SWYM.LogError(0, "Fsckup: Unrecognized value '"+SWYM.ToDebugString(value)+"' passed to BakedValue");
+		SWYM.LogError(errorContext, "Fsckup: Unrecognized value '"+SWYM.ToDebugString(value)+"' passed to BakedValue");
 		result = {type:"type"};
 	}
 
@@ -583,17 +595,26 @@ SWYM.BakedValue = function(value)
 	return result;
 }
 
-SWYM.GetOutType = function(callableType, argType)
+SWYM.GetOutType = function(callableType, argType, errorContext)
 {
+	var isMultivalue = false;
+	var quantifier = undefined;
+	if( callableType.multivalueOf !== undefined )
+	{
+		isMultivalue = true;
+		quantifier = callableType.quantifier;
+		callableType = callableType.multivalueOf;
+	}
+	
 	if( !callableType )
 	{
-		SWYM.LogError(0, "GetOutType - Expected a callable, got: "+callableType);
+		SWYM.LogError(errorContext, "GetOutType - Expected a callable, got: "+callableType);
 		return SWYM.NoValuesType;
 	}
 	
 	if( callableType === SWYM.NoValuesType )
 	{
-    return SWYM.NoValuesType;
+		return SWYM.NoValuesType;
 	}
 	
 	if( callableType.needsCompiling )
@@ -625,7 +646,7 @@ SWYM.GetOutType = function(callableType, argType)
 	
 	if( !callableType.outType )
 	{
-		SWYM.LogError(0, "Fsckup: OutType of callable "+SWYM.TypeToString(callableType)+" is missing. (failed to compile?)");
+		SWYM.LogError(errorContext, "Fsckup: OutType of callable "+SWYM.TypeToString(callableType)+" is missing. (failed to compile?)");
 		return SWYM.NoValuesType;
 	}
 	
@@ -634,7 +655,14 @@ SWYM.GetOutType = function(callableType, argType)
 		SWYM.TypeCoerce(callableType.argType, argType, "Argument to 'do'("+SWYM.TypeToString(callableType)+")");
 	}
 
-	return callableType.outType;
+	if( isMultivalue )
+	{
+		return SWYM.ToMultivalueType(callableType.outType, quantifier);
+	}
+	else
+	{
+		return callableType.outType;
+	}
 }
 
 SWYM.FindArgByFinalName = function(expectedArgs, name)
@@ -649,7 +677,7 @@ SWYM.FindArgByFinalName = function(expectedArgs, name)
 	}
 }
 
-SWYM.GetFunctionReturnType = function(argTypes, argNames, theFunction)
+SWYM.GetFunctionReturnType = function(argTypes, argNames, theFunction, errorContext)
 {
 	var isMulti = false;
 	for( var Idx = 0; Idx < argTypes.length; Idx++ )
@@ -665,7 +693,7 @@ SWYM.GetFunctionReturnType = function(argTypes, argNames, theFunction)
 		{
 			if( !SWYM.TypeMatches(expectedArg.typeCheck, argType) )
 			{
-				SWYM.LogError(0, "Invalid type for argument \""+argNames[Idx]+"\". (Expected "+expectedArg.typeCheck.debugName+", got "+argType.debugName+")");
+				SWYM.LogError(errorContext, "Invalid type for argument \""+argNames[Idx]+"\". (Expected "+expectedArg.typeCheck.debugName+", got "+argType.debugName+")");
 				return undefined;
 			}
 		}
@@ -684,16 +712,30 @@ SWYM.ToLazyMultivalueType = function(type)
 	return result;
 }
 
-SWYM.ToMultivalueType = function(type)
+SWYM.ToMultivalueType = function(type, quantifier)
 {
 	if( type && type.multivalueOf !== undefined )
 	{
-		// a two-level multivalue is the same as one-level
-		return type;
+/*		if( type.quantifier === undefined && quantifier === undefined )
+		{
+			// a multi-multivalue is the same as a multivalue
+			return type;
+		}
+		else
+		{
+*/			quantifier_A = quantifier;
+			quantifier_B = type.quantifier;
+			if( quantifier_A === undefined )
+				quantifier_A = ["EACH"];
+			if( quantifier_B === undefined )
+				quantifier_B = ["EACH"];
+			
+			return {type:"type", multivalueOf:type.multivalueOf, quantifier:quantifier_A.concat(quantifier_B), debugName:type.debugName};
+//		}
 	}
 	else
 	{
-		return {type:"type", multivalueOf:type, debugName:SWYM.TypeToString(type)+"*"};
+		return {type:"type", multivalueOf:type, quantifier:quantifier, debugName:SWYM.TypeToString(type)+"*"};
 	}
 }
 
@@ -701,22 +743,47 @@ SWYM.ToSinglevalueType = function(type)
 {
 	if( type === undefined || type.multivalueOf === undefined )
 		return type;
-	
+		
 	return type.multivalueOf;
 }
 
-SWYM.VariableTypeContaining = function(contentType)
+SWYM.VariableTypeContaining = function(contentType, errorContext)
 {
 	if( !contentType )
 	{
-		SWYM.LogError(0, "VariableTypeContaining - Expected a content type, got: "+SWYM.TypeToString(contentType));
+		SWYM.LogError(errorContext, "VariableTypeContaining - Expected a content type, got: "+SWYM.TypeToString(contentType));
 		return SWYM.NoValuesType;
 	}
 
 	return {type:"type", nativeType:"Variable", contentType:contentType, debugName:contentType.debugName+".Var"};
 }
 
-SWYM.GetVariableTypeContents = function(variableType)
+SWYM.RefType = function(varType)
+{
+	if( varType && varType.isReference )
+	{
+		return varType;
+	}
+	else
+	{
+		var result = object(varType);
+		result.varType = varType;
+		result.isReference = true;
+		result.debugName = result.debugName+".Ref";
+	}
+
+	return result;
+}
+
+SWYM.DerefType = function(refType)
+{
+	if( refType && refType.isReference )
+		return refType.varType;
+	else
+		return refType;
+}
+
+SWYM.GetVariableTypeContents = function(variableType, errorContext)
 {
 	if( variableType && variableType.contentType )
 	{
@@ -724,7 +791,7 @@ SWYM.GetVariableTypeContents = function(variableType)
 	}
 	else
 	{
-		SWYM.LogError(0, "Fsckup: GetVariableTypeContents - Expected a variable type, got: "+SWYM.TypeToString(variableType));
+		SWYM.LogError(errorContext, "Fsckup: GetVariableTypeContents - Expected a variable type, got: "+SWYM.TypeToString(variableType));
 		return SWYM.NoValuesType;
 	}
 }

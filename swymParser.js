@@ -361,6 +361,19 @@ SWYM.FunctionesqueParseTreeNode = function(name)
 	}
 }
 
+SWYM.OverloadableOperatorParseTreeNode = function(name)
+{
+	return function(lhs, op, rhs)
+	{
+		return {type:"fnnode", body:undefined, isDecl:false,
+			name:name,
+			etc:op.etc,
+			children:[lhs, rhs],
+			argNames:["this", "__"]
+		};
+	}
+}
+
 SWYM.IsTableNode = function(paramnode)
 {
 	while( paramnode && paramnode.children && paramnode.op && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )

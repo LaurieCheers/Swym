@@ -1,8 +1,15 @@
 SWYM = {};
 
-SWYM.LogError = function(textpos, message)
+SWYM.LogError = function(errorContext, message)
 {
-	SWYM.errors += "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos)+" - "+message+"\n";
+	if( typeof errorContext === "number" )
+		var textpos = errorContext;
+	else if( errorContext !== undefined )
+		var textpos = errorContext.pos;
+	else
+		var textpos = undefined;
+	
+	SWYM.errors += "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos) + " - "+message+"\n";
 	SWYM.halt = true;
 }
 

@@ -4,15 +4,15 @@ SWYM.Exec = function(executable)
 	SWYM.MainRScope = object(SWYM.DefaultGlobalRScope);
 	SWYM.g_etcState = {depth:0, halt:false};
 	
-	var result = SWYM.ExecWithScope("main", executable, SWYM.MainRScope);
+	var result = SWYM.ExecWithScope("main", executable, SWYM.MainRScope, []);
 }
 
 SWYM.value_novalues = {type:"novalues"};
 
-SWYM.ExecWithScope = function(debugName, executable, rscope)
+SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 {
 	var PC = 0;
-	var stack = [];
+
 	while( PC < executable.length && !SWYM.halt )
 	{
 		switch(executable[PC])
@@ -149,7 +149,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var result = SWYM.ForEachPairing(multiArgs, function(args)
 			{
 				var callScope = SWYM.MakeTable(SWYM.MainRScope, argNames, args);
-				return SWYM.ExecWithScope(debugName, body, callScope);
+				return SWYM.ExecWithScope(debugName, body, callScope, []);
 			});
 			stack.push(result);
 			PC += 4;
@@ -168,7 +168,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			else
 			{
 				var callScope = SWYM.MakeTable(SWYM.MainRScope, argNames, args);
-				stack.push( SWYM.ExecWithScope(debugName, body, callScope) );
+				stack.push( SWYM.ExecWithScope(debugName, body, callScope, []) );
 			}
 			PC += 4;
 			break;
@@ -227,6 +227,83 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			stack.push( SWYM.LazyFlatten(list) );
 			PC += 1;
 			break;
+			
+		case "#DoMultiple":
+			var arrayPosition = executable[PC+1];
+			var numPops = executable[PC+2];
+			var numLevels = executable[PC+3];
+			var quantifierExecutable = executable[PC+4];
+
+			var newStack = [];
+			newStack.length = numPops;
+			for( var Idx = 0; Idx < numPops; ++Idx )
+			{
+				newStack[numPops - (Idx+1)] = stack.pop();
+			}
+
+			stack.push( SWYM.DoIteration( debugName, newStack[ arrayPosition ], 1, numLevels, newStack, arrayPosition, quantifierExecutable, rscope ) );
+			PC += 5;
+			break;
+			
+		case "#ORQuantifier":
+			var array = stack.pop();
+			var result = false;
+			for( var Idx = 0; Idx < array.length; Idx++ )
+			{
+				if( array.run(Idx) === true )
+				{
+					result = true;
+					break;
+				}
+			}
+			stack.push(result);
+			PC += 1;
+			break;
+
+		case "#NORQuantifier":
+			var array = stack.pop();
+			var result = true;
+			for( var Idx = 0; Idx < array.length; Idx++ )
+			{
+				if( array.run(Idx) === true )
+				{
+					result = false;
+					break;
+				}
+			}
+			stack.push(result);
+			PC += 1;
+			break;
+
+		case "#ANDQuantifier":
+			var array = stack.pop();
+			var result = true;
+			for( var Idx = 0; Idx < array.length; Idx++ )
+			{
+				if( array.run(Idx) !== true )
+				{
+					result = false;
+					break;
+				}
+			}
+			stack.push(result);
+			PC += 1;
+			break;
+
+		case "#NANDQuantifier":
+			var array = stack.pop();
+			var result = false;
+			for( var Idx = 0; Idx < array.length; Idx++ )
+			{
+				if( array.run(Idx) !== true )
+				{
+					result = true;
+					break;
+				}
+			}
+			stack.push(result);
+			PC += 1;
+			break;
 
 		case "#At":
 			var index = stack.pop();
@@ -275,13 +352,38 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			
 		case "#VariableContents":
 			var variable = stack.pop();
-			if( variable.getter !== undefined )
+			if( variable === undefined )
+			{
+				SWYM.LogError(0, "Fsckup: undefined variable for #VariableContents instruction");
+				stack.push( undefined );
+			}
+			else if ( variable.getter !== undefined )
 				stack.push( variable.getter() );
 			else
 				stack.push( variable.value );
 			PC += 1;
 			break;
 			
+		case "#MultiVariableContents":
+			var variables = stack.pop();
+			var result = [];
+			for( var Idx = 0; Idx < variables.length; Idx++ )
+			{
+				var v = variables[Idx];
+				if( v === undefined )
+				{
+					SWYM.LogError(0, "Fsckup: undefined variable for #MultiVariableContents instruction");
+					stack.push( undefined );
+				}
+				else if( v.getter !== undefined )
+					result.push( v.getter() );
+				else
+					result.push( v.value );
+			}
+			stack.push(SWYM.jsArray(result));
+			PC += 1;
+			break;
+
 		case "#VariableAssign":
 			var newValue = stack.pop();
 			var variable = stack.pop();
@@ -290,6 +392,22 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			else
 				variable.value = newValue;
 			stack.push(variable);
+			PC += 1;
+			break;
+			
+		case "#MultiVariableAssign":
+			var newValue = stack.pop();
+			var variables = stack.pop();
+			for( var Idx = 0; Idx < variables.length; Idx++ )
+			{
+				var v = variables[Idx];
+				
+				if( v.setter !== undefined )
+					v.setter(newValue);
+				else
+					v.value = newValue;
+			}
+			stack.push(variables);
 			PC += 1;
 			break;
 
@@ -397,9 +515,9 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 
 		case "#IfElse":
 			if( stack.pop() )
-				stack.push( SWYM.ExecWithScope("IfYes", executable[PC+1], rscope) );
+				stack.push( SWYM.ExecWithScope("IfYes", executable[PC+1], rscope, []) );
 			else
-				stack.push( SWYM.ExecWithScope("IfNo", executable[PC+2], rscope) );
+				stack.push( SWYM.ExecWithScope("IfNo", executable[PC+2], rscope, []) );
 			PC += 3;
 			break;
 			
@@ -407,7 +525,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var etcLimit = executable[PC+1];
 			var etcStepExecutable = executable[PC+2];
 
-			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope);
+			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
 
 			var etcData = {index:0};
 			rscope["<etcData>"] = etcData;
@@ -419,7 +537,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			{
 				etcData.index = etcIndex;
 				
-				SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope);
+				SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
 
 				if( SWYM.g_etcState.halt )
 					break;
@@ -443,7 +561,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var etcComposer = executable[PC+5];
 			var etcPostProcessor = executable[PC+6];
 
-			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope);
+			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
 
 			var newRScope = object(rscope);
 			var etcData = {index:0};
@@ -456,7 +574,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			for( var etcIndex = 0; etcIndex < limit; ++etcIndex )
 			{
 				etcData.index = etcIndex;
-				var nextResult = SWYM.ExecWithScope("EtcBody", etcBodyExecutable, newRScope);
+				var nextResult = SWYM.ExecWithScope("EtcBody", etcBodyExecutable, newRScope, []);
 
 				if( etcStepExecutable !== undefined )
 				{
@@ -510,7 +628,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var returnScope = object(rscope);
 			var returnData = {value:undefined, halt:false};
 			returnScope["<returned>"] = returnData;
-			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope);
+			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope, []);
 			if( !SWYM.halt )
 			{
 				SWYM.LogError(0, "Fsckup: Function failed to return at all!?");
@@ -539,7 +657,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope)
 			var returnScope = object(rscope);
 			var returnData = {halt:false};
 			returnScope["<returned>"] = returnData;
-			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope);
+			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope, []);
 			
 			if( SWYM.halt && returnData.halt && !SWYM.errors )
 			{
@@ -966,7 +1084,7 @@ SWYM.ClosureCall = function(closure, arg)
 	{
 		var callScope = object(closure.scope)
 		callScope[closure.argName] = arg;
-		return SWYM.ExecWithScope(closure.debugName, closure.body, callScope);
+		return SWYM.ExecWithScope(closure.debugName, closure.body, callScope, []);
 	}
 	else if ( closure.run )
 	{
@@ -1384,7 +1502,10 @@ SWYM.ToDebugString = function(value)
 			{
 				result += ","+SWYM.ToDebugString(value.run(Idx));
 			}
-			return "[" + result + ",...]";
+			if( value.length <= 3 )
+				return "[" + result + "]";
+			else
+				return "[" + result + ",...]";
 		}
 		
 		case "rangeArray":
@@ -1452,4 +1573,30 @@ SWYM.Distinct = function(array)
 	}
 	
 	return result;
+}
+
+SWYM.DoIteration = function( debugName, array, curLevel, numLevels, stack, stackPosition, executable, rscope )
+{
+	var result = [];
+	for( var Idx = 0; Idx < array.length; ++Idx )
+	{		
+		if( curLevel < numLevels )
+		{
+			result.push( SWYM.DoIteration( debugName, array.run(Idx), curLevel+1, numLevels, stack, stackPosition, executable, rscope ) );
+		}
+		else
+		{
+			var copyStack = [];
+			copyStack.length = stack.length;
+			for( var copyIdx = 0; copyIdx < stack.length; ++copyIdx )
+			{
+				copyStack[copyIdx] = stack[copyIdx];
+			}
+			copyStack[ stackPosition ] = array.run(Idx);
+
+			result.push( SWYM.ExecWithScope( debugName+":ITER", executable, rscope, copyStack) );
+		}
+	}
+	
+	return SWYM.jsArray(result);
 }

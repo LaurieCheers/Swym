@@ -8,7 +8,7 @@ SWYM.NextClassID = 8001;
 // The .run functions are only used to identify whether a run-time object is valid.
 // At compile time we require type IDs to tell us what is a subtype of what.
 //
-//                          Value
+//                         Anything
 //        +-----------+-------+-------+-------+------+----------+----------+
 //      Type        Array   Block   Table   Number  Bool  <structinst> <enuminst>
 //   +----+---+       |                       |
@@ -24,13 +24,13 @@ SWYM.NextClassID = 8001;
 // Can you say Bool.values (or the equivalent for any given enum) to get the list of possible values?
 // Is every enum type actually an instance of a struct, to allow you to go "Color.RED" or whatever? Careful -
 // that means any function you can call on all enums (such as .values), or on all types, will conflict with
-// enum value names!
+// enum value names! A good reason to encourage enum value names to be all caps.
 // Do we even have/want subtypes? What if we just do mixins for everything?
 
 // predefined mixins: GreaterThan, GreaterThanOrEq, LessThan, LessThanOrEq, MultipleOf,
 // Baked, Members, native_Number, native_String, native_Array, native_Table
 
-// 'Type' = Value->Bool & Baked & native_Type
+// 'Type' = Anything->Bool & Baked & native_Type
 // 'Array' = Number->auto & Members{ 'length':Int }
 // 'StringChar' = Number->StringChar & Members{ 'length'=1 }
 // 'String' = Number->StringChar & Members{ 'length':Nat }
@@ -40,7 +40,7 @@ SWYM.NextClassID = 8001;
 // 'Int' = Number & MultipleOf(1)
 // 'Nat' = Number & MultipleOf(1) & GreaterOrEq(0)
 
-SWYM.AnyType = {type:"type", debugName:"Value"};
+SWYM.AnyType = {type:"type", debugName:"Anything"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
@@ -49,7 +49,7 @@ SWYM.VoidType = {type:"type", nativeType:"Void", debugName:"Void"};
 SWYM.TypeType = {type:"type", nativeType:"Type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Type"};
 SWYM.StringCharType = {type:"type", nativeType:"String", argType:SWYM.IntType, memberTypes:{"length":SWYM.BakedValue(1)}, debugName:"StringChar"};
 SWYM.StringCharType.outType = SWYM.StringCharType;
-SWYM.VariableType = {type:"type", nativeType:"Variable", contentsType:SWYM.NoValuesType, debugName:"Variable"};
+SWYM.VariableType = {type:"type", nativeType:"Variable", contentsType:SWYM.NoValuesType, debugName:"Var"};
 
 SWYM.NativeArrayType = {type:"type", nativeType:"JSArray", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"NativeArray"};
 SWYM.NativeTableType = {type:"type", nativeType:"JSObject", argType:SWYM.StringType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"NativeTable"};
@@ -57,7 +57,7 @@ SWYM.NativeStringType = {type:"type", nativeType:"String", argType:SWYM.IntType,
 
 SWYM.NoValuesType = {type:"type", nativeType:"NoValues", debugName:"NoValues"};
 SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"Array"};
-SWYM.TableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Table"};
+SWYM.TableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Table"}; // fixme: needs "keys" member type.
 SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"String"};
 SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Callable"};
 SWYM.BlockType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
@@ -109,7 +109,7 @@ SWYM.operators = {
 			var parentFunction = cscope["<withinFunction>"];
 			if( !parentFunction )
 			{
-				SWYM.LogError(0, "Illegal yield - cannot yield when there's no enclosing function!");
+				SWYM.LogError(node, "Illegal yield - cannot yield when there's no enclosing function!");
 				return undefined;
 			}
 			
@@ -142,7 +142,7 @@ SWYM.operators = {
 			var parentFunction = cscope["<withinFunction>"];
 			if( !parentFunction )
 			{
-				SWYM.LogError(0, "Illegal return - cannot return when there's no enclosing function!");
+				SWYM.LogError(node, "Illegal return - cannot return when there's no enclosing function!");
 				return undefined;
 			}
 			
@@ -245,14 +245,17 @@ SWYM.operators = {
 
 			executable.push( isMulti ? "#ConcatArrays" : "#CreateArray" );
 			executable.push(executables.length);
-			return SWYM.ToMultivalueType(resultType);
+			if( !isMulti )
+				resultType = SWYM.ToMultivalueType(resultType);
+				
+			return resultType;
 		}
 	},
 
 	":":  {precedence:30, infix:true,
 		customCompile:function(node, cscope, executable)
 		{
-			SWYM.LogError(0, "':' is illegal in this context.");
+			SWYM.LogError(node, "':' is illegal in this context.");
 		}
 	},
 	
@@ -262,7 +265,7 @@ SWYM.operators = {
 			if( node.children[0] && node.children[1] && node.children[0].type === "decl" )
 			{
 				// declare a value
-				var typecheck = SWYM.CompileLValue(node.children[1], cscope, executable);
+				var typecheck = SWYM.DerefType( SWYM.CompileLValue(node.children[1], cscope, executable) );
 
 				if( typecheck && typecheck.multivalueOf !== undefined )
 				{
@@ -275,7 +278,7 @@ SWYM.operators = {
 
 				if( cscope.hasOwnProperty(node.children[0].value) )
 				{
-					SWYM.LogError(node.pos, "Tried to redefine \""+node.children[0].value+"\"");
+					SWYM.LogError(node, "Tried to redefine \""+node.children[0].value+"\"");
 				}
 				else
 				{
@@ -328,9 +331,12 @@ SWYM.operators = {
 				var type0 = SWYM.CompileLValue(node.children[0], cscope, executable);
 				var type1 = SWYM.CompileNode(node.children[1], cscope, executable);
 				
-				SWYM.TypeCoerce(SWYM.VariableType, type0, "Left hand side of the = operator");
+				SWYM.TypeCoerce(SWYM.VariableType, type0, node.children[0]);
 				
-				executable.push("#VariableAssign");
+				if( type0.multivalueOf !== undefined )
+					executable.push("#MultiVariableAssign");
+				else
+					executable.push("#VariableAssign");
 				
 				return type0;
 			}
@@ -345,7 +351,7 @@ SWYM.operators = {
 				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
 				executable.push("#Add");
 				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, "+=");
+				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
 				return varType;
 			}
 		},
@@ -358,7 +364,7 @@ SWYM.operators = {
 				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
 				executable.push("#Sub");
 				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, "-=");
+				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
 				return varType;
 			}
 		},
@@ -371,7 +377,7 @@ SWYM.operators = {
 				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
 				executable.push("#Mul");
 				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, "+=");
+				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
 				return varType;
 			}
 		},
@@ -384,7 +390,7 @@ SWYM.operators = {
 				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
 				executable.push("#Div");
 				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, "+=");
+				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
 				return varType;
 			}
 		},
@@ -397,7 +403,7 @@ SWYM.operators = {
 				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
 				executable.push("#Mod");
 				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, "+=");
+				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
 				return varType;
 			}
 		},
@@ -410,7 +416,7 @@ SWYM.operators = {
 			var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
 		
 			if( type1 && type1.multivalueOf !== undefined )
-				SWYM.LogError(0, "Error: Right-hand side of the ** operator cannot be a multi-value.");
+				SWYM.LogError(node, "Error: Right-hand side of the ** operator cannot be a multi-value.");
 
 			executable.push("#Native");
 			executable.push(2);
@@ -439,7 +445,10 @@ SWYM.operators = {
 				});
 			}
 			
-			return SWYM.ToMultivalueType(type0);
+			if( type0.multivalueOf === undefined )
+				return SWYM.ToMultivalueType(type0);
+			else
+				return type0;
 		}
 	},
 
@@ -449,10 +458,10 @@ SWYM.operators = {
 		{
 			var executable2 = [];
 			var type1 = SWYM.CompileNode( node.children[1], cscope, executable2 );
-			type1 = SWYM.TypeCoerce(SWYM.BoolType, type1, "&& operator arguments");
+			type1 = SWYM.TypeCoerce(SWYM.BoolType, type1, node.children[1]);
 
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
-			type0 = SWYM.TypeCoerce(SWYM.BoolType, type0, "&& operator arguments");
+			type0 = SWYM.TypeCoerce(SWYM.BoolType, type0, node.children[0]);
 
 			executable.push("#IfElse");
 			executable.push(executable2); // then
@@ -466,10 +475,10 @@ SWYM.operators = {
 		{
 			var executable2 = [];
 			var type1 = SWYM.CompileNode( node.children[1], cscope, executable2 );
-			type1 = SWYM.TypeCoerce(SWYM.BoolType, type1, "|| operator arguments");
+			type1 = SWYM.TypeCoerce(SWYM.BoolType, type1, node.children[1]);
 
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
-			type0 = SWYM.TypeCoerce(SWYM.BoolType, type0, "|| operator arguments");
+			type0 = SWYM.TypeCoerce(SWYM.BoolType, type0, node.children[0]);
 
 			executable.push("#IfElse");
 			executable.push(["#Literal", true]); // then
@@ -516,7 +525,7 @@ SWYM.operators = {
 			}
 			else
 			{
-				SWYM.LogError(0, "Error - illegal argument to the Not operator.");
+				SWYM.LogError(node, "Error - illegal argument to the Not operator.");
 				return SWYM.NoValuesType;
 			}
 		}},
@@ -539,14 +548,14 @@ SWYM.operators = {
 				}
 				else
 				{
-					SWYM.LogError("Inconsistent arguments for '..' operator: "+SWYM.TypeToString(type0)+" and "+SWYM.TypeToString(type1));
+					SWYM.LogError(node, "Inconsistent arguments for '..' operator: "+SWYM.TypeToString(type0)+" and "+SWYM.TypeToString(type1));
 					return;
 				}
 			}
 			
-			type0 = SWYM.TypeCoerce(SWYM.StringType, type0, ".. operator arguments");
+			type0 = SWYM.TypeCoerce(SWYM.StringType, type0, node.children[0]);
 			var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
-			type1 = SWYM.TypeCoerce(SWYM.StringType, type1, ".. operator arguments");
+			type1 = SWYM.TypeCoerce(SWYM.StringType, type1, node.children[1]);
 
 			executable.push("#Native");
 			executable.push(2);
@@ -580,12 +589,17 @@ SWYM.operators = {
 	"!=any": {precedence:80, argTypes:[SWYM.AnyType, SWYM.ArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b){ return !SWYM.ArrayContains(b, a); }
 	},
+
+	">": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode(">") },
+	">=": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode(">=") },
+	"<": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("<") },
+	"<=": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("<=") },
 	
-	">":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>b} },
+/*	">":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>b} },
 	">=": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>=b} },
 	"<":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a<b} },
 	"<=": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a<=b} },
-
+*/
 	">every":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
 		{
@@ -704,7 +718,7 @@ SWYM.operators = {
 		infix:function(a,b){return a-b}, prefix:function(v){return -v}
 	},
 
-	"+": {precedence:102, returnType:{type:"Number"}, infix:true,
+	"+": {precedence:102, infix:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			// The + operator just ends up calling the + function. ("fn#+", below.)
@@ -957,7 +971,7 @@ SWYM.operators = {
 		},
 		customCompile:function(node, cscope, executable)
 		{
-			SWYM.LogError(0, "Fsckup - failed to use customParseTreeNode for the '~' operator.");
+			SWYM.LogError(node, "Fsckup - failed to use customParseTreeNode for the '~' operator.");
 		}
 	},
 
@@ -1015,7 +1029,7 @@ SWYM.operators = {
 		{
 			if( node.children[1] === undefined )
 			{
-				// empty list/table
+				// empty array/table
 				var emptyList = SWYM.jsArray([]);
 				
 				executable.push("#Literal");
@@ -1042,8 +1056,47 @@ SWYM.operators = {
 				{
 					// wrap single values in a list
 					executable.push( "#SingletonArray" );
+					return SWYM.ArrayTypeContaining( type );
 				}
-				return SWYM.ArrayTypeContaining(type);
+				else if( type.quantifier !== undefined && type.quantifier[0] !== "EACH" )
+				{
+					SWYM.TypeCoerce(SWYM.BoolType, type.multivalueOf, node);
+					// Insert the instruction(s) to resolve this quantifier into a single value
+
+					var qexecutable = [];
+					for( var Idx = type.quantifier.length-1; Idx >= 0; --Idx )
+					{
+						var q = type.quantifier[Idx];
+						
+						if( q === "OR" )
+						{
+							qexecutable.push("#ORQuantifier");
+						}
+						else if( q === "AND" )
+						{
+							qexecutable.push("#ANDQuantifier");
+						}
+						else if( q === "NOR" )
+						{
+							qexecutable.push("#NORQuantifier");
+						}
+						else if( q === "NAND" )
+						{
+							qexecutable.push("#NANDQuantifier");
+						}
+						
+						if( Idx > 0 )
+						{
+							qexecutable = ["#DoMultiple", 0, 1, 1, qexecutable];
+						}
+					}
+					SWYM.pushEach( qexecutable, executable );
+					return SWYM.BoolType;
+				}
+				else
+				{
+					return SWYM.ArrayTypeContaining( SWYM.DerefType( SWYM.ToSinglevalueType(type) ) );
+				}
 			}
 		}
 	},
@@ -1112,7 +1165,7 @@ SWYM.DefaultGlobalCScope =
 	"Bool": SWYM.BakedValue(SWYM.BoolType),
 	"Number": SWYM.BakedValue(SWYM.NumberType),
 	"Int": SWYM.BakedValue(SWYM.IntType),
-	"Value": SWYM.BakedValue(SWYM.AnyType),
+	"Anything": SWYM.BakedValue(SWYM.AnyType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
@@ -1123,12 +1176,60 @@ SWYM.DefaultGlobalCScope =
 		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
 		nativeCode:function(a,b){ return a+b; },
 		getReturnType:function(argTypes){ return SWYM.TypeUnify( argTypes[0], argTypes[1] ); }
-	},
-/*	{
+	}/* now in user code:
+	{
 		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType}, "rhs":{index:1, typeCheck:SWYM.ArrayType} },
 		nativeCode:function(a,b){  return SWYM.Concat(a,b);  },
 		getReturnType:function(argTypes){ return SWYM.ArrayTypeContaining(SWYM.TypeUnify(SWYM.GetOutType(argTypes[0]), SWYM.GetOutType(argTypes[1]))); }
 	}*/],
+
+	"fn#>":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
+		nativeCode:function(a,b){ return a>b; },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	},
+	{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
+		nativeCode:function(a,b){ return SWYM.ToTerseString(a) > SWYM.ToTerseString(b); },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	}],
+
+	"fn#>=":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
+		nativeCode:function(a,b){ return a>=b; },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	},
+	{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
+		nativeCode:function(a,b){ return SWYM.ToTerseString(a) >= SWYM.ToTerseString(b); },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	}],
+
+	"fn#<":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
+		nativeCode:function(a,b){ return a<b; },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	},
+	{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
+		nativeCode:function(a,b){ return SWYM.ToTerseString(a) < SWYM.ToTerseString(b); },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	}],
+
+	"fn#<=":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
+		nativeCode:function(a,b){ return a<=b; },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	},
+	{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
+		nativeCode:function(a,b){ return SWYM.ToTerseString(a) <= SWYM.ToTerseString(b); },
+		getReturnType:function(argTypes){ return SWYM.BoolType; }
+	}],
 	
 	"fn#Struct":
 	[{
@@ -1357,7 +1458,7 @@ SWYM.DefaultGlobalCScope =
 			"then":{index:2, typeCheck:SWYM.CallableType},
 			"else":{index:3, typeCheck:SWYM.CallableType}
 		},
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorContext)
 		{
 			var isMulti = argTypes[0].multivalueOf !== undefined || argTypes[1].multivalueOf !== undefined || 
 						argTypes[2].multivalueOf !== undefined || argTypes[3].multivalueOf !== undefined;
@@ -1368,7 +1469,7 @@ SWYM.DefaultGlobalCScope =
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
-				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked);
+				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked, errorContext);
 			}
 			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType);
 			
@@ -1505,12 +1606,12 @@ SWYM.DefaultGlobalCScope =
 		}],
 
 	"fn#floor":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.NumberType,
+			returnType:SWYM.IntType,
 			nativeCode:function(value){  return Math.floor(value);  }
 		}],
 
 	"fn#ceiling":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.NumberType,
+			returnType:SWYM.IntType,
 			nativeCode:function(value){  return Math.ceil(value);  }
 		}],
 
@@ -1520,20 +1621,20 @@ SWYM.DefaultGlobalCScope =
 			{
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
-					SWYM.LogError(0, "");
-					return SWYM.VariableTypeContaining(SWYM.ValueType);
+					SWYM.LogError(0, "The first argument to 'var' must be a type.");
+					return SWYM.RefType( SWYM.VariableTypeContaining(SWYM.ValueType) );
 				}
 				else
 				{
 					var varType = argTypes[0].baked;
 					SWYM.TypeCoerce(varType, argTypes[1]);
-
+					
 					SWYM.pushEach(argExecutables[1], executable);
-					executable.push("#Native");
+					executable.push(argTypes[1].multivalueOf !== undefined? "#MultiNative": "#Native");
 					executable.push(1);
 					executable.push(function(v){return {type:"variable", value:v}});
 
-					return SWYM.VariableTypeContaining(varType);
+					return SWYM.RefType( SWYM.VariableTypeContaining(varType) );
 				}
 			}
 		}],
@@ -1546,10 +1647,14 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 
-	"fn#ref":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
-		returnType:{type:"variable", template:["@ArgTypeNamed",0,"@Ref"]},
-		customCompile:function(argTypes, cscope, executable) {} // no-op!
-	}],
+	/*"fn#ref":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
+		preserveRefArgs:true,
+		customCompile:function(argTypes, cscope, executable)
+		{
+			// no-op!
+			return SWYM.RefType(argTypes[0]);
+		}
+	}],*/
 	
 	"fn#random":[{  expectedArgs:{ "this":{index:0} },
 		getReturnType:function(argTypes)
@@ -1617,6 +1722,21 @@ SWYM.DefaultGlobalCScope =
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
 		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); },
+	}],
+	
+	"fn#some":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); }, // no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); },
+	}],
+
+	"fn#all":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); }, // no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); },
+	}],
+
+	"fn#none":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); }, // no-op!
+		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); },
 	}],
 
 	"fn#lazy":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
@@ -1709,32 +1829,58 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 	
+	"fn#isLazy":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable)
+		{
+			var result = argTypes[0] && argTypes[0].isLazy == true;
+			executable.push("#Literal");
+			executable.push(result);
+			
+			return SWYM.BakedValue(result);
+		}
+	}],
+	
 	"fn#array":[{  expectedArgs:{
 			"length":{index:0, typeCheck:SWYM.IntType},
-			"at":{index:1, typeCheck:SWYM.CallableType}
+			"at":{index:1, typeCheck:SWYM.CallableType},
+			"isLazy":{index:2, typeCheck:SWYM.BoolType, defaultValueNode:SWYM.NewToken("literal", -1, "false", false)}
 			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
 		},
 		customCompile:function(argTypes, cscope, executable)
 		{
 			var elementType = SWYM.GetOutType(argTypes[1], SWYM.IntType);
 			executable.push("#Native");
-			executable.push(2);
+			
+			if( argTypes[2] === undefined )
+				executable.push(2);
+			else
+				executable.push(3);
+
 			if( elementType && elementType.multivalueOf !== undefined )
 			{
 				SWYM.LogError(0, "Invalid array constructor - element type cannot be a multivalue");
 			}
 			else
 			{
-				executable.push(function(len, lookup)
+				executable.push(function(len, lookup, lazy)
 				{
 					return {
-						type:"jsArray",
+						type:"lazyArray",
 						length:len,
 						run:function(key) {return SWYM.ClosureCall(lookup,key);}
 					};
 				});
 			}
-			return SWYM.ArrayTypeContaining(elementType);
+			
+			if( argTypes[2] && argTypes[2].baked == true )
+			{
+				return SWYM.LazyArrayTypeContaining(elementType);				
+			}
+			else
+			{
+				return SWYM.ArrayTypeContaining(elementType);
+			}
 		}
 	}],
 
@@ -1910,14 +2056,14 @@ Array.'#ndLast' {.atEnd(#-1)};\
 Array.'#rdLast' {.atEnd(#-1)};\
 Array.'#thLast' {.atEnd(#-1)};\
 Array.'last' = .atEnd(0);\
-Value.'box' = [this];\
+Anything.'box' = [this];\
 'pair'('a')('b') = [a,b];\
-Value.'of' = this;\
+Anything.'of' = this;\
 'for'('v')('fn') = v.(fn);\
-Value.'is'('fn') = .(fn);\
-Value.'print' = output($this);\
-Value.'println' = output(\"$this\\n\");\
-Value.'trace' = output(\"$$this\\n\");\
+Anything.'is'('fn') = .(fn);\
+Anything.'print' = output($this);\
+Anything.'println' = output(\"$this\\n\");\
+Anything.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
 'Cell' = Struct{'key','context'};\
 Cell.'value' = .key.(.context);\
@@ -1929,9 +2075,9 @@ Cell.Array.'cellValues' = [.each.value];\
 'forEach_lazy'('list')('fn') = array(length:.length){ list.at(it).(fn) };\
 'if'('cond':Bool, 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
 'if'('cond':Bool, 'then') = 404.if{ cond }{ do(then) } else {};\
-Value.'if'('test':Callable, 'then') = .if(test)(then) else {it};\
-Value.'if'('test':Callable, 'else') = .if(test){it} else (else);\
-Value.'if'('test':Callable) = .if(test){it} else {novalues};\
+Anything.'if'('test':Callable, 'then') = .if(test)(then) else {it};\
+Anything.'if'('test':Callable, 'else') = .if(test){it} else (else);\
+Anything.'if'('test':Callable) = .if(test){it} else {novalues};\
 Array.'contains'('test':Block) = .1st.(test) || .2nd.(test) || etc;\
 Array.'where'('test') = forEach(this){ .if(test) };\
 Array.'where'('test')('body') = forEach(this){ .if(test)(body) else {novalues}  };\
@@ -1939,7 +2085,7 @@ Array.'where'('test', 'body', 'else') = forEach(this){ .if(test)(body) else (els
 Array.'whereKey'('test') = forEach(.keys){ .if(test)(this) else {novalues} };\
 Array.'whereKey'('test', 'body') = forEach(.keys){ .if(test){.(this).(body)} else {novalues} };\
 Array.'whereKey'('test', 'body', 'else') = forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} };\
-Array.'some'('test') = .1st.(test) || .2nd.(test) || etc;\
+/*Array.'some'('test') = .1st.(test) || .2nd.(test) || etc;\
 Array.'every'('test') = .1st.(test) && .2nd.(test) && etc;\
 Array.'none'('test') = !.some(test);\
 Array.'every' = .1st && .2nd && etc;\
@@ -1948,7 +2094,7 @@ Array.'none' = !(.1st || .2nd || etc);\
 'some'('list')('test') = list.some(test);\
 'every'('list')('test') = list.every(test);\
 'no'('list')('test') = !list.some(test);\
-'none'('list')('test') = !list.some(test);\
+'none'('list')('test') = !list.some(test);*/\
 Array.'starting'('n':Int) = .atEach[0..<n];\
 Array.'ending'('n':Int) = .atEach[ (.length-n).clamp(min:0) ..< .length];\
 Array.'slice'('start':Int) = .atEach[start ..< .length];\
@@ -1985,7 +2131,7 @@ Array.'singletonOr'('body':Callable) = .if{.length <= 1}{this} else (body);\n\
 Array.'sort' = .singletonOr\n\
 {\n\
   'v' = .1st;\n\
-  .tail.where{<v}.sort + [this.1st] + .tail.where{>=v}.sort\n\
+  .tail.where{<v}.sort + [v] + .tail.where{>=v}.sort\n\
 };\n\
 Array.'sortBy'('property') = .singletonOr\n\
 {\n\
@@ -2004,7 +2150,7 @@ Array.'total' = .1st + .2nd + etc;\
 Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
 Array.'map'('body') = [.each.(body)];\
-Value.'in'('array') { ==any array };\
+Anything.'in'('array') { ==any array };\
 Number.'clamp'('min':Number) = if(this < min){ min } else { this };\
 Number.'clamp'('max':Number) = if(this > max){ max } else { this };\
 Number.'clamp'('min':Number, 'max':Number) = .clamp(min:min).clamp(max:max);\
@@ -2017,13 +2163,14 @@ Array.'whereMin' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b =
 Array.'whereMax' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st < b.1st){ b } else if(a.1st > b.1st){ a } else { a+b } };\
 Array.'whereMin'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) > b.1st.(property)){ b } else if(a.1st.(property) < b.1st.(property)){ a } else { a+b } };\
 Array.'whereMax'('property') = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st.(property) < b.1st.(property)){ b } else if(a.1st.(property) > b.1st.(property)){ a } else { a+b } };\
-Array.'firstWhere'('test') = .each.if(test){ return it };\
+Array.'firstWhere'('test') { .each.if(test){ return it }; return novalues; };\
 Array.'firstWhere'('test', 'else') { .each.if(test){ return it }; return .(else) };\
 Array.'firstWhere'('test', 'then', 'else') { .each.if(test){ return .(then) }; return .(else) };\
-Array.'firstWhereKey'('test') = .keys.each.if(test){ return .(this) };\
-Array.'firstWhereKey'('test', 'else') { .keys.each.if(test){ return .(this) }; return .(else) };\
+Array.'lastWhere'('test') = .reverse.firstWhere(test);\
+Array.'lastWhere'('test', 'else') = .reverse.firstWhere(test) else (else);\
+Array.'lastWhere'('test', 'then', 'else') = .reverse.firstWhere(test)(then) else (else);\
 Number.'s_plural' = if(this==1) {\"\"} else {\"s\"};\
-'var'('init') = Value.var(init);\
+'var'('init') = Anything.var(init);\
 'Empty' = {.length == 0};\
 'PI' = 3.1415926535897926;\
 Block.'Non' = {!.(this)};\
@@ -2035,7 +2182,7 @@ Number.'differenceFrom'('n') = abs(this-n);\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
 String.'lines' = .splitOutWhere{==\"\\n\"};\
 String.'words' = .splitOutWhere{==any \" \\t\\n\"};\
-Value.'case'('body':Table) = body.at(this);\
+Anything.'case'('body':Table) = body.at(this);\
 Array.'tabulate'('body') = table(this)(body);\
 'case'('key')('body') = body.at(key);\n\
 Array.'structElements'('idx')\n\
