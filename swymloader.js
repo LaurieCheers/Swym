@@ -1,3 +1,5 @@
+SWYM = {};
+
 function loadjs(filename)
 {
   var scriptTag=document.createElement('script');

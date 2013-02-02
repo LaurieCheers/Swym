@@ -101,8 +101,8 @@ function runAllTests()
   endReportTable();
 
   addReportTable("Basic Functions:");
-  runTest("{true}", "{true}");
-  runTest("({true})", "{true}");
+  runTest("{true}", "'it'->{true}");
+  runTest("({true})", "'it'->{true}");
   runTest("'x'->{x}", "'x'->{x}");
   runTest("['x']->{x}", "['x']->{x}");
   runTest("for(3){*2}", "6");
@@ -278,8 +278,8 @@ function runAllTests()
   runTest("Array.'isPalindrome' = .reverse == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
   runTest("Array.'isPalindrome' = .reverse == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
   runTest("forEach[1..5]{it*it}", "[1,4,9,16,25]");
-  runTest("if(this:4, test:String, then:{\"Yes, string\"}, else:{\"Not string\"})", "\"Not string\"");
-  runTest("if(this:\"\", test:String, then:{\"Yes, string\"}, else:{\"Not string\"})", "\"Yes, string\"");
+  runTest("if(this=4, test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Not string\"");
+  runTest("if(this=\"\", test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Yes, string\"");
   runTest("[[8,5],[2,5],[6,2],[1,4]].whereMax{.2nd - .1st}", "[[2,5],[1,4]]");
   runTest("\"Hello\".starting(3)", "\"Hel\"");
   runTest("\"Hello\".ending(3)", "\"llo\"");
@@ -298,7 +298,7 @@ function runAllTests()
   addReportTable("Destructuring:");
   runTest("['x','y'].'test' = x+y; test[5,6]", "11");
   runTest("'test'['x','y'] = x+y; test[5,6]", "11");
-  runTest("'test'(xy:['x','y']) = x+y; test(xy:[5,6])", "11");
+  runTest("'test'(['x','y']:'xy') = x+y; test(xy=[5,6])", "11");
   runTest("['x','y'].'test' = x+y+.length; test[5,6]", "13");
   runTest("[['x'],['y','z']].'test' = x+y+z; test[[5],[3,3]]", "11");
   runTest("[5,6].['x','y']->{x+y}", "11");
@@ -401,11 +401,11 @@ function runAllTests()
   runTest("'T'=Struct{}; 'obj'=new~T; obj.is~T",				"true");
   runTest("'T'=Struct{}; 'obj'=new~T; obj == obj",				"true");
   runTest("'T'=Struct{}; 'obj1'=new~T; 'obj2'=new~T; obj1 == obj2", "false");
-  runTest("'A'=Struct{'a':Int}; 'B'=Struct{'b':Int}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
+  runTest("'A'=Struct{Int:'a'}; 'B'=Struct{Int:'b'}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
   runTest("'T'=Struct{'x'}; T.new(x:5).x", "5");
-  runTest("'T'=Struct{'x':Number}; T.new(x:5).x", "5");
-  runTest("'T'=Struct{'last':Number}; T.new(last:10).last + [1..10].last",	"20");
-  runTest("'T'=Struct{'name':String, 'num':Number}; T.new(name:\"Hello\", num:3).{.name.length-.num}", "2");
+  runTest("'T'=Struct{Number:'x'}; T.new(x=5).x", "5");
+  runTest("'T'=Struct{Number:'last'}; T.new(last=10).last + [1..10].last",	"20");
+  runTest("'T'=Struct{String:'name', Number:'num'}; T.new(name=\"Hello\", num=3).{.name.length-.num}", "2");
   endReportTable();
 
 }

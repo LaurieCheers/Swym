@@ -1,3 +1,8 @@
+if( window.SWYM === undefined )
+{
+	SWYM = {};
+}
+
 SWYM.Exec = function(executable)
 {
 	SWYM.doFinalOutput = true;
@@ -1080,7 +1085,11 @@ SWYM.TableMatches = function(table, tablePattern)
 
 SWYM.ClosureCall = function(closure, arg)
 {
-	if ( closure.body )
+	if( !closure )
+	{
+		SWYM.LogError(0, "Fsckup: missing closure body");
+	}
+	else if ( closure.body )
 	{
 		var callScope = object(closure.scope)
 		callScope[closure.argName] = arg;

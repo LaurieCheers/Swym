@@ -167,7 +167,7 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 			}
 			else if (newOp.text === "else" )
 			{
-				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== ":" ) )
+				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== "=" && SWYM.curToken.text !== ":" ) )
 				{
 					// 'else' consumes either a {} pair, or the entire next sequence until a semicolon is reached.
 					var rhs = SWYM.ParseLevel(2);
@@ -376,7 +376,8 @@ SWYM.OverloadableOperatorParseTreeNode = function(name)
 
 SWYM.IsTableNode = function(paramnode)
 {
-	while( paramnode && paramnode.children && paramnode.op && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
+	while( paramnode && paramnode.children && paramnode.op &&
+			(paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
 		if( paramnode.children[0] )
 		{
@@ -388,33 +389,44 @@ SWYM.IsTableNode = function(paramnode)
 		}
 	}
 	
-	return ( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[0].type !== "decl" );
+	return ( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1].type !== "decl" );
 }
 
 SWYM.ReadParamBlock = function(paramnode, fnnode)
 {
-	if( paramnode && paramnode.op && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
+	if( paramnode && paramnode.op &&
+		(paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
 		SWYM.ReadParamBlock(paramnode.children[0], fnnode);
 		SWYM.ReadParamBlock(paramnode.children[1], fnnode);
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[0].type === "name" )
+	else if( paramnode && paramnode.op && paramnode.op.text === "=" && paramnode.children[0].type === "name" )
 	{
+		// passing a named parameter
 		fnnode.argNames.push( paramnode.children[0].text );
 		fnnode.children.push( paramnode.children[1] );
 	}
-	else if( paramnode && paramnode.op && (paramnode.op.text === ":" || paramnode.op.text === "=") && paramnode.children[0].type === "decl" )
+	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&  paramnode.children[0].type === "decl" )
 	{
+		// declaring a parameter with a default value
 		fnnode.argNames.push( paramnode.children[0].value );
+		fnnode.children.push( paramnode.children[1] );
+	}
+	else if( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1].type === "decl" )
+	{
+		// declaring a parameter with a type
+		fnnode.argNames.push( paramnode.children[1].value );
 		fnnode.children.push( paramnode );
 	}
 	else if( paramnode && paramnode.type === "decl" )
 	{
+		// declaring a parameter without a type or default value
 		fnnode.argNames.push( paramnode.value );
 		fnnode.children.push( paramnode );
 	}
 	else if ( paramnode )
 	{
+		// passing an anonymous parameter
 		fnnode.argNames.push( "__" );
 		fnnode.children.push( paramnode );
 	}
@@ -432,9 +444,11 @@ SWYM.CombineFnNodes = function(base, add)
 	}
 	else if( base.type === "name" )
 	{
-		// pass numbers via the implicit # parameter
+		add.pos = base.pos;
+		
 		if( base.numToken )
 		{
+			// pass numbers via the implicit # parameter
 			add.children.push(base.numToken);
 			add.argNames.push("#");
 			add.name = "#"+base.numSuffix;
@@ -450,6 +464,7 @@ SWYM.CombineFnNodes = function(base, add)
 	{
 		add.name = base.value;
 		add.isDecl = true;
+		add.pos = base.pos;
 
 		// declare the implicit # parameter
 		if( base.value[0] === "#" )

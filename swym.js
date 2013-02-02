@@ -1,15 +1,25 @@
-SWYM = {};
+if( window.SWYM === undefined )
+{
+	SWYM = {};
+}
 
 SWYM.LogError = function(errorContext, message)
 {
+	var textpos;
 	if( typeof errorContext === "number" )
-		var textpos = errorContext;
+	{
+		textpos = errorContext;
+	}
 	else if( errorContext !== undefined )
-		var textpos = errorContext.pos;
-	else
-		var textpos = undefined;
+	{
+		textpos = errorContext.pos;
+		if( textpos === undefined && errorContext.op !== undefined )
+		{
+			textpos = errorContext.op.pos;
+		}
+	}
 	
-	SWYM.errors += "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos) + " - "+message+"\n";
+	SWYM.errors += "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos) +" - "+ SWYM.LineTextForTextPos(SWYM.source, textpos) + "\n  "+message+"\n";
 	SWYM.halt = true;
 }
 
@@ -63,6 +73,31 @@ SWYM.LineForTextPos = function(text, textpos)
   return result;
 }
 
+SWYM.LineTextForTextPos = function(text, textpos)
+{
+  if( textpos === undefined )
+	return "";
+
+  var startPos = 0;
+  for ( var i = 0; i < textpos; ++i )
+  {
+    if (text[i] === '\n')
+	{
+      startPos = i+1;
+	}
+  }
+  
+  for( var endPos = textpos; endPos < text.length; ++endPos )
+  {
+    if(text[endPos] === "\n")
+	{
+	  break;
+	}
+  }
+  
+  return text.substring(startPos, endPos);
+}
+
 SWYM.PosInLineForTextPos = function(text, textpos)
 {
   if( textpos === undefined )
@@ -81,18 +116,20 @@ SWYM.ReportErrors = function(ErrorType, OutputSoFar)
 {
   if ( SWYM.errors !== "" )
   {
-    var numErrors = SWYM.CountLines(SWYM.errors);
+    var numErrors = SWYM.CountLines(SWYM.errors)/2;
     return "-- "+ErrorType+(numErrors>1? ("s ("+numErrors+")"): "")+" --\n" + SWYM.errors + (OutputSoFar?("\n\nOutput so far:\n"+OutputSoFar):"");
   }
 }
 
-SWYM.EvalStdlyb = function(source)
+SWYM.EvalStdlyb = function()
 {
+	SWYM.initStdlyb();
+	
 	SWYM.errors = "";
 	SWYM.safeMode = 0;
 	SWYM.halt = false;
 	
-	var tokenlist = SWYM.Tokenize(source);
+	var tokenlist = SWYM.Tokenize(SWYM.stdlyb);
 	var parsetree = SWYM.Parse(tokenlist);
 
 	SWYM.DefaultGlobalRScope = {};
@@ -129,6 +166,17 @@ SWYM.FullEval = function(readsource, keepScope)
 	SWYM.errors = "";
 	SWYM.halt = false;
 	SWYM.doFinalOutput = true;
+
+	if( SWYM.DefaultGlobalRScope === undefined )
+	{
+		SWYM.EvalStdlyb();
+		result = SWYM.ReportErrors("Stdlyb Error");
+		if ( result )
+		{
+			SWYM.DefaultGlobalRScope = undefined;
+			return SWYM.DisplayError(result);
+		}
+	}
 	
 	var tokenlist = SWYM.Tokenize(readsource);
 	var result;

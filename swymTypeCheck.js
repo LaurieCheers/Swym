@@ -1,8 +1,8 @@
-SWYM.TypeCoerce = function(typeCheck, valueInfo, errorContext)
+SWYM.TypeCoerce = function(typeCheck, valueInfo, errorNode, errorContext)
 {
 	if( !SWYM.TypeMatches(typeCheck, valueInfo) )
 	{
-		SWYM.LogError(errorContext, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo)+". Context: "+errorContext);
+		SWYM.LogError(errorNode, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo));
 	}
 	
 	return valueInfo;
@@ -528,7 +528,7 @@ SWYM.ArrayTypeContaining = function(elementType, errorContext)
 
 SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 {
-	if( arrayType.isLazy )
+	if( arrayType && arrayType.isLazy )
 	{
 		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier);
 		result.isLazy = true;
@@ -540,7 +540,7 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 	}
 }
 
-SWYM.TableTypeFromTo = function(keyType, valueType)
+SWYM.TableTypeFromTo = function(keyType, valueType, accessors)
 {
 	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:SWYM.ValueType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
 }
@@ -599,7 +599,7 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 {
 	var isMultivalue = false;
 	var quantifier = undefined;
-	if( callableType.multivalueOf !== undefined )
+	if( callableType && callableType.multivalueOf !== undefined )
 	{
 		isMultivalue = true;
 		quantifier = callableType.quantifier;
@@ -652,7 +652,7 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	
 	if( callableType.argType )
 	{
-		SWYM.TypeCoerce(callableType.argType, argType, "Argument to 'do'("+SWYM.TypeToString(callableType)+")");
+		SWYM.TypeCoerce(callableType.argType, argType, errorContext, "Argument to 'do'("+SWYM.TypeToString(callableType)+")");
 	}
 
 	if( isMultivalue )

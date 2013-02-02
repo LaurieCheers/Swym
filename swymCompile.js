@@ -122,7 +122,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		if( parsetree.children[0] )
 		{
 			var type0 = SWYM.CompileNode( parsetree.children[0], cscope, tempexecutable0 );
-			type0 = SWYM.TypeCoerce(argTypes[0], type0, "operator '"+parsetree.op.text+"'");
+			type0 = SWYM.TypeCoerce(argTypes[0], type0, parsetree.children[0], "operator '"+parsetree.op.text+"'");
 			++numArgs;
 		}
 
@@ -130,7 +130,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		if( parsetree.children[1] )
 		{
 			var type1 = SWYM.CompileNode( parsetree.children[1], cscope, tempexecutable1 );
-			type1 = SWYM.TypeCoerce(argTypes[1], type1, "operator '"+parsetree.op.text+"'");
+			type1 = SWYM.TypeCoerce(argTypes[1], type1, parsetree.children[1], "operator '"+parsetree.op.text+"'");
 			++numArgs;
 		}
 
@@ -379,7 +379,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		else
 		{
 			refArgType = SWYM.CompileLValue( fnNode.children[0], cscope, executable );
-			SWYM.TypeCoerce(SWYM.VariableType, refArgType, "ref function");
+			SWYM.TypeCoerce(SWYM.VariableType, refArgType, fnNode.children[0], "ref function");
 			return SWYM.RefType(refArgType);
 		}
 		return;
@@ -564,7 +564,7 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 	{
 		var expectedArgName = expectedArgNamesByIndex[expectedArgIndex];
 		
-		if( args[expectedArgName] === undefined )
+		if( expectedArgName && args[expectedArgName] === undefined )
 		{
 			var positionalArgName = theFunction.expectedArgs[expectedArgName].indexName;
 			if( positionalArgName === undefined )
@@ -639,8 +639,10 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 		}
 	}
 
+	// in order to support function overloads,
 	// this function has been split into two halves - the logic continues in CompileFunctionOverload (below), using the following data.
 	overloadResult.inputArgNameList = inputArgNameList;
+	overloadResult.inputArgNodes = args; // we've finished with these; they're just for error reporting 
 	overloadResult.expectedArgNamesByIndex = expectedArgNamesByIndex;
 	overloadResult.inputArgTypes = inputArgTypes;
 	overloadResult.inputArgExecutables = inputArgExecutables;
@@ -709,7 +711,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		{
 			++numArgsPushed;
 			SWYM.pushEach(data.inputArgExecutables[inputArgName], executable);
-			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, "calling '"+fnName+"', argument "+expectedArgName);
+			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, data.inputArgNodes[expectedArgName], "calling '"+fnName+"', argument "+expectedArgName);
 
 //			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
 //			{
@@ -914,12 +916,15 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 			{
 				for( var AIdx = 0; AIdx < cur.types.length; ++AIdx )
 				{
-					if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
-						!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) ||
-						!argTypes[AIdx].isReference != !cur.types[AIdx].isReference )
+					if( argTypes[AIdx] )
 					{
-						matched = false;
-						break;
+						if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
+							!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) ||
+							!argTypes[AIdx].isReference != !cur.types[AIdx].isReference )
+						{
+							matched = false;
+							break;
+						}
 					}
 				}
 			}
@@ -963,7 +968,7 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 		}
 		else if( argNode.op && argNode.op.text === ":" )
 		{
-			argNode = argNode.children[1];
+			argNode = argNode.children[0];
 		}
 
 		if( argNode.op && argNode.op.text === "=" )
@@ -1192,7 +1197,7 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 
 				if( defaultValueType && theArg.typeCheck )
 				{
-					SWYM.TypeCoerce(theArg.typeCheck, defaultValueType, theArg.defaultValueNode);
+					SWYM.TypeCoerce(theArg.typeCheck, defaultValueType, theArg.defaultValueNode, "default argument");
 				}
 			}
 			else
@@ -1285,6 +1290,10 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 		{
 			debugName = argNode.text + "->" + debugName;
 		}
+	}
+	else
+	{
+		debugName = "'it'->" + debugName;
 	}
 
 	var executableBlock = { type:"closure", debugName:debugName };
@@ -1563,6 +1572,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 	var elementExecutable = [];
 	var bakedKeys = [];
 	var bakedValues = [];
+	var accessors = {};
 	var commonKeyType = SWYM.NoValuesType;
 	var commonValueType = SWYM.NoValuesType;
 	var elseExecutable = undefined;
@@ -1591,23 +1601,10 @@ SWYM.CompileTable = function(node, cscope, executable)
 			else
 			{
 				SWYM.LogError(keyNodes[idx], "Table has too many 'else' clauses.");
+				continue;
 			}
 		}
 
-
-		var keyType = SWYM.CompileNode(keyNodes[idx], cscope, []);
-		commonKeyType = SWYM.TypeUnify(commonKeyType, keyType);
-
-		if( keyType === undefined || keyType.baked === undefined )
-		{
-			SWYM.LogError(keyNodes[idx], "Table keys must be compile-time constants (at the moment).");
-		}
-		else
-		{
-			bakedKeys[idx] = keyType.baked;
-		}
-		
-		
 		var valueType = SWYM.CompileNode(valueNodes[idx], cscope, elementExecutable);
 		commonValueType = SWYM.TypeUnify(commonValueType, valueType);
 
@@ -1623,6 +1620,34 @@ SWYM.CompileTable = function(node, cscope, executable)
 			}
 		}
 
+		// handle single quoted 'declaration' keys
+		if( keyNodes[idx] && keyNodes[idx].type === "decl" )
+		{
+			if( accessors[keyNodes[idx].value] !== undefined )
+			{
+				SWYM.LogError(keyNodes[idx], "Duplicate declaration of "+keyNodes[idx].text+" in this table.");
+			}
+			else
+			{
+				accessors[keyNodes[idx].value] = valueType;
+			}
+
+			// replace the declaration with a string literal
+			keyNodes[idx] = SWYM.NewToken("literal", keyNodes[idx].pos, keyNodes[idx].text, keyNodes[idx].value);
+		}
+		
+		var keyType = SWYM.CompileNode(keyNodes[idx], cscope, []);
+		commonKeyType = SWYM.TypeUnify(commonKeyType, keyType);
+
+		if( keyType === undefined || keyType.baked === undefined )
+		{
+			SWYM.LogError(keyNodes[idx], "Table keys must be compile-time constants (at the moment).");
+		}
+		else
+		{
+			bakedKeys[idx] = keyType.baked;
+		}
+		
 		if( valueType && valueType.multivalueOf !== undefined )
 			SWYM.LogError(valueNodes[idx], "Error: json-style object declarations may not contain multi-values.");
 	}
@@ -1693,7 +1718,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 			return {type:"table",
 				run:function(key)
 				{
-					// not very happy with this. Can't we do better?
+					// not very happy with this. Use some kind of hash?
 					for( var idx = 0; idx < this.keys.length; ++idx )
 					{
 						if( SWYM.IsEqual(this.keys.run(idx), key) )
@@ -1721,9 +1746,8 @@ SWYM.CompileTable = function(node, cscope, executable)
 		executable.push("#Literal");
 		executable.push(bakedTable);
 		
-		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType);
+		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
 		resultType.baked = bakedTable;
-		return resultType;
 	}
 	else if ( elseExecutable )
 	{
@@ -1739,7 +1763,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 			return constructor(SWYM.jsArray(args), elseValue);
 		});
 		
-		return SWYM.TableTypeFromTo(commonKeyType, commonValueType);
+		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
 	}
 	else
 	{
@@ -1752,8 +1776,10 @@ SWYM.CompileTable = function(node, cscope, executable)
 			return constructor(SWYM.jsArray(args), undefined);
 		});
 		
-		return SWYM.TableTypeFromTo(commonKeyType, commonValueType);
+		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
 	}
+		
+	return resultType;
 }
 
 
@@ -1885,7 +1911,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 
 		case "&&":
-			SWYM.TypeCoerce(SWYM.BoolType, bodyType, "&&etc arguments");
+			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "&&etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
 				composer = function(tru, v){ var result = SWYM.ResolveBool_Every(v); if(!result){ SWYM.g_etcState.halt = true; }; return result; };
 			else
@@ -1893,7 +1919,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 
 		case "||":
-			SWYM.TypeCoerce(SWYM.BoolType, bodyType, "||etc arguments");
+			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "||etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
 				composer = function(fals, v){ var result = SWYM.ResolveBool_Some(v); if(result){ SWYM.g_etcState.halt = true; }; return result; };
 			else
@@ -1905,7 +1931,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		var limitTimes = [];
 		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimes);
-		SWYM.TypeCoerce(SWYM.IntType, limitType, "etc** number of times");
+		SWYM.TypeCoerce(SWYM.IntType, limitType, parsetree, "etc** number of times");
 	}
 	else
 	{
@@ -2039,7 +2065,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					else
 					{
 						var defaultType = SWYM.CompileNode(defaultNodes[memberNames[Idx]], declCScope, executable);
-						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx]], defaultType, "default value for member '"+memberNames[Idx]+"' of '"+newStruct.debugName+"'" );
+						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx]], defaultType, defaultNodes[memberNames[Idx]], "default value for member '"+memberNames[Idx]+"' of '"+newStruct.debugName+"'" );
 					}
 				}
 				executable.push("#Native")
@@ -2079,7 +2105,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					else
 					{
 						var defaultType = SWYM.CompileNode(defaultNodes[memberNames[Idx-1]], declCScope, executable);
-						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx-1]], defaultType, "default value for member '"+memberNames[Idx-1]+"' of '"+newStruct.debugName+"'" );
+						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx-1]], defaultType, defaultNodes[memberNames[Idx-1]], "default value for member '"+memberNames[Idx-1]+"' of '"+newStruct.debugName+"'" );
 					}
 				}
 				executable.push("#MultiNative")

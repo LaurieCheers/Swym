@@ -31,14 +31,15 @@ SWYM.NextClassID = 8001;
 // Baked, Members, native_Number, native_String, native_Array, native_Table
 
 // 'Type' = Anything->Bool & Baked & native_Type
-// 'Array' = Number->auto & Members{ 'length':Int }
+// 'Array' = Number->auto & Members{ Int:'length' }
 // 'StringChar' = Number->StringChar & Members{ 'length'=1 }
-// 'String' = Number->StringChar & Members{ 'length':Nat }
-// 'Table' = Callable & Members{ 'keys':Array }
-// 'Block' = Callable & Members{ 'text':String, 'parsed':ParseNode }
+// 'String' = Number->StringChar & Members{ Nat:'length' }
+// 'Table' = Callable & Members{ Array:'keys' }
+// 'Block' = Callable & Members{ String:'text', ParseNode:'parsed' }
 // 'Bool' = enum{ 'true'=true, 'false'=false }
 // 'Int' = Number & MultipleOf(1)
 // 'Nat' = Number & MultipleOf(1) & GreaterOrEq(0)
+SWYM.initStdlyb = function() {
 
 SWYM.AnyType = {type:"type", debugName:"Anything"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
@@ -724,6 +725,7 @@ SWYM.operators = {
 			// The + operator just ends up calling the + function. ("fn#+", below.)
 			return {type:"fnnode", body:undefined, isDecl:false,
 				name:"+",
+				pos:op.pos,
 				etc:op.etc,
 				identity:0,
 				children:[lhs, rhs],
@@ -962,7 +964,7 @@ SWYM.operators = {
 		{
 			if( lhs && lhs.type === "name" )
 			{
-				return {type:"fnnode", body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
+				return {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
 			}
 			else
 			{
@@ -992,7 +994,7 @@ SWYM.operators = {
 				var rhs = SWYM.ParseTreeNode(undefined, curly, rhs);
 			}
 
-			var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[rhs], argNames:["else"]};
+			var result = {type:"fnnode", pos:op.pos, body:undefined, isDecl:undefined, name:undefined, children:[rhs], argNames:["else"]};
 			return SWYM.CombineFnNodes(lhs, result);
 		}
 	},
@@ -1004,7 +1006,7 @@ SWYM.operators = {
 				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
 
 			// function call
-			var params = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
+			var params = {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
 			SWYM.ReadParamBlock(rhs, params);
 			return SWYM.CombineFnNodes(lhs, params);
 		},
@@ -1022,7 +1024,7 @@ SWYM.operators = {
 
 			// passing an array to a function call
 			var arrayNode = SWYM.NonCustomParseTreeNode(undefined, op, rhs);
-			var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[arrayNode], argNames:["__"]};
+			var result = {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[arrayNode], argNames:["__"]};
 			return SWYM.CombineFnNodes(lhs, result);
 		},
 		customCompile:function(node, cscope, executable)
@@ -1110,13 +1112,13 @@ SWYM.operators = {
 			if( lhs && (lhs.type === "decl" || (lhs.type === "fnnode" && lhs.isDecl)) )
 			{
 				// something like  'fn'('x') {...}  or  String.'fn' {...}  - this is the body of the function.
-				var result = {type:"fnnode", body:rhs, isDecl:undefined, name:undefined, children:[], argNames:[]};
+				var result = {type:"fnnode", pos:lhs.pos, body:rhs, isDecl:undefined, name:undefined, children:[], argNames:[]};
 			}
 			else
 			{
 				// something like fn{...} - this is a block being passed as a function argument
 				var lambdaNode = SWYM.NonCustomParseTreeNode(undefined, op, rhs);
-				var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[lambdaNode], argNames:["__"]};
+				var result = {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[lambdaNode], argNames:["__"]};
 			}
 			
 			return SWYM.CombineFnNodes(lhs, result);
@@ -1460,8 +1462,10 @@ SWYM.DefaultGlobalCScope =
 		},
 		customCompile:function(argTypes, cscope, executable, errorContext)
 		{
-			var isMulti = argTypes[0].multivalueOf !== undefined || argTypes[1].multivalueOf !== undefined || 
-						argTypes[2].multivalueOf !== undefined || argTypes[3].multivalueOf !== undefined;
+			var isMulti = (argTypes[0] && argTypes[0].multivalueOf !== undefined) ||
+						(argTypes[1] && argTypes[1].multivalueOf !== undefined) || 
+						(argTypes[2] && argTypes[2].multivalueOf !== undefined) ||
+						(argTypes[3] && argTypes[3].multivalueOf !== undefined);
 			
 			var selfType = SWYM.ToSinglevalueType(argTypes[0]);
 			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType);
@@ -2037,7 +2041,7 @@ SWYM.stdlyb =
 //'random', 'length', 'do', 'each', 'sin', 'cos', 'sqrt', 'floor', 'array', etc)\n\
 //plus a few special constants that cannot be bootstrapped ('true', 'false' and\n\
 //'novalues'), are not defined here.\n\
-Array.'+'('arr':Array) = [.each, arr.each];\
+Array.'+'(Array:'arr') = [.each, arr.each];\
 Array.'atEnd'('idx') {.at(.length-1-idx)};\
 Array.'#st' {.at(#-1)};\
 Array.'#nd' {.at(#-1)};\
@@ -2046,7 +2050,7 @@ Array.'#th' {.at(#-1)};\
 Table.'at'('key') = key.(this);\
 Table.'at'('key','else') = .if{ key.in(.keys) }{ .at(key) } else (else);\
 Array.'at'('key','else') = .if{key >=0 && key < .length}{.at(key)} else (else);\
-Array.'atEach'('keys':Int.Array) = [ keys.each.if{>=0 && it<this.length}.(this) ];\
+Array.'atEach'(Int.Array:'keys') = [ keys.each.if{>=0 && it<this.length}.(this) ];\
 Array.'#st'('else') {.at(#-1) else(else)};\
 Array.'#nd'('else') {.at(#-1) else(else)};\
 Array.'#rd'('else') {.at(#-1) else(else)};\
@@ -2071,63 +2075,54 @@ Table.'cells' = array(.keys.length) 'key'->{ Cell.new(this.keys.at(key), this) }
 Cell.Array.'table' = table[.each.key](.1st.context);\
 Cell.Array.'cellKeys' = [.each.key];\
 Cell.Array.'cellValues' = [.each.value];\
+Array.'each'('fn') = [.each.(fn)];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
-'forEach_lazy'('list')('fn') = array(length:.length){ list.at(it).(fn) };\
-'if'('cond':Bool, 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
-'if'('cond':Bool, 'then') = 404.if{ cond }{ do(then) } else {};\
-Anything.'if'('test':Callable, 'then') = .if(test)(then) else {it};\
-Anything.'if'('test':Callable, 'else') = .if(test){it} else (else);\
-Anything.'if'('test':Callable) = .if(test){it} else {novalues};\
-Array.'contains'('test':Block) = .1st.(test) || .2nd.(test) || etc;\
+'forEach_lazy'('list')('fn') = array(length=.length){ list.at(it).(fn) };\
+'if'(Bool:'cond', 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
+'if'(Bool:'cond', 'then') = 404.if{ cond }{ do(then) } else {};\
+Anything.'if'(Callable:'test', 'then') = .if(test)(then) else {it};\
+Anything.'if'(Callable:'test', 'else') = .if(test){it} else (else);\
+Anything.'if'(Callable:'test') = .if(test){it} else {novalues};\
+Array.'contains'(Block:'test') = .1st.(test) || .2nd.(test) || etc;\
 Array.'where'('test') = forEach(this){ .if(test) };\
 Array.'where'('test')('body') = forEach(this){ .if(test)(body) else {novalues}  };\
 Array.'where'('test', 'body', 'else') = forEach(this){ .if(test)(body) else (else) };\
 Array.'whereKey'('test') = forEach(.keys){ .if(test)(this) else {novalues} };\
 Array.'whereKey'('test', 'body') = forEach(.keys){ .if(test){.(this).(body)} else {novalues} };\
 Array.'whereKey'('test', 'body', 'else') = forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} };\
-/*Array.'some'('test') = .1st.(test) || .2nd.(test) || etc;\
-Array.'every'('test') = .1st.(test) && .2nd.(test) && etc;\
-Array.'none'('test') = !.some(test);\
-Array.'every' = .1st && .2nd && etc;\
-Array.'some' = .1st || .2nd || etc;\
-Array.'none' = !(.1st || .2nd || etc);\
-'some'('list')('test') = list.some(test);\
-'every'('list')('test') = list.every(test);\
-'no'('list')('test') = !list.some(test);\
-'none'('list')('test') = !list.some(test);*/\
-Array.'starting'('n':Int) = .atEach[0..<n];\
-Array.'ending'('n':Int) = .atEach[ (.length-n).clamp(min:0) ..< .length];\
-Array.'slice'('start':Int) = .atEach[start ..< .length];\
-Array.'slice'('length':Int) = .atEach[0..<length];\
-Array.'slice'('end':Int) = .atEach[0..<end];\
-Array.'slice'('last':Int) = .atEach[0..last];\
-Array.'slice'('trimEnd':Int) = .atEach[0 ..< .length-trimEnd];\
-Array.'slice'('start':Int,'end':Int) = .atEach[start..<end];\
-Array.'slice'('start':Int,'last':Int) = .atEach[start..last];\
-Array.'slice'('start':Int,'length':Int) = .atEach[start..<start+length];\
-Array.'slice'('length':Int,'end':Int) = .atEach[end-length..<end];\
-Array.'slice'('length':Int, 'last':Int) = .atEach[last-length-1..last];\
-Array.'slice'('start':Int,'trimEnd':Int) = .atEach[start ..< .length-trimEnd];\
-Array.'slice'('length':Int,'trimEnd':Int) = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
-Array.'slices'('length':Int) = array(.length+1-length) 'start'->{ this.slice(start:start, end:start+length) };\
-Array.'trimStart'('n':Int) = .atEach[n ..< .length];\
-Array.'trimEnd'('n':Int) = .atEach[0 ..< .length-n];\
-Array.'startsWith'('list':Array) = .length >= list.length && .starting(list.length) == list;\
-Array.'endsWith'('list':Array) = .length >= list.length && .ending(list.length) == list;\
-Array.'splitAt'('n':Int) = [ .slice(end:n), .slice(start:n) ];\
-Array.'splitAt'('keys':Int.Array) = [0, keys.each, .length].{[this.slice(start:.1st, end:.2nd), this.slice(start:.2nd, end:.3rd), etc]};\
+Array.'starting'(Int:'n') = .atEach[0..<n];\
+Array.'ending'(Int:'n') = .atEach[ (.length-n).clamp(min=0) ..< .length];\
+Array.'slice'(Int:'start') = .atEach[start ..< .length];\
+Array.'slice'(Int:'length') = .atEach[0..<length];\
+Array.'slice'(Int:'end') = .atEach[0..<end];\
+Array.'slice'(Int:'last') = .atEach[0..last];\
+Array.'slice'(Int:'trimEnd') = .atEach[0 ..< .length-trimEnd];\
+Array.'slice'(Int:'start',Int:'end') = .atEach[start..<end];\
+Array.'slice'(Int:'start',Int:'last') = .atEach[start..last];\
+Array.'slice'(Int:'start',Int:'length') = .atEach[start..<start+length];\
+Array.'slice'(Int:'length',Int:'end') = .atEach[end-length..<end];\
+Array.'slice'(Int:'length',Int:'last') = .atEach[last-length-1..last];\
+Array.'slice'(Int:'start',Int:'trimEnd') = .atEach[start ..< .length-trimEnd];\
+Array.'slice'(Int:'length',Int:'trimEnd') = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
+Array.'slices'(Int:'length') = array(.length+1-length) 'start'->{ this.slice(start=start, end=start+length) };\
+Array.'trimStart'(Int:'n') = .atEach[n ..< .length];\
+Array.'trimEnd'(Int:'n') = .atEach[0 ..< .length-n];\
+Array.'startsWith'(Array:'list') = .length >= list.length && .starting(list.length) == list;\
+Array.'endsWith'(Array:'list') = .length >= list.length && .ending(list.length) == list;\
+Array.'splitAt'(Int:'n') = [ .slice(end=n), .slice(start=n) ];\
+Array.'splitAt'(Int.Array:'keys') = [0, keys.each, .length].{[this.slice(start=.1st, end=.2nd), this.slice(start=.2nd, end=.3rd), etc]};\
 Cell.Array.'split' = .1st.context.splitAt(.cellKeys);\
-Array.'splitWhere'('test':Callable) = .cells.where{.value.(test)}.split;\
-Array.'splitOut'('keys':Int.Array) = [-1, keys.each, .length].{[this.slice(start:.1st+1, end:.2nd), this.slice(start:.2nd+1, end:.3rd), etc]};\
+Array.'splitWhere'(Callable:'test') = .cells.where{.value.(test)}.split;\
+Array.'splitOut'(Int.Array:'keys') = [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]};\
 Cell.Array.'splitOut' = .1st.context.splitOut(.cellKeys);\
-Array.'splitOutWhere'('test':Callable) = .cells.where{.value.(test)}.splitOut;\
-Array.'splitAtEnd'('n':Int) = [ .slice(trimEnd:n), .ending(n) ];\
+Array.'splitOutWhere'(Callable:'test') = .cells.where{.value.(test)}.splitOut;\
+Array.'splitAtEnd'(Int:'n') = [ .slice(trimEnd=n), .ending(n) ];\
 Array.'tail' = .atEach[1 ..< .length];\
 Array.'stem' = .atEach[0 ..< .length-1];\
 Array.'middle' = .atEach[1 ..< .length-1];\
 Array.'reverse' = .atEach[.length-1 .. 0];\
-Array.'emptyOr'('body':Callable) = .if{==[]}{[]} else (body);\
-Array.'singletonOr'('body':Callable) = .if{.length <= 1}{this} else (body);\n\
+Array.'emptyOr'(Callable:'body') = .if{==[]}{[]} else (body);\
+Array.'singletonOr'(Callable:'body') = .if{.length <= 1}{this} else (body);\n\
 Array.'sort' = .singletonOr\n\
 {\n\
   'v' = .1st;\n\
@@ -2143,7 +2138,7 @@ Array.'whereDistinct'('property') = .singletonOr\n\
   'p' = .1st.(property);\n\
   [.1st] + .tail.where{.(property) != p}.whereDistinct(property)\n\
 };\n\
-Array.'withBounds'('bound') = array(length:.length) 'key'->{ this.at(key) else (key.(bound)) };\
+Array.'withBounds'('bound') = array(length=.length) 'key'->{ this.at(key) else (key.(bound)) };\
 Array.'safeBounds' = .withBounds{novalues};\
 Array.'cyclic' = .withBounds{ this.at( it%this.length ) };\
 Array.'total' = .1st + .2nd + etc;\
@@ -2151,12 +2146,12 @@ Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
 Array.'map'('body') = [.each.(body)];\
 Anything.'in'('array') { ==any array };\
-Number.'clamp'('min':Number) = if(this < min){ min } else { this };\
-Number.'clamp'('max':Number) = if(this > max){ max } else { this };\
-Number.'clamp'('min':Number, 'max':Number) = .clamp(min:min).clamp(max:max);\
-Array.'min' = .reduce ['a','b']-> { a.clamp(max:b) };\
+Number.'clamp'(Number:'min') = if(this < min){ min } else { this };\
+Number.'clamp'(Number:'max') = if(this > max){ max } else { this };\
+Number.'clamp'(Number:'min', Number:'max') = .clamp(min=min).clamp(max=max);\
+Array.'min' = .reduce ['a','b']-> { a.clamp(max=b) };\
 Array.'min'('else') = if(.length>0){this.min} else (else);\
-Array.'max' = .reduce ['a','b']-> { a.clamp(min:b) };\
+Array.'max' = .reduce ['a','b']-> { a.clamp(min=b) };\
 Array.'min'('property') = .reduce ['a','b']-> { if(a.(property) <= b.(property)){a} else {b} };\
 Array.'max'('property') = .reduce ['a','b']-> { if(a.(property) >= b.(property)){a} else {b} };\
 Array.'whereMin' = [.each.box].reduce['a','b'] -> { if(a == []){ b } else if(b == []){ a } else if(a.1st > b.1st){ b } else if(a.1st < b.1st){ a } else { a+b } };\
@@ -2182,7 +2177,7 @@ Number.'differenceFrom'('n') = abs(this-n);\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
 String.'lines' = .splitOutWhere{==\"\\n\"};\
 String.'words' = .splitOutWhere{==any \" \\t\\n\"};\
-Anything.'case'('body':Table) = body.at(this);\
+Anything.'case'(Table:'body') = body.at(this);\
 Array.'tabulate'('body') = table(this)(body);\
 'case'('key')('body') = body.at(key);\n\
 Array.'structElements'('idx')\n\
@@ -2201,10 +2196,10 @@ Array.Array.'Struct' = array(product[.each.length]) 'idx'->\n\
 ";/**/
 
 /*
-Array.'random'('length':Int) = [.random, etc**length]
-Array.'randomDraw'('length':Int) = .randomSubset(length).shuffle
-Array.'randomSubset'('length':Int) = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(start:k+1).randomSubset(length-1) }
-Array.'randomRange'('length':Int) = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
+Array.'random'(Int:'length') = [.random, etc**length]
+Array.'randomDraw'(Int:'length') = .randomSubset(length).shuffle
+Array.'randomSubset'(Int:'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(start:k+1).randomSubset(length-1) }
+Array.'randomRange'(Int:'length') = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
 */
 /*
 if( .contains(Non~Digit) )
@@ -2221,7 +2216,7 @@ else
 
 //'customTable'('at') { Table.internalNew(at:at, members:[]) }
 
-SWYM.EvalStdlyb(SWYM.stdlyb);
-result = SWYM.ReportErrors("Stdlyb Error");
 //if ( result ) alert(result);
 //SWYM.DefaultGlobalCScope = SWYM.scope;
+
+}; // initStdlyb ends
