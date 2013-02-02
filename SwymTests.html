@@ -402,7 +402,7 @@ function runAllTests()
   runTest("'T'=Struct{}; 'obj'=new~T; obj == obj",				"true");
   runTest("'T'=Struct{}; 'obj1'=new~T; 'obj2'=new~T; obj1 == obj2", "false");
   runTest("'A'=Struct{Int:'a'}; 'B'=Struct{Int:'b'}; A.'fnTest' = \"a!\"; B.'fnTest' = \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
-  runTest("'T'=Struct{'x'}; T.new(x:5).x", "5");
+  runTest("'T'=Struct{'x'}; T.new(x=5).x", "5");
   runTest("'T'=Struct{Number:'x'}; T.new(x=5).x", "5");
   runTest("'T'=Struct{Number:'last'}; T.new(last=10).last + [1..10].last",	"20");
   runTest("'T'=Struct{String:'name', Number:'num'}; T.new(name=\"Hello\", num=3).{.name.length-.num}", "2");

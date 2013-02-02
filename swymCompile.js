@@ -1557,6 +1557,42 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 	}
 }
 
+SWYM.AddClassMember = function(typeNode, bodyNode,  typeNodes, nameNodes, defaultValueNodes)
+{
+	typeNodes.push(typeNode);
+	if( bodyNode && bodyNode.op && bodyNode.op.text === "=" )
+	{
+		nameNodes.push(bodyNode.children[0]);
+		defaultValueNodes.push(bodyNode.children[1]);
+	}
+	else
+	{
+		nameNodes.push(bodyNode);
+		defaultValueNodes.push(undefined);
+	}
+}
+
+SWYM.CollectClassMembers = function(node, typeNodes, nameNodes, defaultValueNodes)
+{
+	if( node && node.op && (node.op.text === "," || node.op.text === ";" || node.op.text === "(blank_line)") )
+	{
+		SWYM.CollectClassMembers(node.children[0], typeNodes, nameNodes, defaultValueNodes);
+		SWYM.CollectClassMembers(node.children[1], typeNodes, nameNodes, defaultValueNodes);
+	}
+	else if( node && (node.type === "decl" || (node.op && node.op.text === "=")) )
+	{
+		SWYM.AddClassMember(undefined, node,  typeNodes, nameNodes, defaultValueNodes);
+	}
+	else if( node && node.op && node.op.text === ":" )
+	{
+		SWYM.AddClassMember(node.children[0], node.children[1],  typeNodes, nameNodes, defaultValueNodes);
+	}
+	else if( node )
+	{
+		SWYM.LogError(node, "Error: Expected a member declaration, got "+node.text+".");
+	}
+}
+
 SWYM.CompileTable = function(node, cscope, executable)
 {
 	var keyNodes = [];
@@ -1783,48 +1819,48 @@ SWYM.CompileTable = function(node, cscope, executable)
 }
 
 
-SWYM.CompileClassBody = function(node, cscope, defaultNodes)
+SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 {
-	var keyNodes = [];
-	var valueNodes = [];
+	var typeNodes = [];
+	var nameNodes = [];
+	var defaultValueNodes = [];
 	
-	SWYM.CollectKeysAndValues(node, keyNodes, valueNodes);
+	SWYM.CollectClassMembers(node, typeNodes, nameNodes, defaultValueNodes);
 
-	if( keyNodes.length != valueNodes.length )
+	if( typeNodes.length !== nameNodes.length || nameNodes.length !== defaultValueNodes.length )
 	{
-		SWYM.LogError(node, "Fsckup: inconsistent numbers of keys and values in table!?");
+		SWYM.LogError(node, "Fsckup: inconsistent numbers of types, names and values in struct!?");
 	}
 	
 	var memberTypes = {};
 	var unusedExecutable = [];
 	
-	for( var idx = 0; idx < keyNodes.length; ++idx )
+	for( var idx = 0; idx < nameNodes.length; ++idx )
 	{		
-		if( !keyNodes[idx] || keyNodes[idx].type !== "decl" )
+		if( !nameNodes[idx] || nameNodes[idx].type !== "decl" )
 		{
-			SWYM.LogError(node, "Invalid member declaration "+keyNodes[idx]);
+			SWYM.LogError(node, "Invalid member declaration "+nameNodes[idx]);
 		}
 		
-		if( valueNodes[idx] === undefined )
+		var memberName = nameNodes[idx].value;
+
+		defaultValueTable[memberName] = defaultValueNodes[idx];
+		
+		if( typeNodes[idx] === undefined )
 		{
-			memberTypes[keyNodes[idx].value] = SWYM.AnyType;
-		}
-		else if( valueNodes[idx].op && valueNodes[idx].op.text === "=" )
-		{
-			defaultNodes[keyNodes[idx].value] = valueNodes[idx].children[1];
-			valueNodes[idx] = valueNodes[idx].children[0];
+			memberTypes[memberName] = SWYM.AnyType;
 		}
 		else
 		{
-			var valueType = SWYM.CompileNode(valueNodes[idx], cscope, unusedExecutable);
+			var typeType = SWYM.CompileNode(typeNodes[idx], cscope, unusedExecutable);
 
-			if( !valueType || !valueType.baked || valueType.baked.type !== "type" )
+			if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
 			{
-				SWYM.LogError(node, "Invalid member declaration "+keyNodes[idx]);
+				SWYM.LogError(typeNodes, "Type declaration for "+memberName+" is not a valid type!");
 			}
 			else
 			{
-				memberTypes[keyNodes[idx].value] = valueType.baked;
+				memberTypes[memberName] = typeType.baked;
 			}
 		}
 	}
