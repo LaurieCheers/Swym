@@ -1431,7 +1431,7 @@ SWYM.ToDebugString = function(value)
 	switch(value.type)
 	{
 		case "variable":
-			return "(var)"+SWYM.ToDebugString(value.getter? value.getter(): value.value);
+			return "var("+SWYM.ToDebugString(value.getter? value.getter(): value.value)+")";
 			//return SWYM.ToDebugString(value.getter? value.getter(): value.value);
 		case "string":
 			return '"'+value.data+'"';

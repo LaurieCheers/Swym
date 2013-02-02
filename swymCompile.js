@@ -289,17 +289,7 @@ SWYM.CompileNode = function(node, cscope, executable)
 			SWYM.pushEach( qexecutable, executable );
 			resultType = SWYM.BoolType;
 		}
-*/		else if( resultType.nativeType === "Variable" && !resultType.isReference )
-		{
-			executable.push("#VariableContents");
-			resultType = resultType.contentType;
-		}
-		else if( resultType.multivalueOf !== undefined && resultType.multivalueOf.nativeType === "Variable" && !resultType.multivalueOf.isReference )
-		{
-			executable.push("#MultiVariableContents");
-			resultType = SWYM.ToMultivalueType(resultType.multivalueOf.contentType);
-		}
-		else
+*/		else
 		{
 			break;
 		}
@@ -363,27 +353,6 @@ SWYM.GetPositionalName = function(theFunction, expectedArgName)
 SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 {
 	var fnName = fnNode.name;
-	
-	if( fnName === "ref" )
-	{
-		// ugly special case - the ref keyword/function cannot be overloaded. It always just does this:
-		var refArgType = undefined;
-		if( fnNode.children.length === 0 )
-		{
-			SWYM.LogError(fnNode, "Cannot call 'ref' with no arguments (expected 1).");
-		}
-		else if( fnNode.children.length > 1 )
-		{
-			SWYM.LogError(fnNode, "Too many arguments to the 'ref' function (expected 1, got "+fnNode.children.length+").");
-		}
-		else
-		{
-			refArgType = SWYM.CompileLValue( fnNode.children[0], cscope, executable );
-			SWYM.TypeCoerce(SWYM.VariableType, refArgType, fnNode.children[0], "ref function");
-			return SWYM.RefType(refArgType);
-		}
-		return;
-	}
 	
 	var numAnonymous = 0;
 	var args = {};
@@ -816,7 +785,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			var bodyCScope = object(SWYM.MainCScope);
 			for( var Idx = 0; Idx < argNamesPassed.length; Idx++ )
 			{
-				bodyCScope[argNamesPassed[Idx]] = SWYM.DerefType( argTypesPassed[Idx] );
+				bodyCScope[argNamesPassed[Idx]] = argTypesPassed[Idx];
 			}
 			bodyCScope["__default"] = {redirect:"this"};
 
@@ -2119,7 +2088,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 				var memberTypes = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
-					memberTypes[memberNames[Idx]] = SWYM.DerefType( argTypes[Idx+1] );
+					memberTypes[memberNames[Idx]] = argTypes[Idx+1];
 				}
 				
 				return {type:"type", debugName:SWYM.TypeToString(argTypes[0].baked), nativeType:"Struct", memberTypes:memberTypes};
@@ -2159,7 +2128,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 				var memberTypes = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
-					memberTypes[memberNames[Idx]] = SWYM.DerefType( SWYM.ToSinglevalueType(argTypes[Idx+1]) );
+					memberTypes[memberNames[Idx]] = SWYM.ToSinglevalueType(argTypes[Idx+1]);
 				}
 				
 				return {type:"type", nativeType:"Struct", debugName:SWYM.TypeToString(argTypes[0].baked), memberTypes:memberTypes};

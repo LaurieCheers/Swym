@@ -260,13 +260,27 @@ SWYM.operators = {
 		}
 	},
 	
-	"=":  {precedence:45, infix:true,
+	"=":  {precedence:45, infix:true, rightAssociative:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			if ( lhs && lhs.type === "fnnode" && !lhs.isDecl )
+			{
+				// pass an "equals" argument to this function
+				var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[rhs], argNames:["equals"]};
+				
+				return SWYM.CombineFnNodes(lhs, result);
+			}
+			else
+			{
+				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+			}
+		},
 		customCompile:function(node, cscope, executable)
 		{
 			if( node.children[0] && node.children[1] && node.children[0].type === "decl" )
 			{
 				// declare a value
-				var typecheck = SWYM.DerefType( SWYM.CompileLValue(node.children[1], cscope, executable) );
+				var typecheck = SWYM.CompileNode(node.children[1], cscope, executable);
 
 				if( typecheck && typecheck.multivalueOf !== undefined )
 				{
@@ -326,7 +340,7 @@ SWYM.operators = {
 //					cscope[declName] = type1;
 //				}
 //			}
-			else
+/*			else
 			{
 				// ordinary assignment
 				var type0 = SWYM.CompileLValue(node.children[0], cscope, executable);
@@ -340,6 +354,23 @@ SWYM.operators = {
 					executable.push("#VariableAssign");
 				
 				return type0;
+			}*/
+			else if( node.children[0].type === "name" && cscope[node.children[0].text] === undefined )
+			{
+				SWYM.LogError(node, "Invalid declaration. (Did you forget to 'quote' it?)");
+			}
+			else
+			{
+				var type0 = SWYM.CompileNode(node.children[0], cscope, executable);
+				
+				if( type0 !== undefined && SWYM.TypeMatches(SWYM.VariableType, type0) )
+				{
+					SWYM.LogError(node, "Invalid declaration. (Did you intend to call .set?)");
+				}
+				else
+				{
+					SWYM.LogError(node, "Invalid declaration.");
+				}
 			}
 		}
 	},
@@ -1097,7 +1128,7 @@ SWYM.operators = {
 				}
 				else
 				{
-					return SWYM.ArrayTypeContaining( SWYM.DerefType( SWYM.ToSinglevalueType(type) ) );
+					return SWYM.ArrayTypeContaining( SWYM.ToSinglevalueType(type) );
 				}
 			}
 		}
@@ -1619,31 +1650,31 @@ SWYM.DefaultGlobalCScope =
 			nativeCode:function(value){  return Math.ceil(value);  }
 		}],
 
-	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "init":{index:1} },
+	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1} },
 			customCompileWithoutArgs:true,
 			customCompile:function(argTypes, cscope, executable, argExecutables)
 			{
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
 					SWYM.LogError(0, "The first argument to 'var' must be a type.");
-					return SWYM.RefType( SWYM.VariableTypeContaining(SWYM.ValueType) );
+					return SWYM.VariableTypeContaining(SWYM.AnyType);
 				}
 				else
 				{
 					var varType = argTypes[0].baked;
-					SWYM.TypeCoerce(varType, argTypes[1]);
+					SWYM.TypeCoerce(varType, argTypes[1]); //TODO: missing error info!
 					
 					SWYM.pushEach(argExecutables[1], executable);
 					executable.push(argTypes[1].multivalueOf !== undefined? "#MultiNative": "#Native");
 					executable.push(1);
 					executable.push(function(v){return {type:"variable", value:v}});
 
-					return SWYM.RefType( SWYM.VariableTypeContaining(varType) );
+					return SWYM.VariableTypeContaining(varType);
 				}
 			}
 		}],
 
-	"fn#value":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
+	"fn#get":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
 			customCompile:function(argTypes, cscope, executable)
 			{
 				executable.push("#VariableContents");
@@ -1651,14 +1682,13 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 
-	/*"fn#ref":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
-		preserveRefArgs:true,
-		customCompile:function(argTypes, cscope, executable)
-		{
-			// no-op!
-			return SWYM.RefType(argTypes[0]);
-		}
-	}],*/
+	"fn#set":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
+			returnType:SWYM.VoidType,
+			customCompile:function(argTypes, cscope, executable)
+			{
+				executable.push("#VariableAssign");
+			}
+		}],
 	
 	"fn#random":[{  expectedArgs:{ "this":{index:0} },
 		getReturnType:function(argTypes)

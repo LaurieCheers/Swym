@@ -218,7 +218,10 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 		else
 		{
 			// we have an operator (and maybe an lhs). Recursively get the rhs, then apply the operator to it.
-			curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curOp.behaviour.precedence+1));
+			if( curOp.behaviour.rightAssociative )
+				curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curOp.behaviour.precedence));
+			else
+				curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curOp.behaviour.precedence+1));
 			curOp = undefined;
 		}
 	}

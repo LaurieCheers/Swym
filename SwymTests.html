@@ -305,15 +305,17 @@ function runAllTests()
   endReportTable();
   
   addReportTable("Variables:");
-  runTest("'x' = Anything.var(4); x = 5; x", "5");
-  runTest("'x' = Anything.var[4]; x = [5]; x", "[5]");
-  runTest("'x' = Anything.var(3); 'y' = Anything.var(x); x = 4; [x, y]", "[4,3]");
-  runTest("'x' = Anything.var(3); 'y' = Anything.var(4); (x,y) = (y,x); [x.value,y.value]",	"[4,3]");
+  runTest("'x' = Anything.var=4; x.set= 5; x", "var(5)");
+  runTest("'x' = Anything.var=4; x.set= 5; get~x", "5");
+  runTest("'x' = Anything.var=[4]; x.set[5]; x", "var([5])");
+  runTest("'x' = Anything.var[4]; x.set=[5]; get~x", "[5]");
+  runTest("'x' = Anything.var(3); 'y' = Anything.var=get~x; x.set=4; [x.get, y.get]", "[4,3]");
+  runTest("Array.'set'(Array:'values') = .keys.each{.(this).set= .(values)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].set=[y,x]; [x.get,y.get]",	"[4,3]");
 //  runTest("vars: Mutable[6,3,9]; vars.each = 1; vars",	"[1,1,1]");
 //  runTest("x:Anything.var = 3; y: Anything.var=8; z: Anything.var=9; vars: Mutable[x,y,z]; vars.each = 1; [x,y,z,vars.each]",	"[3,8,9,1,1,1]");
 //  runTest("Anything.var:x=3; :z=[x]; x=9; z",	"[3]");
 //  runTest("Anything.var:x=3; :z=[x;x;x]; x = 9; [z.each==x]",	"[false,false,false]");
-  runTest("'set10'('v'){ v=10 }; 'x' = Anything.var(3); set10(ref x); x",	"10");
+  runTest("'set10'('v'){ v.set=10 }; 'x' = Anything.var=3; set10(x); x.get",	"10");
   endReportTable();
 
   addReportTable("Etc keyword:");

@@ -758,31 +758,6 @@ SWYM.VariableTypeContaining = function(contentType, errorContext)
 	return {type:"type", nativeType:"Variable", contentType:contentType, debugName:contentType.debugName+".Var"};
 }
 
-SWYM.RefType = function(varType)
-{
-	if( varType && varType.isReference )
-	{
-		return varType;
-	}
-	else
-	{
-		var result = object(varType);
-		result.varType = varType;
-		result.isReference = true;
-		result.debugName = result.debugName+".Ref";
-	}
-
-	return result;
-}
-
-SWYM.DerefType = function(refType)
-{
-	if( refType && refType.isReference )
-		return refType.varType;
-	else
-		return refType;
-}
-
 SWYM.GetVariableTypeContents = function(variableType, errorContext)
 {
 	if( variableType && variableType.contentType )
