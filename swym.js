@@ -155,7 +155,7 @@ SWYM.Eval = function(readsource, keepScope)
 {
 	var result = "<no output>";
 	SWYM.DisplayOutput = function(a){ result = a; SWYM.DisplayOutput = function(b){ result += b; }; };
-	SWYM.DisplayError = function(e){ result = e; };
+	SWYM.DisplayError = function(e){ result = e; SWYM.DisplayOutput = function(){}; };
 	SWYM.FullEval(readsource, keepScope);
 	
 	return result;

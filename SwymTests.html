@@ -183,6 +183,8 @@ function runAllTests()
   runTest("(1..10).if{>4}{ 1 } else { 2 }.[]", "[2,2,2,2,1,1,1,1,1,1]");
   runTest("(1..10).if{>4}{ novalues } else { ==2 }", "false\ntrue\nfalse\nfalse");
   runTest("[\"hi\", \"lo\"].each.each", "\"h\"\n\"i\"\n\"l\"\n\"o\"");
+  runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.length", "5\n4\n7");
+  runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.{.length}", "5\n4\n7");
   endReportTable();
 
   addReportTable("JSON");
@@ -306,16 +308,21 @@ function runAllTests()
   
   addReportTable("Variables:");
   runTest("'x' = Anything.var=4; x.set= 5; x", "var(5)");
-  runTest("'x' = Anything.var=4; x.set= 5; get~x", "5");
+  runTest("'x' = Anything.var=4; x.set= 5; value~of~x", "5");
   runTest("'x' = Anything.var=[4]; x.set[5]; x", "var([5])");
-  runTest("'x' = Anything.var[4]; x.set=[5]; get~x", "[5]");
-  runTest("'x' = Anything.var(3); 'y' = Anything.var=get~x; x.set=4; [x.get, y.get]", "[4,3]");
-  runTest("Array.'set'(Array:'values') = .keys.each{.(this).set= .(values)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].set=[y,x]; [x.get,y.get]",	"[4,3]");
+  runTest("'x' = Anything.var[4]; x.set=[5]; value~of~x", "[5]");
+  runTest("'x' = Anything.var(3); 'y' = Anything.var=value(x); x.set=4; [x.value, y.value]", "[4,3]");
+  runTest("Array.'set'(Array:'equals') = .keys.each{.(this).set= .(equals)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].set=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
 //  runTest("vars: Mutable[6,3,9]; vars.each = 1; vars",	"[1,1,1]");
 //  runTest("x:Anything.var = 3; y: Anything.var=8; z: Anything.var=9; vars: Mutable[x,y,z]; vars.each = 1; [x,y,z,vars.each]",	"[3,8,9,1,1,1]");
 //  runTest("Anything.var:x=3; :z=[x]; x=9; z",	"[3]");
 //  runTest("Anything.var:x=3; :z=[x;x;x]; x = 9; [z.each==x]",	"[false,false,false]");
-  runTest("'set10'('v'){ v.set=10 }; 'x' = Anything.var=3; set10(x); x.get",	"10");
+  runTest("'set10'('v'){ v.set=10 }; 'x' = Anything.var=3; set10(x); x.value",	"10");
+  runTest("'x' = Anything.var=0; x.set=x; value~x", "var(var(var(...)))");
+  runTest("'x' = Int.var=\"OMG not an int\"", "~error~");
+  runTest("'x' = Int.var=0; x.set=\"OMG not an int\"", "~error~");
+  runTest("'arr' = Int.mutableArray[1..5]; arr.set(1)=3; arr", "[1,3,3,4,5]");
+  runTest("'arr' = Int.mutableArray[1..5]; arr.set(1)=\"OMG not an int\"; arr", "~error~");
   endReportTable();
 
   addReportTable("Etc keyword:");

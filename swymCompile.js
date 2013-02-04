@@ -603,17 +603,36 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 		if( !matched )
 		{
 			overloadResult.error = "Unexpected argument '"+remainingArgName+"' during call to function '"+fnName+"'.";
-			overloadResult.quality = 5; // terrible match
+			overloadResult.quality = 5; // terrible match: extraneous arguments are unlikely to be an accident
 			return overloadResult;
 		}
 	}
 
-	// in order to support function overloads,
-	// this function has been split into two halves - the logic continues in CompileFunctionOverload (below), using the following data.
+	var finalArgTypes = [];
+	for( var Idx = 0; Idx < inputArgNameList.length; Idx++ )
+	{
+		var inputArgName = inputArgNameList[Idx];
+		finalArgTypes[Idx] = inputArgTypes[inputArgName];
+	}
+	
+	if( theFunction.customTypeCheck )
+	{
+		var typeCheckResult = theFunction.customTypeCheck(finalArgTypes);
+		if( typeCheckResult !== true )
+		{
+			overloadResult.error = typeCheckResult;
+			overloadResult.quality = 120; // pretty good match, just failed at the last hurdle
+			return overloadResult;
+		}
+	}
+
+	// in order to support function overloads, this function has been split into two halves.
+	// the logic continues in CompileFunctionOverload (below), using the following data.
 	overloadResult.inputArgNameList = inputArgNameList;
-	overloadResult.inputArgNodes = args; // we've finished with these; they're just for error reporting 
+	overloadResult.inputArgNodes = args; // we've finished processing these; they're just here for error reporting 
 	overloadResult.expectedArgNamesByIndex = expectedArgNamesByIndex;
 	overloadResult.inputArgTypes = inputArgTypes;
+	overloadResult.finalArgTypes = finalArgTypes;
 	overloadResult.inputArgExecutables = inputArgExecutables;
 	overloadResult.theFunction = theFunction;
 	overloadResult.isMulti = isMulti;
@@ -623,7 +642,6 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 //(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables)
 SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 {
-	var finalArgTypes = [];
 	var argIndices = [];
 	var customArgExecutables = [];
 	var numArgsPassed = 0;
@@ -633,12 +651,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	var isLazy = false;
 	var isQuantifier = false;
 	var theFunction = data.theFunction;
-
-	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
-	{
-		var inputArgName = data.inputArgNameList[Idx];
-		var tempType = data.inputArgTypes[inputArgName];
-	}
+	var finalArgTypes = data.finalArgTypes;
 	
 	var numArgsPushed = 0;
 
@@ -654,7 +667,6 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		var tempType = data.inputArgTypes[inputArgName];
 
 		argIndices[Idx] = Idx;
-		finalArgTypes[Idx] = tempType;
 		
 		argTypesPassed[numArgsPassed] = SWYM.ToSinglevalueType(tempType);
 		argNamesPassed[numArgsPassed] = theFunction.expectedArgs[expectedArgName].finalName;

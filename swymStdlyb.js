@@ -67,6 +67,7 @@ SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, me
 SWYM.NumberArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.NumberType, memberTypes:{"length":SWYM.IntType}, debugName:"Number.Array"};
 SWYM.StringArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringType, memberTypes:{"length":SWYM.IntType}, debugName:"String.Array"};
 SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"StringChar.Array"};
+SWYM.MutableArrayType = {type:"type", isMutable:true, argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"MutableArray"};
 
 SWYM.operators = {
 	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true,
@@ -1665,7 +1666,7 @@ SWYM.DefaultGlobalCScope =
 					SWYM.TypeCoerce(varType, argTypes[1]); //TODO: missing error info!
 					
 					SWYM.pushEach(argExecutables[1], executable);
-					executable.push(argTypes[1].multivalueOf !== undefined? "#MultiNative": "#Native");
+					executable.push(argTypes[1] && argTypes[1].multivalueOf !== undefined? "#MultiNative": "#Native");
 					executable.push(1);
 					executable.push(function(v){return {type:"variable", value:v}});
 
@@ -1673,8 +1674,34 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 		}],
+		
+	"fn#set":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
+			returnType:SWYM.VoidType,
+			customCompile:function(argTypes, cscope, executable)
+			{
+				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1]); //TODO: missing error info!
+				executable.push("#VariableAssign");
+			}
+		},
+		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.MutableArrayType},
+						"key":{index:1, typeCheck:SWYM.IntType},
+						"equals":{index:2} },
+			returnType:SWYM.VoidType,
+			customTypeCheck:function(argTypes)
+			{
+				if( !SWYM.TypeMatches(argTypes[0].outType, argTypes[2]) )
+				{
+					return "Cannot store values of type "+SWYM.TypeToString(argTypes[2])+" in an array of type "+SWYM.TypeToString(argTypes[0].outType);
+				}
+				return true;
+			},
+			nativeCode:function(array, key, equals)
+			{
+				array[key] = equals;
+			}
+		}],
 
-	"fn#get":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
+	"fn#value":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
 			customCompile:function(argTypes, cscope, executable)
 			{
 				executable.push("#VariableContents");
@@ -1682,14 +1709,28 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 
-	"fn#set":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
-			returnType:SWYM.VoidType,
-			customCompile:function(argTypes, cscope, executable)
+	"fn#mutableArray":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1, typeCheck:SWYM.ArrayType} },
+			customCompileWithoutArgs:true,
+			customCompile:function(argTypes, cscope, executable, argExecutables)
 			{
-				executable.push("#VariableAssign");
+				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+				{
+					SWYM.LogError(0, "The first argument to 'mutableArray' must be a type.");
+					return SWYM.ArrayTypeContaining(SWYM.AnyType, true);
+				}
+				else
+				{
+					var varType = argTypes[0].baked;
+					SWYM.TypeCoerce(varType, argTypes[1].outType); //TODO: missing error info!
+
+					SWYM.pushEach(argExecutables[1], executable);
+					executable.push("#CopyArray");
+
+					return SWYM.ArrayTypeContaining(varType, true);
+				}
 			}
 		}],
-	
+			
 	"fn#random":[{  expectedArgs:{ "this":{index:0} },
 		getReturnType:function(argTypes)
 		{
@@ -1939,9 +1980,9 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, argExecutables)
 		{
-			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+			if( !argTypes[0] || !argTypes[0].baked )
 			{
-				SWYM.LogError(0, "Argument to the Static function is not a valid type expression!");
+				SWYM.LogError(0, "Argument to .Literal must be defined at compile time.");
 				return SWYM.NoValuesType;
 			}
 			return SWYM.BakedValue(argTypes[0]);
@@ -2039,14 +2080,6 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 
-	"fn#sortedBy":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType}, "body":{index:1, typeCheck:SWYM.BlockType} },
-		returnType:SWYM.ArrayType,
-		nativeCode:function(array, body)
-		{
-			
-		}
-	}],
-
 	"fn#while":[{ expectedArgs:{ "test":{index:0, typeCheck:SWYM.CallableType}, "body":{index:1, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
 		customCompile:function(argTypes, cscope, executable)
@@ -2100,7 +2133,8 @@ Anything.'println' = output(\"$this\\n\");\
 Anything.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
 'Cell' = Struct{'key','context'};\
-Cell.'value' = .key.(.context);\
+Cell.'value' = .context.at(.key);\
+Cell.'set'('equals') = .context.set(.key)=equals;\
 Table.'cells' = array(.keys.length) 'key'->{ Cell.new(this.keys.at(key), this) };\
 Cell.Array.'table' = table[.each.key](.1st.context);\
 Cell.Array.'cellKeys' = [.each.key];\

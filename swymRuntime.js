@@ -32,7 +32,14 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 			stack.push( newValue );
 			PC += 1;
 			break;
-		
+
+		case "#CopyArray":
+			var original = stack.pop();
+			var newValue = SWYM.jsArray(SWYM.ConcatInPlace([], original));
+			stack.push( newValue );
+			PC += 1;
+			break;
+			
 		case "#Native":
 			var args = SWYM.CollectArgs(stack, executable[PC+1]);
 			if( args.isNovalues )
@@ -960,6 +967,8 @@ SWYM.ConcatInPlace = function(target,source)
 	{
 		target.push( source.run(Idx) );
 	}
+	
+	return target;
 }
 
 SWYM.Concat = function(a,b)
@@ -1414,11 +1423,20 @@ SWYM.ToMultiDebugString = function(value)
 	return result;
 }
 
-SWYM.ToDebugString = function(value)
-{
+SWYM.ToDebugString = function(value, loopBreaker)
+{	
 	if( value === null )
 	{
 		return "void";
+	}
+
+	if( loopBreaker === undefined )
+	{
+		loopBreaker = 0;
+	}
+	else if( loopBreaker > 2 )
+	{
+		return "...";
 	}
 	
 	var t = typeof value;	
@@ -1431,7 +1449,7 @@ SWYM.ToDebugString = function(value)
 	switch(value.type)
 	{
 		case "variable":
-			return "var("+SWYM.ToDebugString(value.getter? value.getter(): value.value)+")";
+			return "var("+SWYM.ToDebugString(value.getter? value.getter(): value.value, loopBreaker+1)+")";
 			//return SWYM.ToDebugString(value.getter? value.getter(): value.value);
 		case "string":
 			return '"'+value.data+'"';
@@ -1443,12 +1461,12 @@ SWYM.ToDebugString = function(value)
 			
 			var firstEntry = value.run(0);
 			
-			var result = SWYM.ToDebugString(firstEntry);
+			var result = SWYM.ToDebugString(firstEntry, loopBreaker);
 			
 			for( var Idx = 1; Idx < value.length; Idx++ )
 			{
 				var element = value.run(Idx);
-				result += ","+SWYM.ToDebugString(element);
+				result += ","+SWYM.ToDebugString(element, loopBreaker);
 			}
 			
 			return "["+result+"]";
@@ -1473,7 +1491,7 @@ SWYM.ToDebugString = function(value)
 					if( result !== "" )
 						result += ", ";
 
-					result += SWYM.ToDebugString(key)+":"+SWYM.ToDebugString(value.run(key));
+					result += SWYM.ToDebugString(key, loopBreaker)+":"+SWYM.ToDebugString(value.run(key), loopBreaker);
 				}
 			}
 			else
@@ -1483,7 +1501,7 @@ SWYM.ToDebugString = function(value)
 					if( result !== "" )
 						result += ", ";
 
-					result += memberName+":"+SWYM.ToDebugString(value.data[memberName]);
+					result += memberName+":"+SWYM.ToDebugString(value.data[memberName], loopBreaker);
 				}
 			}
 			return "{"+result+"}";
@@ -1499,17 +1517,17 @@ SWYM.ToDebugString = function(value)
 				if( result !== "" )
 					result += ", ";
 
-				result += memberName+":"+SWYM.ToDebugString(value.members[memberName]);
+				result += memberName+":"+SWYM.ToDebugString(value.members[memberName], loopBreaker);
 			}
 			return value.structType.debugName+"("+result+")";
 		}
 
 		case "lazyArray":
 		{
-			var result = SWYM.ToDebugString(value.run(0));
+			var result = SWYM.ToDebugString(value.run(0), loopBreaker);
 			for( var Idx = 1; Idx < value.length && Idx < 3; ++Idx )
 			{
-				result += ","+SWYM.ToDebugString(value.run(Idx));
+				result += ","+SWYM.ToDebugString(value.run(Idx), loopBreaker);
 			}
 			if( value.length <= 3 )
 				return "[" + result + "]";

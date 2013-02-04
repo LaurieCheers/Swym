@@ -163,6 +163,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 		return false;
 	}
 	
+	if( typeCheck.isMutable && !valueInfo.isMutable )
+	{
+		return false;
+	}
+	
 	if( typeCheck.nativeType === "Callable" )
 	{
 		if( valueInfo.needsCompiling === undefined && valueInfo.outType === undefined )
@@ -508,7 +513,7 @@ SWYM.LazyArrayTypeContaining = function(elementType)
 	return result;
 }
 
-SWYM.ArrayTypeContaining = function(elementType, errorContext)
+SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 {
 	if( !elementType )
 	{
@@ -523,7 +528,7 @@ SWYM.ArrayTypeContaining = function(elementType, errorContext)
 		return SWYM.LazyArrayTypeContaining(outType);
 	}
 	
-	return {type:"type", nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
+	return {type:"type", isMutable:isMutable, nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
 }
 
 SWYM.ArrayToMultivalueType = function(arrayType, quantifier)

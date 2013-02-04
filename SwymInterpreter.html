@@ -109,8 +109,9 @@ function runDemo(div)
   
 	// call out to the main "eval" method
 	SWYM.DisplayOutput = function(a){ fields.dest.value = a; SWYM.DisplayOutput = function(b){ fields.dest.value += b; }; };
-	SWYM.DisplayError = function(e){ fields.dest.value = e; };
+	SWYM.DisplayError = function(e){ fields.dest.value = e; SWYM.DisplayOutput = function(){}; };
 	SWYM.FullEval(fields.source.value);
+	SWYM.DisplayOutput("");
 }
 
 function clearOutput(div)

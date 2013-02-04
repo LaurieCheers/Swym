@@ -76,7 +76,10 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 			{
 				// curOp is infix, newOp is prefix
 				// (...) curOp (newOp ...)
-				curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curPrecedence+1));
+				if( curOp.behaviour.rightAssociative )
+					curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curPrecedence));
+				else
+					curLhs = SWYM.ParseTreeNode(curLhs, curOp, SWYM.ParseLevel(curPrecedence+1));
 				curOp = undefined;
 				return undefined;
 			}
