@@ -257,7 +257,50 @@ SWYM.operators = {
 	":":  {precedence:30, infix:true,
 		customCompile:function(node, cscope, executable)
 		{
-			SWYM.LogError(node, "':' is illegal in this context.");
+			if( node.children[1].op && node.children[1].op.text === "=" )
+			{
+				// declare a variable
+				var equalsNode = node.children[1];
+				var declName;
+				if( equalsNode.children[0].type === "decl" )
+				{
+					declName = equalsNode.children[0].value;
+				}
+				else if( equalsNode.children[0].type === "name" )
+				{
+					declName = equalsNode.children[0].text;
+					SWYM.LogError(node, "Illegal declaration of "+declName+" - did you forget to 'quote' it?");
+				}
+				else
+				{
+					SWYM.LogError(node, "Invalid declaration");
+				}
+				
+				var initialValueType = SWYM.CompileNode(equalsNode.children[1], cscope, executable);
+				var varType;
+
+				var unusedExecutable = [];
+				var typeType = SWYM.CompileNode(node.children[0], cscope, unusedExecutable);				
+				if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
+				{
+					SWYM.LogError(node.children[0], "Expected a type here");
+					varType = initialValueType;
+				}
+				else
+				{
+					varType = typeType.baked;
+					SWYM.TypeCoerce(varType, initialValueType);
+				}
+				
+				SWYM.CreateLocal(declName, varType, cscope, executable, node);
+				cscope[declName+"##mutable"] = true;
+				return varType;
+			}
+			else
+			{
+				SWYM.LogError(node, "':' is illegal in this context.");
+				return SWYM.VoidType;
+			}
 		}
 	},
 	
@@ -278,34 +321,48 @@ SWYM.operators = {
 		},
 		customCompile:function(node, cscope, executable)
 		{
-			if( node.children[0] && node.children[1] && node.children[0].type === "decl" )
+			if ( !node.children[0] || !node.children[1] )
 			{
-				// declare a value
-				var typecheck = SWYM.CompileNode(node.children[1], cscope, executable);
+				SWYM.LogError(node, "Fsckup: = operator missing children!?");
+				return SWYM.AnyValue;
+			}
+			
+			if( node.children[0].type === "decl" )
+			{
+				// declare a constant
+				var valueType = SWYM.CompileNode(node.children[1], cscope, executable);
+				
+				SWYM.CreateLocal( node.children[0].value, valueType, cscope, executable, node );
+				return valueType;
+			}
+			else if ( node.children[0].type === "name" )
+			{
+				// assign a local variable
+				var varName = node.children[0].text;
+				var varType = cscope[varName];
+				if( !varType )
+				{
+					SWYM.LogError(node, "Variable "+node.children[0].text+" is not defined - did you forget to 'quote' it?");
+				}
+				else if( cscope[varName+"##mutable"] !== true )
+				{
+					SWYM.LogError(node, "Cannot assign - "+node.children[0].text+" is a constant.");
+					return SWYM.VoidType;
+				}
 
-				if( typecheck && typecheck.multivalueOf !== undefined )
+				var newValueType = SWYM.CompileNode(node.children[1], cscope, executable);
+				if( newValueType && newValueType.multivalueOf !== undefined )
 				{
 					executable.push( "#ForceSingleValue" );
-					typecheck = SWYM.ToSinglevalueType(typecheck);
+					newValueType = SWYM.ToSinglevalueType(newValueType);
 				}
-					
-				executable.push( "#Store" );
-				executable.push( node.children[0].value );
-
-				if( cscope.hasOwnProperty(node.children[0].value) )
-				{
-					SWYM.LogError(node, "Tried to redefine \""+node.children[0].value+"\"");
-				}
-				else
-				{
-					cscope[node.children[0].value] = typecheck;
-				}
-
-				// If this just declared a class, name the class after this variable name
-				if( typecheck && typecheck.baked && typecheck.baked.type === "type" && !typecheck.baked.debugName )
-				{
-					typecheck.baked.debugName = node.children[0].value;
-				}
+				
+				SWYM.TypeCoerce(varType, newValueType);
+				
+				executable.push( "#Overwrite" );
+				executable.push( node.children[0].text );
+				
+				return SWYM.VoidType;
 			}
 			else if ( node.children[0] && node.children[1] && node.children[0].type === "fnnode" && node.children[0].isDecl )
 			{
@@ -2135,6 +2192,8 @@ Array.'flatten' = [ .each.each ];\
 'Cell' = Struct{'key','context'};\
 Cell.'value' = .context.at(.key);\
 Cell.'set'('equals') = .context.set(.key)=equals;\
+Cell.'next' = Cell.new(.key+1, .context);\
+Cell.'previous' = Cell.new(.key-1, .context);\
 Table.'cells' = array(.keys.length) 'key'->{ Cell.new(this.keys.at(key), this) };\
 Cell.Array.'table' = table[.each.key](.1st.context);\
 Cell.Array.'cellKeys' = [.each.key];\

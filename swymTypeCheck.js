@@ -158,11 +158,6 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 		return false;
 	}
 	
-	if( exact && !!typeCheck.isReference !== !!valueInfo.isReference )
-	{
-		return false;
-	}
-	
 	if( typeCheck.isMutable && !valueInfo.isMutable )
 	{
 		return false;

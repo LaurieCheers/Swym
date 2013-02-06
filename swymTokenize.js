@@ -364,7 +364,7 @@ SWYM.GenerateDeclaration = function(tokenlist)
 	var tokenStartPos = SWYM.sourcePos;
 	
 	// an identifier is any sequence of symbols, excluding quotes and whitespace.
-	while( SWYM.c !== "'" && !SWYM.IsWhitespace() )
+	while( SWYM.c !== "'" && SWYM.c !== undefined && !SWYM.IsWhitespace() )
     {
 		SWYM.NextChar();
 	}

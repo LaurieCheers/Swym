@@ -29,6 +29,7 @@
 	var keyDownState = {};
 	var tickBlock = undefined;
 	var mouseCharCode = 224;
+	var paused = false;
 
 	window.onload = function()
 	{
@@ -91,11 +92,21 @@
 		var src = document.getElementById("swymsource");
 		var dest = document.getElementById("swymoutput");
 		lastRunSrc = src.value;
+		if(paused) togglePause();
 		
 		dest.value = "";
 		SWYM.DisplayOutput = function(v){ dest.value += v };
 		SWYM.DisplayError = function(v){ dest.value = v };
 		SWYM.FullEval(src.value);
+	}
+
+	function togglePause()
+	{
+		paused = !paused;
+		if(paused)
+			document.getElementById("stopbutton").value = "Resume";
+		else
+			document.getElementById("stopbutton").value = "Stop";
 	}
 
 	function autorun()
@@ -128,6 +139,7 @@
 
 		if( SWYM && !initialized )
 		{
+			SWYM.EvalStdlyb();
 			SWYM.ImageType = {type:"type", nativeType:"image", debugName:"Image"};
 			SWYM.DefaultGlobalCScope["mouse_x"] = SWYM.NumberType;
 			SWYM.DefaultGlobalCScope["mouse_y"] = SWYM.NumberType;
@@ -272,7 +284,7 @@
 			}
 		}
 		
-		if( tickBlock )
+		if( tickBlock && !paused )
 		{
 			SWYM.ClosureCall(tickBlock);
 		}
@@ -286,6 +298,7 @@
 if(keyDown(" ")){...} ... mouse_x, mouse_y, keyDown(VK_LEFT), keyDown(VK_MOUSE)</code>
 <p>
 <input type=button value="Run" style="vertical-align: top;" onclick='test();'>
+<input id="stopbutton" type=button value="Stop" style="vertical-align: top;" onclick='togglePause();'>
 <input type=button value="Program URL" style="vertical-align: top;" onclick='saveURL();'>
 <input type=checkbox id=autorun_checkbox style="vertical-align: top;" checked><font style="vertical-align: top;">Update as you type</font><br>
 <textarea cols=60 rows=20 style="vertical-align: top;" id=swymsource>
@@ -294,7 +307,7 @@ if(keyDown(" ")){...} ... mouse_x, mouse_y, keyDown(VK_LEFT), keyDown(VK_MOUSE)<
 tick 
 {
   clearCanvas()
-  logo.draw( x:50, y:mouse_y-25 )
+  logo.draw( x=50, y=mouse_y-25 )
 }
 </textarea>
 <canvas id="canvas" width="400" height="500"></canvas>

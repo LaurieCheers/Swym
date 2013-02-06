@@ -900,8 +900,7 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 					if( argTypes[AIdx] )
 					{
 						if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
-							!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) ||
-							!argTypes[AIdx].isReference != !cur.types[AIdx].isReference )
+							!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) )
 						{
 							matched = false;
 							break;
@@ -2156,4 +2155,32 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 	}
 
 	SWYM.AddFunctionDeclaration("fn#new", declCScope, functionData);
+}
+
+SWYM.CreateLocal = function(declName, valueType, cscope, executable, errorNode)
+{
+	// the initial value is assumed to be already on the stack
+	if( valueType && valueType.multivalueOf !== undefined )
+	{
+		executable.push( "#ForceSingleValue" );
+		valueType = SWYM.ToSinglevalueType(valueType);
+	}
+		
+	executable.push( "#Store" );
+	executable.push( declName );
+
+	if( cscope[declName] !== undefined )
+	{
+		SWYM.LogError(errorNode, "Redefinition of \""+declName+"\"");
+	}
+	else
+	{
+		cscope[declName] = valueType;
+	}
+
+	// If this just declared a type, name the type after this variable name
+	if( valueType && valueType.baked && valueType.baked.type === "type" && !valueType.baked.debugName )
+	{
+		valueType.baked.debugName = declName;
+	}
 }
