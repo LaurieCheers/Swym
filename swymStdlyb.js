@@ -499,7 +499,7 @@ SWYM.operators = {
 		},
 		
 	// the 'repeat' operator. 10**3 -> 10,10,10
-	"**": {precedence:104, infix:true, argTypes:[SWYM.AnyType, SWYM.IntType],
+	"**": {precedence:55, infix:true, argTypes:[SWYM.AnyType, SWYM.IntType],
 		customCompile:function(node, cscope, executable)
 		{
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
@@ -535,7 +535,7 @@ SWYM.operators = {
 				});
 			}
 			
-			if( type0.multivalueOf === undefined )
+			if( type0 && type0.multivalueOf === undefined )
 				return SWYM.ToMultivalueType(type0);
 			else
 				return type0;
@@ -584,7 +584,7 @@ SWYM.operators = {
 			if( SWYM.TypeMatches(SWYM.BoolType, type1) )
 			{
 				// logical 'not'
-				if( type1.multivalueOf !== undefined )
+				if( type1 && type1.multivalueOf !== undefined )
 					executable.push("#MultiNative");
 				else
 					executable.push("#Native");
@@ -1746,7 +1746,7 @@ SWYM.DefaultGlobalCScope =
 			returnType:SWYM.VoidType,
 			customTypeCheck:function(argTypes)
 			{
-				if( !SWYM.TypeMatches(argTypes[0].outType, argTypes[2]) )
+				if( argTypes[0] && !SWYM.TypeMatches(argTypes[0].outType, argTypes[2]) )
 				{
 					return "Cannot store values of type "+SWYM.TypeToString(argTypes[2])+" in an array of type "+SWYM.TypeToString(argTypes[0].outType);
 				}

@@ -376,7 +376,7 @@ SWYM.GenerateDeclaration = function(tokenlist)
 		if( declText === "" )
 		{
 			var prevToken = tokenlist[tokenlist.length-1];
-			if( prevToken.type === "name" )
+			if( prevToken && prevToken.type === "name" )
 				SWYM.LogError(prevToken.pos, "Missing open quote when declaring "+prevToken.text);
 			else
 				SWYM.LogError(tokenStartPos-1, "Unexpected quote symbol");

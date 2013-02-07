@@ -684,14 +684,22 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			}
 		}
 			
-		if( theFunction.customCompileWithoutArgs )
+		if( theFunction.customCompileWithoutArgs || (theFunction.bakeOutArgs && theFunction.bakeOutArgs[Idx]) )
 		{
 			customArgExecutables[Idx] = data.inputArgExecutables[inputArgName];
 		}
 		else
 		{
 			++numArgsPushed;
-			SWYM.pushEach(data.inputArgExecutables[inputArgName], executable);
+			var argExecutable = data.inputArgExecutables[inputArgName];
+			if( argExecutable )
+			{
+				SWYM.pushEach(argExecutable, executable);
+			}
+			else
+			{
+				SWYM.LogError(0, "Fsckup: Missing argExecutable for arg name '"+inputArgName+"'");
+			}
 			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, data.inputArgNodes[expectedArgName], "calling '"+fnName+"', argument "+expectedArgName);
 
 //			if( isMulti && (!tempType || tempType.multivalueOf === undefined))
@@ -714,13 +722,20 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 				if( tempType && tempType.multivalueOf !== undefined )
 				{
 					finalArgTypes[Idx] = SWYM.ToSinglevalueType(tempType);
-					SWYM.pushEach(["#DoMultiple", argPositionOnStack, numArgsPushed, tempType.quantifier? tempType.quantifier.length: 1], executable);
-					oldExecutable = executable;
-					executable = [];
-					oldExecutable.push(executable);
+					
+					if( !theFunction.bakeOutArgs || !theFunction.bakeOutArgs[Idx] )
+					{
+						SWYM.pushEach(["#DoMultiple", argPositionOnStack, numArgsPushed, tempType.quantifier? tempType.quantifier.length: 1], executable);
+						oldExecutable = executable;
+						executable = [];
+						oldExecutable.push(executable);
+					}
 				}
 
-				++argPositionOnStack;
+				if( !theFunction.bakeOutArgs || !theFunction.bakeOutArgs[Idx] )
+				{
+					++argPositionOnStack;
+				}
 			}
 		}		
 	}
@@ -764,13 +779,13 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 /*			if( isMulti )
 			{
 				executable.push(isLazy? "#LazyNative": "#MultiNative");
-				executable.push(numArgsPassed);
+				executable.push(numArgsPushed);
 				executable.push(theFunction.nativeCode);
 			}
 			else
 			{
 */				executable.push("#Native");
-				executable.push(numArgsPassed);
+				executable.push(numArgsPushed);
 				executable.push(theFunction.nativeCode);
 //			}
 		}
@@ -1817,30 +1832,36 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 	
 	for( var idx = 0; idx < nameNodes.length; ++idx )
 	{		
-		if( !nameNodes[idx] || nameNodes[idx].type !== "decl" )
+		if( !nameNodes[idx] )
+		{
+			SWYM.LogError(node, "Invalid member declaration - missing name");
+		}
+		else if( nameNodes[idx].type !== "decl" )
 		{
 			SWYM.LogError(node, "Invalid member declaration "+nameNodes[idx]);
 		}
-		
-		var memberName = nameNodes[idx].value;
-
-		defaultValueTable[memberName] = defaultValueNodes[idx];
-		
-		if( typeNodes[idx] === undefined )
-		{
-			memberTypes[memberName] = SWYM.AnyType;
-		}
 		else
 		{
-			var typeType = SWYM.CompileNode(typeNodes[idx], cscope, unusedExecutable);
+			var memberName = nameNodes[idx].value;
 
-			if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
+			defaultValueTable[memberName] = defaultValueNodes[idx];
+			
+			if( typeNodes[idx] === undefined )
 			{
-				SWYM.LogError(typeNodes, "Type declaration for "+memberName+" is not a valid type!");
+				memberTypes[memberName] = SWYM.AnyType;
 			}
 			else
 			{
-				memberTypes[memberName] = typeType.baked;
+				var typeType = SWYM.CompileNode(typeNodes[idx], cscope, unusedExecutable);
+
+				if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
+				{
+					SWYM.LogError(typeNodes, "Type declaration for "+memberName+" is not a valid type!");
+				}
+				else
+				{
+					memberTypes[memberName] = typeType.baked;
+				}
 			}
 		}
 	}
@@ -2069,80 +2090,25 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 	var memberNames = [];
 	var functionData = {
 			expectedArgs:{"this":{index:0, typeCheck:SWYM.BakedValue(newStruct)}},
-			customCompileWithoutArgs:true,
-			customCompile:function(argTypes, cscope, executable, argExecutables)
+			bakeOutArgs:{0:true},
+			nativeCode:function(/*...args...*/)
 			{
+				var members = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
-					if( argTypes[Idx+1] !== undefined )
-					{
-						SWYM.pushEach(argExecutables[Idx+1], executable);
-					}
-					else
-					{
-						var defaultType = SWYM.CompileNode(defaultNodes[memberNames[Idx]], declCScope, executable);
-						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx]], defaultType, defaultNodes[memberNames[Idx]], "default value for member '"+memberNames[Idx]+"' of '"+newStruct.debugName+"'" );
-					}
+					members[memberNames[Idx]] = arguments[Idx];
 				}
-				executable.push("#Native")
-				executable.push(memberNames.length);
-				executable.push(function()
-				{
-					var members = {};
-					for( var Idx = 0; Idx < memberNames.length; ++Idx )
-					{
-						members[memberNames[Idx]] = arguments[Idx];
-					}
-					return {type:"struct", debugName:SWYM.TypeToString(argTypes[0].baked), structType:newStruct, members:members};
-				});
-				
+				return {type:"struct", debugName:SWYM.TypeToString(newStruct), structType:newStruct, members:members};
+			},
+			getReturnType:function(argTypes)
+			{
 				var memberTypes = {};
 				for( var Idx = 0; Idx < memberNames.length; ++Idx )
 				{
 					memberTypes[memberNames[Idx]] = argTypes[Idx+1];
 				}
 				
-				return {type:"type", debugName:SWYM.TypeToString(argTypes[0].baked), nativeType:"Struct", memberTypes:memberTypes};
-			},
-			
-			multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
-			{
-				for( var Idx = 1; Idx <= memberNames.length; ++Idx )
-				{
-					if( argTypes[Idx] !== undefined )
-					{
-						SWYM.pushEach(argExecutables[Idx], executable);
-
-						if( argTypes[Idx].multivalueOf === undefined )
-						{
-						  executable.push("#SingletonArray");
-						}
-					}
-					else
-					{
-						var defaultType = SWYM.CompileNode(defaultNodes[memberNames[Idx-1]], declCScope, executable);
-						SWYM.TypeCoerce(newStruct.memberTypes[memberNames[Idx-1]], defaultType, defaultNodes[memberNames[Idx-1]], "default value for member '"+memberNames[Idx-1]+"' of '"+newStruct.debugName+"'" );
-					}
-				}
-				executable.push("#MultiNative")
-				executable.push(memberNames.length);
-				executable.push(function()
-				{
-					var members = {};
-					for( var Idx = 0; Idx < memberNames.length; ++Idx )
-					{
-						members[memberNames[Idx]] = arguments[Idx];
-					}
-					return {type:"struct", debugName:SWYM.TypeToString(argTypes[0].baked), structType:newStruct, members:members};
-				});
-				
-				var memberTypes = {};
-				for( var Idx = 0; Idx < memberNames.length; ++Idx )
-				{
-					memberTypes[memberNames[Idx]] = SWYM.ToSinglevalueType(argTypes[Idx+1]);
-				}
-				
-				return {type:"type", nativeType:"Struct", debugName:SWYM.TypeToString(argTypes[0].baked), memberTypes:memberTypes};
+				return {type:"type", debugName:SWYM.TypeToString(argTypes[0]? argTypes[0].baked: ""), nativeType:"Struct", memberTypes:memberTypes};
 			}
 		};
 	
