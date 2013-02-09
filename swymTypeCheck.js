@@ -530,13 +530,13 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 {
 	if( arrayType && arrayType.isLazy )
 	{
-		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier);
+		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType.isMutable);
 		result.isLazy = true;
 		return result;
 	}
 	else
 	{
-		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier);
+		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType? arrayType.isMutable: undefined);
 	}
 }
 
@@ -712,7 +712,7 @@ SWYM.ToLazyMultivalueType = function(type)
 	return result;
 }
 
-SWYM.ToMultivalueType = function(type, quantifier)
+SWYM.ToMultivalueType = function(type, quantifier, isMutable)
 {
 	if( type && type.multivalueOf !== undefined )
 	{
@@ -730,12 +730,12 @@ SWYM.ToMultivalueType = function(type, quantifier)
 			if( quantifier_B === undefined )
 				quantifier_B = ["EACH"];
 			
-			return {type:"type", multivalueOf:type.multivalueOf, quantifier:quantifier_A.concat(quantifier_B), debugName:type.debugName};
+			return {type:"type", multivalueOf:type.multivalueOf, isMutable:isMutable, quantifier:quantifier_A.concat(quantifier_B), debugName:type.debugName};
 //		}
 	}
 	else
 	{
-		return {type:"type", multivalueOf:type, quantifier:quantifier, debugName:SWYM.TypeToString(type)+"*"};
+		return {type:"type", multivalueOf:type, isMutable:isMutable, quantifier:quantifier, debugName:SWYM.TypeToString(type)+"*"};
 	}
 }
 

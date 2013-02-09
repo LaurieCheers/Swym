@@ -1127,17 +1127,6 @@ SWYM.operators = {
 				executable.push(emptyList);
 				return {type:"swymObject", ofClass:SWYM.ArrayClass, outType:SWYM.NoValuesType, baked:emptyList};
 			}
-//			else if ( node.op.isParamBlock )
-//			{
-//				// json table
-//				var memberNodes = {};
-//				for( var Idx = 0; Idx < node.children[1].argNames.length; Idx++ )
-//				{
-//					memberNodes[node.children[1].argNames[Idx]] = node.children[1].children[Idx];
-//				}
-//
-//				return SWYM.CompileJson(memberNodes, cscope, executable);
-//			}
 			else
 			{
 				// list expression
@@ -1184,8 +1173,15 @@ SWYM.operators = {
 					SWYM.pushEach( qexecutable, executable );
 					return SWYM.BoolType;
 				}
+				else if( type.isMutable )
+				{
+					// if the multivalue is a mutable array, make an immutable copy of it
+					executable.push("#CopyArray");
+					return SWYM.ArrayTypeContaining( SWYM.ToSinglevalueType(type) );
+				}
 				else
 				{
+					// otherwise, just reinterpret it back into an array (no-op)
 					return SWYM.ArrayTypeContaining( SWYM.ToSinglevalueType(type) );
 				}
 			}
@@ -1732,14 +1728,7 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 		
-	"fn#set":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
-			returnType:SWYM.VoidType,
-			customCompile:function(argTypes, cscope, executable)
-			{
-				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1]); //TODO: missing error info!
-				executable.push("#VariableAssign");
-			}
-		},
+	"fn#at":[
 		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.MutableArrayType},
 						"key":{index:1, typeCheck:SWYM.IntType},
 						"equals":{index:2} },
@@ -1763,6 +1752,14 @@ SWYM.DefaultGlobalCScope =
 			{
 				executable.push("#VariableContents");
 				return SWYM.GetVariableTypeContents(argTypes[0]);
+			}
+		},
+		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
+			returnType:SWYM.VoidType,
+			customCompile:function(argTypes, cscope, executable)
+			{
+				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1]); //TODO: missing error info!
+				executable.push("#VariableAssign");
 			}
 		}],
 
@@ -2268,6 +2265,7 @@ Array.'total' = .1st + .2nd + etc;\
 Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
 Array.'map'('body') = [.each.(body)];\
+Array.'copy' = [.each];\
 Anything.'in'('array') { ==any array };\
 Number.'clamp'(Number:'min') = if(this < min){ min } else { this };\
 Number.'clamp'(Number:'max') = if(this > max){ max } else { this };\
@@ -2316,6 +2314,12 @@ Array.Array.'Struct' = array(product[.each.length]) 'idx'->\n\
 {\n\
   [ this.structElements(idx) ]\n\
 };\
+Array.'all'('body') = [.all.(body)];\
+Array.'some'('body') = [.some.(body)];\
+Array.'none'('body') = [.none.(body)];\
+Array.'no'('body') = [.no.(body)];\
+Anything.'orIf'('test')('body') = .if(test)(body) else {this};\
+/*Type.'mutableArray'(Int:'length', this:'initialValue') = this.mutableArray[initialValue**length];*/\
 ";/**/
 
 /*

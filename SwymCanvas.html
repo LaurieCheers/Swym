@@ -27,6 +27,7 @@
 	var mouseY = 0;
 	var initialized = false;
 	var keyDownState = {};
+	var keyPressBlock = {};
 	var tickBlock = undefined;
 	var mouseCharCode = 224;
 	var paused = false;
@@ -78,6 +79,11 @@
 		{
 			var symbol = String.fromCharCode(event.which);
 			keyDownState[symbol] = true;
+			
+			if( keyPressBlock[symbol] !== undefined )
+			{
+				SWYM.ClosureCall(keyPressBlock[symbol]);
+			}
 		}
 		document.onkeyup = function(event)
 		{
@@ -181,8 +187,7 @@
 				expectedArgs:{ "this":{index:0} },
 				customCompile:function(argTypes, cscope, executable)
 				{
-					// force compile
-					SWYM.GetOutType( argTypes[0], SWYM.NumberType );
+					SWYM.GetOutType( argTypes[0], SWYM.NumberType ); // force compile
 					executable.push("#Native");
 					executable.push(1);
 					executable.push(function(body){ tickBlock = body; });
@@ -258,6 +263,19 @@
 				{
 					var code = SWYM.ToTerseString(codeValue);
 					return keyDownState[code] === true;
+				}
+			}];
+			
+			SWYM.DefaultGlobalCScope["fn#onKeyPress"] =
+			[{
+				expectedArgs:{ "this":{index:0}, "body":{index:1} }, returnType:SWYM.BoolType,
+				customCompile:function(argTypes, cscope, executable)
+				{
+					SWYM.GetOutType( argTypes[1], SWYM.VoidType ); // force compile
+					executable.push("#Native");
+					executable.push(2);
+					executable.push(function(key, body){ keyPressBlock[SWYM.ToTerseString(key)] = body; });
+					return SWYM.VoidType;
 				}
 			}];
 

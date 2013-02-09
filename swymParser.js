@@ -406,19 +406,22 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 		SWYM.ReadParamBlock(paramnode.children[0], fnnode);
 		SWYM.ReadParamBlock(paramnode.children[1], fnnode);
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === "=" && paramnode.children[0].type === "name" )
+	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
+				paramnode.children[0] && paramnode.children[0].type === "name" )
 	{
 		// passing a named parameter
 		fnnode.argNames.push( paramnode.children[0].text );
 		fnnode.children.push( paramnode.children[1] );
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&  paramnode.children[0].type === "decl" )
+	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
+				paramnode.children[0] && paramnode.children[0].type === "decl" )
 	{
 		// declaring a parameter with a default value
 		fnnode.argNames.push( paramnode.children[0].value );
 		fnnode.children.push( paramnode.children[1] );
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1].type === "decl" )
+	else if( paramnode && paramnode.op && paramnode.op.text === ":" &&
+				paramnode.children[1] && paramnode.children[1].type === "decl" )
 	{
 		// declaring a parameter with a type
 		fnnode.argNames.push( paramnode.children[1].value );
