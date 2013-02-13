@@ -1,0 +1,253 @@
+// TETRIS!
+// The first ever large Swym program
+// by Laurie Cheers, 2013
+
+// Tile types
+'EMPTY'=0
+'SOLID'=1
+
+Int.'image' = case(this)
+{
+  EMPTY:image("gap.png"),
+  SOLID:image("earth.png")
+}
+
+// A Grid represents a 2D array of ints
+'Grid' = Struct
+{
+  Int:'w'
+  Int:'h'
+  Int.Array:'contents'
+}
+
+'mutableGrid'('w','h', 'equals')
+{
+  Grid.new(w,h, Int.mutableArray(w*h)=equals )
+}
+
+Grid.'xCoords' = [0 ..< .w]
+Grid.'yCoords' = [0 ..< .h]
+
+Grid.'at'('x','y') = .contents.at(x + y*.w)
+Grid.'at'('x','y','equals') = .contents.at(x + y*.w)=equals
+
+Grid.'at'('x','y','else')
+{
+  .if{ x.in(.xCoords) && y.in(.yCoords) }{ .at(x,y) } else (else)
+}
+
+Grid.'draw'('offsx', 'offsy') = forEach(.cells)
+{
+  .value.image.draw(offsx + .x*TILESIZE, offsy + .y*TILESIZE)
+}
+
+Grid.'drawWhere'('test')('offsx', 'offsy') = forEach(.cells)
+{
+  .value.if(test).image.draw(offsx + .x*TILESIZE, offsy + .y*TILESIZE)
+}
+
+Grid.'fill'('equals') = forEach(.cells)
+{
+  .value = equals
+}
+
+Grid.'rowAt'('y') = [ .at(x=.xCoords.each, y=y) ]
+
+// A GridCell represents a position in a grid
+'GridCell' = Struct
+{
+  Int:'x'
+  Int:'y'
+  Grid:'grid'
+}
+
+GridCell.'value' = .grid.at(.x, .y)
+GridCell.'value'('equals') = .grid.at(.x, .y)=equals
+
+Grid.'cells'
+{
+  [ GridCell.new(x=.xCoords.each, y=.yCoords.each, grid=this) ]
+}
+
+GridCell.'isBlocked'
+{
+     .x+pieceX !=any board.xCoords
+  || .y+pieceY !=any board.yCoords
+  || board.at(.x+pieceX, .y+pieceY) != EMPTY
+}
+
+Grid.'isBlocked' = .cells.where{.value == SOLID}.some{.isBlocked}
+
+'tetragrams' = [
+  "*** "+
+  " *  ",
+           "****",
+  " ** "+
+  " ** ",
+           "**  "+
+           " ** ",
+  " ** "+
+  "**  ",
+           "*** "+
+           "  * ",
+  " ***"+
+  " *  ",
+]
+
+Grid.'setTetragram'(String:'tgram')
+{
+  .fill = EMPTY
+
+  forEach( tgram.cells.where{.value != " "} )
+  {
+    this.contents.at(.key+4) = SOLID
+  }
+}
+
+'BOARDPOSX' = 120
+'BOARDPOSY' = 50
+'TILESIZE'=16
+
+'board' = mutableGrid(10,20) = EMPTY
+
+'piece' = mutableGrid(4,4) = EMPTY
+piece.setTetragram(tetragrams.random)
+
+'nextpiece' = mutableGrid(4,4) = EMPTY
+nextpiece.setTetragram(tetragrams.random)
+
+Int:'pieceX' = 4
+Int:'pieceY' = 0
+
+Number:'fallTimer' = 0
+'FALLSLOW' = 0.5
+'FALLFAST' = 0.15
+
+Bool:'gameOver' = false
+
+clearCanvas()
+
+tick 'dt'->
+{
+  if( !gameOver )
+  {
+    board.draw(BOARDPOSX,BOARDPOSY)
+
+    piece.drawWhere{==SOLID}
+         (offsx = BOARDPOSX+pieceX*TILESIZE)
+         (offsy = BOARDPOSY+pieceY*TILESIZE)
+
+    nextpiece.draw(10, BOARDPOSY)
+
+    fallTimer = fallTimer + dt
+  }
+
+  'fallDelay' = if( keyDown("S") ){ FALLFAST } else { FALLSLOW }
+
+  if( fallTimer >= fallDelay )
+  {
+    // fall 1 square
+    fallTimer = fallTimer-fallDelay
+    pieceY = pieceY+1
+
+    if( piece.isBlocked )
+    {
+      // we hit something, go back up and anchor here
+      pieceY = pieceY-1
+
+      forEach(piece.cells.where{.value == SOLID})
+      {
+        board.at(.x+pieceX, .y+pieceY) = SOLID
+      }
+
+      'filledRows' = [pieceY..pieceY+4].where 'y'->
+      {
+        y < board.h && [ board.rowAt(y).all == SOLID ]
+      }
+
+      if( filledRows != [] )
+      {
+        Int:'yRead' = board.h-1
+        
+        // time to delete some rows!
+        forEach(board.xCoords.reverse) 'yWrite'->
+        {
+          while{ yRead.in(filledRows) }
+          {
+            yRead = yRead - 1
+          }
+
+          forEach(board.xCoords) 'x'->
+          {
+            board.at(x,yWrite) = board.at(x,yRead) else { EMPTY }
+          }
+          yRead = yRead - 1
+        }
+      }
+
+      //new piece
+      pieceX = 4
+      pieceY = 0
+      forEach(nextpiece.cells)
+      {
+        piece.at(.x,.y) = .value
+      }
+
+      nextpiece.setTetragram(tetragrams.random)
+
+      if( piece.isBlocked )
+      {
+        "Game Over".draw(10,45)
+        gameOver = true
+      }
+    }
+  }
+}
+
+"A".onKeyPress
+{
+  pieceX = pieceX-1
+  if( piece.isBlocked )
+  {
+    pieceX = pieceX+1
+  }
+}
+
+"D".onKeyPress
+{
+  pieceX = pieceX+1
+  if( piece.isBlocked )
+  {
+    pieceX = pieceX-1
+  }
+}
+
+"W".onKeyPress
+{
+  //to rotate the piece, we need a temp copy of it
+  'temp' = Grid.new(piece.w, piece.h, piece.contents.copy)
+
+  forEach(piece.cells)
+  {
+    .value = temp.at( x=piece.h-(.y+1), y=.x )
+  }
+
+  if( piece.isBlocked )
+  {
+    // try jiggling it to fit
+    pieceX = pieceX+1
+    if( piece.isBlocked )
+    {
+      pieceX = pieceX-2
+      if( piece.isBlocked )
+      {
+        // oh well, we tried
+        pieceX = pieceX+1
+        forEach(piece.cells)
+        {
+          .value = temp.at(.x,.y)
+        }
+      }
+    }
+  }
+}

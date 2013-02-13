@@ -257,7 +257,7 @@ SWYM.operators = {
 	":":  {precedence:30, infix:true,
 		customCompile:function(node, cscope, executable)
 		{
-			if( node.children[1].op && node.children[1].op.text === "=" )
+			if( node.children[1] && node.children[1].op && node.children[1].op.text === "=" )
 			{
 				// declare a variable
 				var equalsNode = node.children[1];
@@ -1489,6 +1489,16 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],*/
 	
+	"fn#Type":
+	[{
+		expectedArgs:{"this":{index:0, typeCheck:SWYM.AnyType}},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, argExecutables)
+		{
+			return SWYM.BakedValue(argTypes[0]);
+		}
+	}],
+	
 	"fn#Subtype":
 	[{
 		expectedArgs:{
@@ -1793,7 +1803,7 @@ SWYM.DefaultGlobalCScope =
 		nativeCode:function(array)
 		{
 			var randomIndex = Math.floor(Math.random() * array.length);
-			return array[randomIndex];
+			return array.run(randomIndex);
 		}
 	}],
 
@@ -2139,14 +2149,18 @@ SWYM.DefaultGlobalCScope =
 		customCompile:function(argTypes, cscope, executable)
 		{
 			executable.push("#Native");
-			executable.push(1);
-			executable.push(function(body)
+			executable.push(2);
+			executable.push(function(test, body)
 			{
-				return SWYM.ClosureCall(body, undefined);
+				while( SWYM.ClosureCall(test) != false )
+				{
+					SWYM.ClosureCall(body);
+				}
 			});
 
-			return SWYM.GetOutType(argTypes[0], SWYM.VoidType);
-
+			SWYM.TypeCoerce(SWYM.BoolType, SWYM.GetOutType(argTypes[0], SWYM.VoidType));
+			SWYM.GetOutType(argTypes[1], SWYM.VoidType);
+			return SWYM.VoidType;
 		}
 	}],
 }
@@ -2318,8 +2332,8 @@ Array.'all'('body') = [.all.(body)];\
 Array.'some'('body') = [.some.(body)];\
 Array.'none'('body') = [.none.(body)];\
 Array.'no'('body') = [.no.(body)];\
-Anything.'orIf'('test')('body') = .if(test)(body) else {this};\
-/*Type.'mutableArray'(Int:'length', this:'initialValue') = this.mutableArray[initialValue**length];*/\
+Anything.'or_if'('test')('body') = .if(test)(body) else {this};\
+Type.'mutableArray'(Int:'length', 'equals') = this.mutableArray[equals**length];\
 ";/**/
 
 /*

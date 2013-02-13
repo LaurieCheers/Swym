@@ -194,7 +194,12 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 				argName:closureData.argName,
 				body:closureData.body,
 				scope: rscope,
-				run:function(arg){ return SWYM.ClosureCall(this, arg); }
+				run:function(arg)
+				{
+					var callScope = object(this.scope)
+					callScope[this.argName] = arg;
+					return SWYM.ExecWithScope(this.debugName, this.body, callScope, []);
+				}
 			}
 			stack.push(newClosure);
 			PC += 2;
@@ -1097,12 +1102,6 @@ SWYM.ClosureCall = function(closure, arg)
 	if( !closure )
 	{
 		SWYM.LogError(0, "Fsckup: missing closure body");
-	}
-	else if ( closure.body )
-	{
-		var callScope = object(closure.scope)
-		callScope[closure.argName] = arg;
-		return SWYM.ExecWithScope(closure.debugName, closure.body, callScope, []);
 	}
 	else if ( closure.run )
 	{

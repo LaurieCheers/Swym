@@ -1,0 +1,277 @@
+// ALCHEMY
+
+// Tile types
+'EMPTY'=0
+
+Int.'image' = if(this == EMPTY)
+{
+  "gap.png".image
+}
+else
+{
+  "blob$(this).png".image
+}
+
+// A Grid represents a 2D array of ints
+'Grid' = Struct
+{
+  Int:'w'
+  Int:'h'
+  Int.Array:'contents'
+}
+
+'mutableGrid'('w','h', 'equals')
+{
+  Grid.new(w,h, Int.mutableArray(w*h)=equals )
+}
+
+Grid.'internalIndex'('x','y') = x+y*.w
+Grid.'xCoords' = [0 ..< .w]
+Grid.'yCoords' = [0 ..< .h]
+
+Grid.'at'('x','y') = .contents.at(.internalIndex(x,y))
+Grid.'at'('x','y','equals') = .contents.at(.internalIndex(x,y))=equals
+
+Grid.'at'('x','y','else')
+{
+  .if{ x.in(.xCoords) && y.in(.yCoords) }{ .at(x,y) } else (else)
+}
+
+Grid.'draw'('offsx', 'offsy') = forEach(.cells)
+{
+  'x' = offsx + .x*TILESIZE
+  'y' = offsy + .y*TILESIZE
+
+  "gap.png".image.draw(x,y)
+
+  .value.image.draw(x,y)
+}
+
+Grid.'drawWhere'('test')('offsx', 'offsy') = forEach(.cells)
+{
+  .value.if(test).image.draw(offsx + .x*TILESIZE, offsy + .y*TILESIZE)
+}
+
+Grid.'fill'('equals') = forEach(.cells)
+{
+  .value = equals
+}
+
+// A GridCell represents a position in a grid
+'GridCell' = Struct
+{
+  Int:'x'
+  Int:'y'
+  Grid:'grid'
+}
+
+GridCell.'value' = .grid.at(.x, .y)
+GridCell.'value'('equals') = .grid.at(.x, .y)=equals
+GridCell.'internalIndex' = .grid.internalIndex(.x,.y)
+
+Grid.'cells'
+{
+  [ GridCell.new(x=.xCoords.each, y=.yCoords.each, grid=this) ]
+}
+
+// the cell you would land in, if dropped in this column
+Grid.'getFallingCell'(Int:'x')
+{
+  'firstSolidY' = this.yCoords.firstWhere 'y'->
+                         { this.at(x,y) != EMPTY }
+                    else { this.h }
+
+  GridCell.new(x=x, y=firstSolidY-1, grid=this)
+}
+
+GridCell.'neighboring4Cells'
+{
+  [
+    GridCell.new(x=(this.x+1, this.x-1),  y=.y,  grid=this.grid),
+    GridCell.new(x=.x,  y=(this.y+1, this.y-1),  grid=this.grid)
+  ]
+  .where{.x.in(this.grid.xCoords) && .y.in(this.grid.yCoords)}
+}
+
+GridCell.'region'
+{
+  if(this.value == EMPTY)
+  {
+    return []
+  }
+
+  this.Type.Array: 'found' = [this]
+  this.Type.Array: 'active' = [this]
+
+  while{active != []}
+  {
+    'neighbors' = forEach(active) 'a'->
+    {
+      a.neighboring4Cells.each.if{.value==a.value}
+    }
+
+    'foundInternalIndices' = [found.each.internalIndex]
+
+    active = neighbors.where{.internalIndex !=any foundInternalIndices}.whereDistinct{.internalIndex}
+
+    found = found + active
+  }
+
+  return found
+}
+
+'BOARDPOSX' = 120
+'BOARDPOSY' = 50
+'TILESIZE' = 16
+
+'board' = mutableGrid(10,20) = EMPTY
+
+Int:'maxPiece' = 1
+'piece' = mutableGrid(2,2) = EMPTY
+
+Int:'pieceX' = 0
+Int:'pieceR' = 0
+
+'newPiece'()
+{
+  pieceX = 4
+  pieceR = 0
+  piece.cells.each.value = EMPTY
+  piece.at(0,1) = random[1..maxPiece]
+  piece.at(1,1) = random[1..maxPiece]
+}
+
+'clampPieceX'()
+{
+  forEach(piece.cells.where{.value != EMPTY})
+  {
+    .if{ .x + pieceX >= board.w }
+    {
+      pieceX = board.w - (.x+1)
+    }
+    else .if{ .x + pieceX < 0 }
+    {
+      pieceX = -.x
+    }
+  }
+}
+
+'redraw'()
+{
+  clearCanvas()
+
+  board.draw(BOARDPOSX, BOARDPOSY)
+
+  forEach(piece.xCoords) 'x'->
+  {
+    if( (x+pieceX).in(board.xCoords) )
+    {
+      forEach(piece.yCoords) 'y'->
+      {
+        piece.at(x,y).if{!=EMPTY}.image.draw
+                    (BOARDPOSX+(x+pieceX)*TILESIZE)
+                    (BOARDPOSY+y*TILESIZE)
+      }
+    }
+  }
+
+  forEach[1..maxPiece] 'p'->
+  {
+    p.image.draw(80, 280-TILESIZE*p)
+  }
+}
+
+newPiece()
+
+redraw()
+
+Number:'timer' = 0
+
+tick 'dt'->
+{
+  timer = timer+dt
+  if( timer >= 0.5 )
+  {
+    timer = 0
+    'mergeTargets' = mutableGrid(board.w, board.h, EMPTY)
+
+    forEach(board.cells)
+    {
+      'region' = .region // this is sort of expensive to calculate
+      if(region.length >= 3)
+      {
+        // merges always collapse into the left-most cell of the bottom row.
+        'target' = region.whereMax{.y}.min{.x}
+        'newValue' = target.value + 1
+
+        region.each.value = EMPTY
+        mergeTargets.at(target.x, target.y) = newValue
+        maxPiece = max[newValue, maxPiece]
+      }
+    }
+
+    forEach(mergeTargets.cells.where{.value != EMPTY})
+    {
+      board.at(.x,.y) = .value
+    }
+
+    forEach(board.cells.where{.value == EMPTY && .y > 0})
+    {
+      // block falls down
+      .value = board.at(.x, .y-1)
+      board.at(.x, .y-1) = EMPTY
+    }
+
+    redraw()
+  }
+}
+
+"W".onKeyPress
+{
+  'temp' = Grid.new(piece.w, piece.h, piece.contents.copy)
+
+  forEach(piece.cells)
+  {
+    .value = temp.at( x=piece.h-(.y+1), y=.x )
+  }
+
+  clampPieceX()
+  redraw()
+}
+
+"S".onKeyPress
+{
+  forEach(piece.xCoords) 'x'->
+  {
+    if( (x+pieceX).in(board.xCoords) )
+    {    
+      forEach(piece.yCoords.reverse) 'y'->
+      {
+        'target' = board.getFallingCell(x+pieceX)
+
+        if( piece.at(x,y) != EMPTY )
+        {
+          board.at(x+pieceX, target.y) = piece.at(x,y)
+        }
+      }
+    }
+  }
+
+  timer = 0
+  newPiece()
+  redraw()
+}
+
+"A".onKeyPress
+{
+  pieceX = pieceX-1
+  clampPieceX()
+  redraw()
+}
+
+"D".onKeyPress
+{
+  pieceX = pieceX+1
+  clampPieceX()
+  redraw()
+}

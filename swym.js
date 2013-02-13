@@ -19,7 +19,16 @@ SWYM.LogError = function(errorContext, message)
 		}
 	}
 	
-	SWYM.errors += "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos) +" - "+ SWYM.LineTextForTextPos(SWYM.source, textpos) + "\n  "+message+"\n";
+	var errorText = "Line "+SWYM.LineForTextPos(SWYM.source, textpos)+":"+SWYM.PosInLineForTextPos(SWYM.source, textpos) +" - "+ SWYM.LineTextForTextPos(SWYM.source, textpos) + "\n  "+message+"\n";
+	
+	if( SWYM.errors !== undefined )
+	{
+		SWYM.errors += errorText;
+	}
+	else
+	{
+		SWYM.DisplayError(errorText);
+	}
 	SWYM.halt = true;
 }
 
@@ -143,12 +152,20 @@ SWYM.EvalStdlyb = function()
 	var resultType = SWYM.CompileNode(parsetree, SWYM.DefaultGlobalCScope, executable);
 
 	var result = SWYM.ReportErrors("Stdlyb Error");
-	if ( result ) alert(result);
+	if ( result )
+	{
+		alert("Stdlyb compile error!");
+		return SWYM.DisplayError(result);
+	}
 	
 	SWYM.ExecWithScope("stdlyb", executable, SWYM.DefaultGlobalRScope);
 
 	result = SWYM.ReportErrors("Stdlyb Exec Error");
-	if ( result ) alert(result);
+	if ( result )
+	{
+		alert("Stdlyb exec error!");
+		return SWYM.DisplayError(result);
+	}
 }
 
 SWYM.Eval = function(readsource, keepScope)
@@ -237,4 +254,6 @@ SWYM.FullEval = function(readsource, keepScope)
 	if ( result ) return result;
 	*/
 //	return output;
+
+	SWYM.errors = undefined; // report future errors directly
 }

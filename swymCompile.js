@@ -893,12 +893,18 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 	}
 
 	var mustCompile = false;
+	// if any of the arguments need compiling, it's not precompiled!
 	for( var AIdx = 0; AIdx < argTypes.length; ++AIdx )
 	{
-		if( argTypes[AIdx] && argTypes[AIdx].needsCompiling )
+		aType = argTypes[AIdx];
+		while( aType && aType != SWYM.StringCharType )
 		{
-			mustCompile = true;
-			break;
+			if( aType.needsCompiling )
+			{
+				mustCompile = true;
+				break;
+			}
+			aType = aType.outType;
 		}
 	}
 

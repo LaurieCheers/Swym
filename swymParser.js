@@ -395,7 +395,7 @@ SWYM.IsTableNode = function(paramnode)
 		}
 	}
 	
-	return ( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1].type !== "decl" );
+	return ( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1] && paramnode.children[1].type !== "decl" && (!paramnode.children[1].op || paramnode.children[1].op.text !== "=") );
 }
 
 SWYM.ReadParamBlock = function(paramnode, fnnode)
