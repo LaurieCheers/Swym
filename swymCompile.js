@@ -1178,9 +1178,7 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 			bodyExecutable.push("#Load");
 			bodyExecutable.push(argName);
 			
-			var argNameList = [];
-			SWYM.GetDeconstructorNameList( deconstructNode.children[1], argNameList );
-			SWYM.CompileDeconstructor(argNameList, bodyExecutable, cscope, cscope[argName] );
+			SWYM.CompileDeconstructor(deconstructNode, cscope, bodyExecutable, cscope[argName] );
 			
 			bodyExecutable.push("#Pop");
 		}
@@ -1335,27 +1333,27 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	SWYM.NextArgTypeID++;
 
 //	var argType = {type:"value", canConstrain:true, template:["@ArgType", argTypeID]};  //FIXME: handle arg type declarations
+	var argName;
 
 	if( !argNode )
 	{
-		var argName = "it";
+		argName = "it";
 		innerCScope["__default"] = {redirect:"it"};
 	}
 	else if( argNode.type === "decl" )
 	{
-		var argName = argNode.value;
+		argName = argNode.value;
 		innerCScope["__default"] = undefined;
 		innerCScope["it"] = undefined;
 	}
-	else if ( argNode.type === "node" && argNode.op.text === "[" )
+	else if ( argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
 	{
-		var argName = "~arglist~";
+		// destructuring an array/table arg
+		argName = "~arglist~";
 		bodyExecutable.push("#Load");
 		bodyExecutable.push("~arglist~");
 
-		var argNameList = [];
-		SWYM.GetDeconstructorNameList( argNode.children[1], argNameList );
-		SWYM.CompileDeconstructor(argNameList, bodyExecutable, cscope, argType);
+		SWYM.CompileDeconstructor(argNode, cscope, bodyExecutable, argType);
 
 		bodyExecutable.push("#Pop");
 		
@@ -1469,63 +1467,131 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 	}
 }
 
-SWYM.GetDeconstructorNameList = function(templateNode, elementList, cscope)
+// Compile deconstructing expressions such as ['x','y']->{ x+y }
+// (well, only the part in square brackets.)
+SWYM.CompileDeconstructor = function(templateNode, cscope, executable, argType)
 {
 	if( templateNode.type === "decl" )
 	{
-		elementList.push(templateNode);
+		executable.push("#Store");
+		executable.push(templateNode.value);
+
+		cscope[templateNode.value] = argType;
+	}
+	else if( templateNode.op && templateNode.op.text === ":" && templateNode.children[1] && templateNode.children[1].type === "decl" )
+	{
+		executable.push("#Store");
+		executable.push(templateNode.children[1].value);
+
+		//TODO: handle this explicit type declaration
+		cscope[templateNode.children[1].value] = argType;
 	}
 	else if( templateNode.op && templateNode.op.text === "[" )
 	{
-		var subElementList = [];
-		SWYM.GetDeconstructorNameList(templateNode.children[1], subElementList);
-		elementList.push(subElementList);
+		SWYM.CompileArrayDeconstructor(templateNode.children[1], 0, cscope, executable, argType);
 	}
-	else if( templateNode.op && templateNode.op.text === "," )
+	else if( templateNode.op && templateNode.op.text === "{" )
 	{
-		SWYM.GetDeconstructorNameList(templateNode.children[0], elementList);
-		SWYM.GetDeconstructorNameList(templateNode.children[1], elementList);
+		SWYM.CompileTableDeconstructor(templateNode.children[1], cscope, executable, argType);
 	}
 	else
 	{
-		SWYM.LogError(templateNode.sourcePos, "Unexpected structure in list declaration")
+		SWYM.LogError(templateNode, "Unexpected structure in argument declaration")
 	}
 }
 
-// Compile deconstructing expressions such as ['x','y']->{ x+y }
-SWYM.CompileDeconstructor = function(argNameList, executable, cscope, argType)
+SWYM.CompileArrayDeconstructor = function(templateNode, index, cscope, executable, argType)
 {
-	for( var Idx = 0; Idx < argNameList.length; ++Idx )
+	if( templateNode.op && (templateNode.op.text === "," || templateNode.op.text === ";" || templateNode.op.text === "(blank_line)") )
 	{
-		var entry = argNameList[Idx];
-		
-		if( entry )
+		index = SWYM.CompileArrayDeconstructor(templateNode.children[0], index, cscope, executable, argType);
+		index = SWYM.CompileArrayDeconstructor(templateNode.children[1], index, cscope, executable, argType);
+		return index;
+	}
+	else
+	{
+		executable.push("#Dup");
+		executable.push("#Literal");
+		executable.push(index);
+		executable.push("#At");
+		SWYM.CompileDeconstructor(templateNode, cscope, executable, SWYM.GetOutType(argType));
+		executable.push("#Pop");
+		return index+1;
+	}
+}
+
+SWYM.CompileTableDeconstructor = function(templateNode, cscope, executable, argType)
+{
+	if( templateNode.op && (templateNode.op.text === "," || templateNode.op.text === ";" || templateNode.op.text === "(blank_line)") )
+	{
+		SWYM.CompileTableDeconstructor(templateNode.children[0], cscope, executable, argType);
+		SWYM.CompileTableDeconstructor(templateNode.children[1], cscope, executable, argType);
+	}
+	else if( templateNode.type === "decl" )
+	{
+		SWYM.CompileTableElementDeconstructor(SWYM.StringWrapper(templateNode.value), templateNode.value, cscope, executable, argType);
+	}
+	else if( templateNode.op && templateNode.op.text === ":" && templateNode.children[1] && templateNode.children[1].type === "decl" )
+	{
+		//TODO: handle this type declaration
+		SWYM.CompileTableElementDeconstructor(
+			SWYM.StringWrapper(templateNode.children[1].value),
+			templateNode.children[1].value,
+			cscope,
+			executable,
+			argType
+		);
+	}
+	else if( templateNode.op && templateNode.op.text === "=>" )
+	{
+		//Explicit table key
+		var tempExecutable = [];
+		var keyType = SWYM.CompileNode(templateNode.children[0], cscope, tempExecutable);
+		if( !keyType || !keyType.baked )
 		{
-			executable.push("#Dup");
-			executable.push("#Literal");
-			executable.push(Idx);
-			executable.push("#At");
-
-			if( entry && entry.type === "decl" )
+			SWYM.LogError(templateNode.children[0], "For destructuring arguments, table keys must be known at compile time.");
+		}
+		else
+		{
+			var rhs = templateNode.children[1];
+			if( rhs.op && rhs.op.text === ":" && rhs.children[1] && rhs.children[1].type === "decl" )
 			{
-				executable.push("#Store");
-				executable.push(entry.value);
-				
-				cscope[entry.value] = SWYM.GetOutType(argType);
+				// TODO: handle type declaration
+				SWYM.CompileTableElementDeconstructor(keyType.baked, rhs.children[1].value, cscope, executable, argType);
 			}
-			else if ( entry && entry.length > 0 )
+			else if( rhs.type === "decl" )
 			{
-				SWYM.CompileDeconstructor(entry, executable, cscope, SWYM.GetOutType(argType));
+				SWYM.CompileTableElementDeconstructor(keyType.baked, rhs.value, cscope, executable, argType);
 			}
-
-			executable.push("#Pop");
+			else
+			{
+				SWYM.LogError(rhs, "Invalid table destructuring declaration.");
+			}
 		}
 	}
+	else
+	{
+		SWYM.LogError(templateNode, "Unexpected structure in argument table declaration")
+	}
+}
+
+SWYM.CompileTableElementDeconstructor = function(readName, writeName, cscope, executable, argType)
+{
+	executable.push("#Dup");
+	executable.push("#Literal");
+	executable.push(readName);
+	executable.push("#At");
+	executable.push("#Store");
+	executable.push(writeName);
+	executable.push("#Pop");
+	
+	// TODO: get the specific type from the table, if available?
+	cscope[writeName] = SWYM.GetOutType(argType);
 }
 
 SWYM.AddKeyAndValue = function(keyNode, valueNode, keyNodes, valueNodes)
 {
-	if( keyNode && keyNode.op && keyNode.op.text === ":" )
+	if( keyNode && keyNode.op && keyNode.op.text === "=>" )
 	{
 		SWYM.AddKeyAndValue(keyNode.children[0], valueNode, keyNodes, valueNodes);
 		SWYM.AddKeyAndValue(keyNode.children[1], valueNode, keyNodes, valueNodes);
@@ -1544,7 +1610,7 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 		SWYM.CollectKeysAndValues(node.children[0], keyNodes, valueNodes);
 		SWYM.CollectKeysAndValues(node.children[1], keyNodes, valueNodes);
 	}
-	else if( node && node.op && node.op.text === ":" )
+	else if( node && node.op && node.op.text === "=>" )
 	{
 		SWYM.AddKeyAndValue(node.children[0], node.children[1], keyNodes, valueNodes);
 	}
@@ -1592,6 +1658,21 @@ SWYM.CollectClassMembers = function(node, typeNodes, nameNodes, defaultValueNode
 	{
 		SWYM.LogError(node, "Error: Expected a member declaration, got "+node.text+".");
 	}
+}
+
+SWYM.ConvertSeparatorsToCommas = function(node)
+{
+	if( node && node.op && (node.op.text === ";" || node.op.text === "(blank_line)") )
+	{
+		node.op.behaviour = SWYM.operators[","];
+		node.op.text = ",";
+		node.children = [
+			SWYM.ConvertSeparatorsToCommas(node.children[0]),
+			SWYM.ConvertSeparatorsToCommas(node.children[1])
+		]
+	}
+	
+	return node;
 }
 
 SWYM.CompileTable = function(node, cscope, executable)

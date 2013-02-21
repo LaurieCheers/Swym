@@ -134,6 +134,9 @@ function runAllTests()
 
   addReportTable("Sequences:");
   runTest("[1,,,,,]",										"[1]");
+  runTest("[1;2]",											"[1,2]");
+  runTest("[1\n2]",											"[1,2]");
+  runTest("[1\n\n2]",										"[1,2]");
   runTest("[1,2,3]",										"[1,2,3]");
   runTest("[1,2,3].at(1)",										"2");
   runTest("[1,2,3].1st",										"1");
@@ -176,9 +179,9 @@ function runAllTests()
 //  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Ciao\"].pretty(\" and \"); ",	"\"Ciao\"");
   runTest("[10..6].keys", "[0..4]");
   runTest("\"Hello\".keys", "[0..4]");
-  runTest("Int.'bottles' = case(this){ 0:\"no more bottles\", 1:\"1 bottle\", else:\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
+  runTest("Int.'bottles' = case(this){ 0=>\"no more bottles\", 1=>\"1 bottle\", else=>\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
 			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n\n");
-  runTest("Int.'b'{\"$(.{0:\"no more\",else:this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
+  runTest("Int.'b'{\"$(.{0=>\"no more\",else=>this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
   			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n");
   runTest("\"Foo\".each.length.[]", "[1,1,1]");
   runTest("(1..10).if{>4}{ 1 } else { 2 }.[]", "[2,2,2,2,1,1,1,1,1,1]");
@@ -189,27 +192,28 @@ function runAllTests()
   endReportTable();
 
   addReportTable("JSON");
-  runTest("{\"x\":10, \"y\":20}", "{\"x\":10, \"y\":20}");
-  runTest("{\"x\":10, \"y\":20}.at(\"x\")", "10");
-  runTest("{\"x\":10, \"y\":20}.at(\"y\")", "20");
-  runTest("{\"x\":10, \"y\":20}.at(\"z\")", "~error~");
-  runTest("Table.'getx' = .at(\"x\"); getx{\"x\":10, \"y\":20}", "10");
-  runTest("0.{else:1}", "1");
-  runTest("{else:1}.keys", "[]");
-  runTest("{\"xx\":10, \"y\":20}.keys", "[\"xx\",\"y\"]");
-  runTest("{\"x\":10, \"y\":20}.length", "~error~");
-  runTest("\"1\".{\"1\":$1, \"2\":$2}", "\"1\"");
-  runTest("\"2\".{\"1\":$1, \"2\":$2}", "\"2\"");
-  runTest("\"3\".{\"1\":$1, \"2\":$2}", "~error~");
-  runTest("\"1\".{\"1\":$1, \"2\":$2, else:$3}", "\"1\"");
-  runTest("\"2\".{\"1\":$1, \"2\":$2, else:$3}", "\"2\"");
-  runTest("\"3\".{\"1\":$1, \"2\":$2, else:$3}", "\"3\"");
-  runTest("table[1..10]{^2}", "{1:1, 2:4, 3:9, 4:16, 5:25, 6:36, 7:49, 8:64, 9:81, 10:100}");
+  runTest("{\"x\"=>10, \"y\"=>20}", "{\"x\"=>10, \"y\"=>20}");
+  runTest("{\"x\"=>10, \"y\"=>20}.at(\"x\")", "10");
+  runTest("{\"x\"=>10, \"y\"=>20}.at(\"y\")", "20");
+  runTest("{\"x\"=>10, \"y\"=>20}.at(\"z\")", "~error~");
+  runTest("Table.'getx' = .at(\"x\"); getx{\"x\"=>10, \"y\"=>20}", "10");
+  runTest("0.{else=>1}", "1");
+  runTest("{else=>1}.keys", "[]");
+  runTest("{\"xx\"=>10, \"y\"=>20}.keys", "[\"xx\",\"y\"]");
+  runTest("{\"x\"=>10, \"y\"=>20}.length", "~error~");
+  runTest("\"1\".{\"1\"=>$1, \"2\"=>$2}", "\"1\"");
+  runTest("\"2\".{\"1\"=>$1, \"2\"=>$2}", "\"2\"");
+  runTest("\"3\".{\"1\"=>$1, \"2\"=>$2}", "~error~");
+  runTest("\"1\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"1\"");
+  runTest("\"2\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"2\"");
+  runTest("\"3\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"3\"");
+  runTest("table[1..10]{^2}", "{1=>1, 2=>4, 3=>9, 4=>16, 5=>25, 6=>36, 7=>49, 8=>64, 9=>81, 10=>100}");
 //  runTest("[x:10, y:10].at(\"x\")+1", "11");
   endReportTable();
 
   addReportTable("Type system torture");
   runTest("true+1", "~error~");
+  runTest("Bool:'b' = [false, true].1st", "false");
   runTest("4.{+1}+1", "6");
   runTest("4.{it}+1", "5");
   runTest("true.{+1}", "~error~");

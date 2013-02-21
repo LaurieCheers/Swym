@@ -935,7 +935,7 @@ SWYM.ReportOutOfBounds = function(array, index)
   }
   else
   {
-    SWYM.LogError(-1, "Array index "+index+" was out of bounds on array "+SWYM.ToDebugString(array));
+    SWYM.LogError(-1, "Array index "+SWYM.ToDebugString(index)+" was out of bounds on array "+SWYM.ToDebugString(array));
   }
 }
 
@@ -1490,7 +1490,7 @@ SWYM.ToDebugString = function(value, loopBreaker)
 					if( result !== "" )
 						result += ", ";
 
-					result += SWYM.ToDebugString(key, loopBreaker)+":"+SWYM.ToDebugString(value.run(key), loopBreaker);
+					result += SWYM.ToDebugString(key, loopBreaker)+"=>"+SWYM.ToDebugString(value.run(key), loopBreaker);
 				}
 			}
 			else

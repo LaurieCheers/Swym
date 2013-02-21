@@ -201,10 +201,23 @@ SWYM.operators = {
 			var isMulti = false;
 			var executables = [];
 			var resultType = undefined;
+			var bakedArray = [];
 			for( var Idx = 0; Idx < args.length; ++Idx )
 			{
 				var executableN = [];
 				var typeN = SWYM.CompileNode( args[Idx], cscope, executableN );
+				
+				if( bakedArray !== undefined )
+				{
+					if( typeN && typeN.baked !== undefined )
+					{
+						bakedArray.push(typeN.baked);
+					}
+					else
+					{
+						bakedArray = undefined;
+					}
+				}
 				
 				if( typeN && typeN.multivalueOf !== undefined )
 				{
@@ -240,17 +253,38 @@ SWYM.operators = {
 				executables.push(executableN);
 			}
 			
-			for( var Idx = 0; Idx < executables.length; ++Idx )
-			{
-				SWYM.pushEach(executables[Idx], executable);
-			}
-
-			executable.push( isMulti ? "#ConcatArrays" : "#CreateArray" );
-			executable.push(executables.length);
 			if( !isMulti )
 				resultType = SWYM.ToMultivalueType(resultType);
+
+			if( bakedArray !== undefined )
+			{
+				bakedArray = SWYM.jsArray(bakedArray);
 				
+				executable.push( "#Literal" );
+				executable.push( bakedArray );
+
+				resultType.baked = bakedArray;
+			}
+			else
+			{
+				for( var Idx = 0; Idx < executables.length; ++Idx )
+				{
+					SWYM.pushEach(executables[Idx], executable);
+				}
+
+				executable.push( isMulti ? "#ConcatArrays" : "#CreateArray" );
+				executable.push(executables.length);
+			}
+			
 			return resultType;
+		}
+	},
+
+	"=>":  {precedence:25, infix:true,
+		customCompile:function(node, cscope, executable)
+		{
+			SWYM.LogError(node, "'=>' can only be used within a table declaration.");
+			return SWYM.VoidType;
 		}
 	},
 
@@ -1118,6 +1152,8 @@ SWYM.operators = {
 		},
 		customCompile:function(node, cscope, executable)
 		{
+			SWYM.ConvertSeparatorsToCommas(node.children[1]);
+			
 			if( node.children[1] === undefined )
 			{
 				// empty array/table
@@ -1177,12 +1213,12 @@ SWYM.operators = {
 				{
 					// if the multivalue is a mutable array, make an immutable copy of it
 					executable.push("#CopyArray");
-					return SWYM.ArrayTypeContaining( SWYM.ToSinglevalueType(type) );
+					return SWYM.ArrayTypeContaining( type );
 				}
 				else
 				{
 					// otherwise, just reinterpret it back into an array (no-op)
-					return SWYM.ArrayTypeContaining( SWYM.ToSinglevalueType(type) );
+					return SWYM.ArrayTypeContaining( type );
 				}
 			}
 		}
@@ -1364,31 +1400,22 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 		
-/*	"fn#enum":
+/*	"fn#AnyOf":
 	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.TableType} },
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable)
 		{
-			for( var memberName in argTypes[0].memberTypes )
+			if( argTypes[0].baked === undefined )
 			{
-				SWYM.CompileFunctionDeclaration(
-					"fn#"+memberName,
-					{"this":{/*node* /}},
-					{type:"fncall", name:"enumAt", args:{"this":SWYM.NewToken("name", 0, "this"), "that":SWYM.NewToken("literal", 0, memberName, memberName)}},
-					cscope,
-					executable
-				);
+				SWYM.LogError(0, "The body of AnyOf must be known at compile time!");
+				return undefined;
 			}
-			
-			return {type:"jsArray", memberTypes:argTypes[0].memberTypes, classType:SWYM.DefaultGlobalCScope.Namespace};
-		},
-		nativeCode:function(table)
-		{
-			return {type:"swymObject", classType:SWYM.DefaultGlobalCScope.Namespace, data:table.data};
+			return SWYM.BakedValue(SWYM.GetOutType(argTypes[0]));
 		}
 	}],
-
-	"fn#enumAt":
+*/
+/*	"fn#enumAt":
 	[{
 		expectedArgs:{ "this":{index:0, typeCheck:{type:"swymObject"}}, "that":{index:1, typeCheck:SWYM.StringType} },
 		returnType:{template:["@ArgTypeNamed",0,"@ArgTypeNamed",1,"@NamespaceMemberType"]},
@@ -1489,13 +1516,37 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],*/
 	
+	"fn#Literal":
+	[{
+		expectedArgs:{"this":{index:0, typeCheck:SWYM.AnyType}},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, argExecutables)
+		{
+			if( !argTypes[0] || !argTypes[0].baked )
+			{
+				SWYM.LogError(0, "Calling Literal - value was not known at compile time!");
+				return undefined;
+			}
+			var result = SWYM.BakedValue(argTypes[0].baked);
+			executable.push("#Literal");
+			executable.push(result);
+			
+			return SWYM.BakedValue(result);
+		}
+	}],
+	
 	"fn#Type":
 	[{
 		expectedArgs:{"this":{index:0, typeCheck:SWYM.AnyType}},
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, argExecutables)
 		{
-			return SWYM.BakedValue(argTypes[0]);
+			var result = argTypes[0];
+			
+			executable.push("#Literal");
+			executable.push(result);
+			
+			return SWYM.BakedValue(result);
 		}
 	}],
 	
@@ -2036,23 +2087,7 @@ SWYM.DefaultGlobalCScope =
 			}
 			return SWYM.BakedValue(SWYM.ArrayTypeContaining(argTypes[0].baked));
 		}
-	}],
-	
-	"fn#Literal":[{ expectedArgs:{
-			"this":{index:0, typeCheck:SWYM.TypeType},
-		},
-		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
-		{
-			if( !argTypes[0] || !argTypes[0].baked )
-			{
-				SWYM.LogError(0, "Argument to .Literal must be defined at compile time.");
-				return SWYM.NoValuesType;
-			}
-			return SWYM.BakedValue(argTypes[0]);
-		}
-	}],
-		
+	}],		
 	
 	"fn#distinct":[{
 		expectedArgs:{"this":{index:0, typeCheck:SWYM.ArrayType} },
@@ -2334,6 +2369,7 @@ Array.'none'('body') = [.none.(body)];\
 Array.'no'('body') = [.no.(body)];\
 Anything.'or_if'('test')('body') = .if(test)(body) else {this};\
 Type.'mutableArray'(Int:'length', 'equals') = this.mutableArray[equals**length];\
+Array.'AnyOf' = Type~of(.1st);\
 ";/**/
 
 /*

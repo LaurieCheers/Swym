@@ -170,7 +170,7 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 			}
 			else if (newOp.text === "else" )
 			{
-				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== "=" && SWYM.curToken.text !== ":" ) )
+				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== "=" && SWYM.curToken.text !== "=>" ) )
 				{
 					// 'else' consumes either a {} pair, or the entire next sequence until a semicolon is reached.
 					var rhs = SWYM.ParseLevel(2);
@@ -395,7 +395,7 @@ SWYM.IsTableNode = function(paramnode)
 		}
 	}
 	
-	return ( paramnode && paramnode.op && paramnode.op.text === ":" && paramnode.children[1] && paramnode.children[1].type !== "decl" && (!paramnode.children[1].op || paramnode.children[1].op.text !== "=") );
+	return ( paramnode && paramnode.op && paramnode.op.text === "=>" );
 }
 
 SWYM.ReadParamBlock = function(paramnode, fnnode)

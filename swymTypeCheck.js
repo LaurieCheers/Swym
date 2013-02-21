@@ -486,11 +486,41 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		result.memberTypes = newMemberTypes;
 	}
 	
-	if( typeA.baked && typeB.baked && SWYM.IsEqual(typeA.baked, typeB.baked) )
+	if( (typeA.baked !== undefined || typeA.enumValues !== undefined) &&
+			(typeB.baked !== undefined || typeB.enumValues !== undefined) )
 	{
-		result.baked = typeA.baked;
-		result.debugName = typeA.debugName;
-	}
+		var enumValues = [];
+		if( typeA.baked !== undefined )
+		{
+			enumValues.push(typeA.baked);
+		}
+		else
+		{
+			SWYM.pushEach(typeA.enumValues, enumValues);
+		}
+
+		if( typeB.baked !== undefined )
+		{
+			enumValues.push(typeB.baked);
+		}
+		else
+		{
+			SWYM.pushEach(typeB.enumValues, enumValues);
+		}
+		
+		enumValues = SWYM.Distinct( SWYM.jsArray(enumValues) );
+		
+		if( enumValues.length === 1 )
+		{
+			result.baked = enumValues[0];
+			result.debugName = "Literal("+SWYM.ToDebugString(result.baked)+")";
+		}
+		else
+		{
+			result.enumValues = enumValues;
+			result.debugName = "AnyOf"+SWYM.ToDebugString(result.enumValues);
+		}
+	}		
 		
 	if( toCompile !== undefined )
 	{
@@ -504,7 +534,7 @@ SWYM.LazyArrayTypeContaining = function(elementType)
 {
 	var result = SWYM.ArrayTypeContaining(elementType);
 	result.isLazy = true;
-	result.debugName += ".Lazy";
+	result.debugName = "Lazy("+result.debugName+")";
 	return result;
 }
 
@@ -517,13 +547,34 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 	}
 
 	var outType = SWYM.ToSinglevalueType(elementType);
-
-	if( elementType.multivalueOf !== undefined && elementType.isLazy )
+	var resultType =
 	{
-		return SWYM.LazyArrayTypeContaining(outType);
+		type:"type",
+		isMutable:isMutable,
+		nativeType:"JSArray",
+		memberTypes:{length:SWYM.IntType},
+		argType:SWYM.IntType,
+		outType:outType,
+		debugName:"Array("+SWYM.TypeToString(outType)+")"
+	};
+	
+	if( elementType.multivalueOf !== undefined )
+	{
+		if( elementType.isLazy )
+		{
+			return SWYM.LazyArrayTypeContaining(outType);
+		}
+		else
+		{
+			resultType.baked = elementType.baked;
+		}
+	}
+	else if( elementType.baked )
+	{
+		resultType.baked = SWYM.jsArray([elementType.baked]);
 	}
 	
-	return {type:"type", isMutable:isMutable, nativeType:"JSArray", memberTypes:{length:SWYM.IntType}, argType:SWYM.IntType, outType:outType, debugName:SWYM.TypeToString(outType)+".Array"};
+	return resultType;
 }
 
 SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
@@ -591,7 +642,7 @@ SWYM.BakedValue = function(value, errorContext)
 	}
 
 	result.baked = value;
-	result.debugName = SWYM.ToDebugString(value)+".Literal";
+	result.debugName = "Literal("+SWYM.ToDebugString(value)+")";
 	return result;
 }
 
@@ -755,7 +806,7 @@ SWYM.VariableTypeContaining = function(contentType, errorContext)
 		return SWYM.NoValuesType;
 	}
 
-	return {type:"type", nativeType:"Variable", contentType:contentType, debugName:contentType.debugName+".Var"};
+	return {type:"type", nativeType:"Variable", contentType:contentType, debugName:"Var("+contentType.debugName+")"};
 }
 
 SWYM.GetVariableTypeContents = function(variableType, errorContext)
