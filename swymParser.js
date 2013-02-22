@@ -486,15 +486,28 @@ SWYM.CombineFnNodes = function(base, add)
 	}
 	else if ( base.type === "fnnode" )
 	{
-		SWYM.pushEach(add.children, base.children);
-		SWYM.pushEach(add.argNames, base.argNames);
+		var addArgsTo;
+		if( base.addArgsTo !== undefined )
+			addArgsTo = base.addArgsTo;
+		else
+			addArgsTo = base;
+
+		if( addArgsTo.children )
+			SWYM.pushEach(add.children, addArgsTo.children);
+		else
+			SWYM.LogError(addArgsTo, "Invalid use of ~ operator!")
+
+		if( addArgsTo.argNames )
+			SWYM.pushEach(add.argNames, addArgsTo.argNames);
+		else
+			SWYM.LogError(addArgsTo, "Invalid use of ~ operator!")
 		
 		if( add.body )
 		{
-			if( base.body )
+			if( addArgsTo.body )
 				SWYM.LogError(0, "Error: too many function bodies!");
 			else
-				base.body = add.body;
+				addArgsTo.body = add.body;
 		}
 		return base;
 	}

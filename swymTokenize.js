@@ -298,60 +298,60 @@ SWYM.GenerateIdentifier = function(tokenlist, ignoreDecl)
 	var chunkStartPos = SWYM.sourcePos;
 	var allDigits = true;
 	
-	// an identifier is any number of consecutive letters, digits and/or underscores.
-	do
+	var numberToken = [];
+	if( SWYM.IsDigit() )
 	{
-		if( allDigits && !SWYM.IsDigit() )
-			allDigits = false;
-		
+		// this identifier starts with a number, so we'll begin by parsing the number
+		SWYM.GenerateNumberLiteral(numberToken);
+	}
+
+	var textStartPos = SWYM.sourcePos;
+	
+	// an identifier is any number of consecutive letters, digits, hashes and/or underscores.
+	while( SWYM.IsLetter() || SWYM.IsDigit() || SWYM.c === '_' || SWYM.c === '#' )
+	{
 		SWYM.NextChar();
 	}
-	while( SWYM.IsLetter() || SWYM.IsDigit() || SWYM.c === '_' );
     var chunkEndPos = SWYM.sourcePos;
-    
-	if( allDigits && SWYM.c === "." && SWYM.IsDigit(SWYM.PeekNext()) )
-	{
-		// it's a floating point number
-		SWYM.SetNextChar(chunkStartPos);
-		SWYM.GenerateNumberLiteral(tokenlist);
-		return;
-	}
-	
-    var text = SWYM.GetSource(chunkStartPos, chunkEndPos);
+    	
+    var text = SWYM.GetSource(textStartPos, chunkEndPos);
 
-	if( SWYM.operators[text] )
+	if ( numberToken.length > 0 )
+	{
+		if( text === "" )
+		{
+			// ok, it was just a number
+			SWYM.pushEach(numberToken, tokenlist);
+		}
+		else
+		{
+			// it's passing the number as argument # of a function call!
+			var functionName = "#"+text;
+			
+			// FIXME: very weird to do this inside the tokenizer, but for now
+			// it's the easiest way to make etc expressions accept 1st and 2nd as
+			// calls to the same function...
+			// Probably not acceptable as a permanent solution, what if we wanted to
+			// write 7stone or something
+			if( /^#st|#nd|#rd/.test(functionName) )
+			{
+				functionName = "#th"+functionName.slice(3);
+			}
+			
+			tokenlist.push(
+				{type:"fnnode", pos:chunkStartPos, body:undefined, isDecl:false, name:functionName, children:numberToken, argNames:["#"]}
+			);
+		}
+	}
+	else if( SWYM.operators[text] )
     {
 		// handle keyword operators
         tokenlist.push(SWYM.NewToken("op", chunkStartPos, text));
     }
 	else
 	{
-		var nameToken = SWYM.NewToken("name", chunkStartPos, text);
-
-		if ( SWYM.IsDigit( text[0] ) )
-		{
-			// if the identifier has a number in it, parse the number
-			SWYM.sourcePos = chunkStartPos;
-			SWYM.c = SWYM.source[SWYM.sourcePos];
-
-			var numToken = [];
-			SWYM.GenerateNumberLiteral(numToken);
-			
-			if( SWYM.sourcePos === chunkEndPos )
-			{
-				// ok, it was just a number
-				tokenlist.push(numToken[0]);
-				return;
-			}
-
-			nameToken.numToken = numToken[0];
-			nameToken.numSuffix = SWYM.GetSource(SWYM.sourcePos, chunkEndPos);
-			
-			SWYM.sourcePos = chunkEndPos;
-			SWYM.c = SWYM.source[SWYM.sourcePos];
-		}
-
-		tokenlist.push(nameToken);
+		// just a name
+		tokenlist.push(SWYM.NewToken("name", chunkStartPos, text));
 	}
 }
 

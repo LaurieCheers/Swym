@@ -1410,7 +1410,7 @@ SWYM.ToTerseString = function(value)
 SWYM.ToMultiDebugString = function(value)
 {
 	if( !value ||  !value.run )
-		return "<ToMultiDebugString fsckup!? ("+value+")>";
+		return "<ToMultiDebugString fsckup!? ("+SWYM.ToDebugString(value)+")>";
 	else if( value.length === 0 )
 		return "<no values>";
 	

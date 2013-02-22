@@ -158,7 +158,7 @@ SWYM.EvalStdlyb = function()
 		return SWYM.DisplayError(result);
 	}
 	
-	SWYM.ExecWithScope("stdlyb", executable, SWYM.DefaultGlobalRScope);
+	SWYM.ExecWithScope("stdlyb", executable, SWYM.DefaultGlobalRScope, []);
 
 	result = SWYM.ReportErrors("Stdlyb Exec Error");
 	if ( result )

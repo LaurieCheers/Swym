@@ -1087,7 +1087,13 @@ SWYM.operators = {
 		{
 			if( lhs && lhs.type === "name" )
 			{
-				return {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
+				var addArgsTo;
+				if( rhs.addArgsTo !== undefined )
+					addArgsTo = rhs.addArgsTo;
+				else
+					addArgsTo = rhs;
+					
+				return {type:"fnnode", addArgsTo:addArgsTo, pos:lhs.pos, body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
 			}
 			else
 			{
@@ -1537,9 +1543,18 @@ SWYM.DefaultGlobalCScope =
 	
 	"fn#Type":
 	[{
-		expectedArgs:{"this":{index:0, typeCheck:SWYM.AnyType}},
+		expectedArgs:{"this":{index:0}},
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, argExecutables)
+		{
+			var result = argTypes[0];
+			
+			executable.push("#Literal");
+			executable.push(result);
+			
+			return SWYM.BakedValue(result);
+		},
+		multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
 		{
 			var result = argTypes[0];
 			
@@ -1882,7 +1897,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 			executable.push(isLazy? "#LazyClosureCall": "#MultiClosureCall");
-			return SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]) );
+			return SWYM.ToMultivalueType(SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]) ));
 		}
 	},
 	{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.CallableType} },
@@ -1905,38 +1920,32 @@ SWYM.DefaultGlobalCScope =
 			SWYM.pushEach(argExecutables[0], executable);
 
 			executable.push("#MultiClosureCall");
-			return SWYM.GetOutType( argTypes[0], SWYM.VoidType );
+			return SWYM.ToMultivalueType(SWYM.GetOutType( argTypes[0], SWYM.VoidType ));
 		}
 	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); },
 	}],
 	
 	"fn#some":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); }, // no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); },
 	}],
 
 	"fn#all":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); }, // no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); },
 	}],
 
 	"fn#none":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); }, // no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); },
 	}],
 
 	"fn#lazy":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // basically a no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
 	}],
 
 	"fn#eager":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // basically a no-op!
-		multiCustomCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); },
+		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
 	}],
 	
 	"fn#accumulate":[
@@ -2199,6 +2208,8 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 }
+
+//SWYM.stdlyb = "";
 
 SWYM.stdlyb =
 "\

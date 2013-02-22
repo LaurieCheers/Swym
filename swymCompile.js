@@ -741,6 +741,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	}
 
 	var resultType;
+	var didMultiCustomCompile = false;
 	if( theFunction.customCompileWithoutArgs )
 	{
 		if( !isMulti )
@@ -749,10 +750,9 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		}
 		else
 		{
-			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input,
-			// and generates multivalues as output. But for consistency with other compile modes,
-			// its result_type_ is still expected to be a single value type.
+			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input.
 			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, customArgExecutables);
+			didMultiCustomCompile = true;
 		}
 	}
 	else if ( theFunction.customCompile || theFunction.nativeCode )
@@ -866,7 +866,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		}	
 	}
 		
-	if( isMulti || isQuantifier )
+	if( !didMultiCustomCompile && (isMulti || isQuantifier) )
 	{
 		for( var Idx = data.inputArgNameList.length-1; Idx >= 0; --Idx )
 		{
@@ -2213,11 +2213,11 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 SWYM.CreateLocal = function(declName, valueType, cscope, executable, errorNode)
 {
 	// the initial value is assumed to be already on the stack
-	if( valueType && valueType.multivalueOf !== undefined )
-	{
-		executable.push( "#ForceSingleValue" );
-		valueType = SWYM.ToSinglevalueType(valueType);
-	}
+//	if( valueType && valueType.multivalueOf !== undefined )
+//	{
+//		executable.push( "#ForceSingleValue" );
+//		valueType = SWYM.ToSinglevalueType(valueType);
+//	}
 		
 	executable.push( "#Store" );
 	executable.push( declName );
