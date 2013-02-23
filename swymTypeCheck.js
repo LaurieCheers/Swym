@@ -346,7 +346,6 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	
 	if( SWYM.TypeMatches(SWYM.VoidType, typeA) !== SWYM.TypeMatches(SWYM.VoidType, typeB) )
 	{
-		SWYM.LogError(errorContext, "An expression may not be sometimes void.");
 		return SWYM.VoidType;
 	}
 
