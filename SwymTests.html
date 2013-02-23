@@ -354,6 +354,7 @@ function runAllTests()
 
   addReportTable("Quantifiers:");
   runTest("[ some[1..10] < 2 ]","true");
+  runTest("[ [1..10].some.{<2} ]","true");
   runTest("[ some[2..10]<2 ]","false");
   runTest("![ some[1..10]<2 ]","false");
   runTest("[ all[2..9] == some[1..10] ]","true");

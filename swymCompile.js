@@ -382,6 +382,11 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		var inputExecutable = [];
 		var inputArgName = argNames[Idx];
 		var inputType = SWYM.CompileNode( args[inputArgName], cscope, inputExecutable );
+
+		if( SWYM.TypeMatches(SWYM.VoidType, inputType) )
+		{
+			SWYM.LogError(args[inputArgName], "Got a Void argument ("+inputArgName+") while calling '"+fnName+"'");
+		}
 		
 		if( inputType && inputType.multivalueOf !== undefined )
 		{
@@ -391,7 +396,6 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		inputArgTypes[inputArgName] = inputType;
 		inputArgExecutables[inputArgName] = inputExecutable;
 	}
-
 	
 	var fnScopeName = "fn#"+fnName;
 	var overloads = cscope[fnScopeName];

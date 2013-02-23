@@ -98,21 +98,19 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 		{
 			SWYM.LogError(newOp.pos, "Expected: value before operator '"+newOp.text+"'");
 		}
-		else if ( curLhs && !newOpCanHaveLhs )
+		else if ( curLhs && newOp.followsBreak && !newOpNeedsLhs && !curOpNeedsRhs && !newOp.behaviour.noImplicitSemicolon )
 		{
-			if( newOp.followsBreak )
-			{
-				// have to auto-insert the blank_line operator.
-				var result = HandleAddOp( SWYM.NewToken("op", SWYM.curToken.sourcePos, "(blank_line)"), true );
-				if ( result )
-				{
-					return result;
-				}
-			}
-			else
-			{
-				SWYM.LogError(newOp.pos, "Expected: line break or ; before operator '"+newOp.text+"'");
-			}
+			// auto-insert the blank_line operator.
+			var result = HandleAddOp( SWYM.NewToken("op", SWYM.curToken.sourcePos, "(blank_line)"), true );
+			if ( result ) { return result; }
+
+			// then try adding the op again.
+			result = HandleAddOp(newOp);
+			if ( result ) { return result; }
+		}
+		else if( curLhs && !newOpCanHaveLhs )
+		{
+			SWYM.LogError(newOp.pos, "Expected: line break or ; before operator '"+newOp.text+"'");
 		}
 		else if ( curLhs && newOp.behaviour.precedence < minpriority && (!newOp.behaviour.leftAssociative || newOp.behaviour.precedence+1 < minpriority) )
 		{

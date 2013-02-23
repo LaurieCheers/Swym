@@ -137,6 +137,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 		return true;
 	}
 	
+	if( typeCheck.nativeType === "Void" )
+	{
+		return valueInfo.nativeType === "Void";
+	}
+	
 	if( valueInfo.multivalueOf !== undefined )
 	{
 		if( typeCheck.multivalueOf !== undefined )
@@ -337,6 +342,12 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	{
 		SWYM.LogError(errorContext, "Fsckup: cannot unify types with inconsistent multivaluedness");
 		return undefined;
+	}
+	
+	if( SWYM.TypeMatches(SWYM.VoidType, typeA) !== SWYM.TypeMatches(SWYM.VoidType, typeB) )
+	{
+		SWYM.LogError(errorContext, "An expression may not be sometimes void.");
+		return SWYM.VoidType;
 	}
 
 	if( !typeA || typeA.nativeType === "NoValues" )

@@ -70,7 +70,7 @@ SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.Stri
 SWYM.MutableArrayType = {type:"type", isMutable:true, argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"MutableArray"};
 
 SWYM.operators = {
-	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true,
+	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true, noImplicitSemicolon:true,
 		customCompile:function(node, cscope, executable)
 		{
 			if( node.children[1] )
@@ -89,7 +89,7 @@ SWYM.operators = {
 		}
 	},
 
-	";":  {precedence:1, infix:true, postfix:true,
+	";":  {precedence:1, infix:true, postfix:true, noImplicitSemicolon:true,
 		customCompile:function(node, cscope, executable)
 		{
 			if( node.children[1] )
@@ -170,7 +170,8 @@ SWYM.operators = {
 			return SWYM.VoidType;
 		}},
 	
-	",":  {precedence:20, infix:true, postfix:true, identity:function(){ return [] },
+	",":  {precedence:20, infix:true, postfix:true, noImplicitSemicolon:true,
+		identity:function(){ return [] },
 		customCompile:function(node, cscope, executable)
 		{
 			// compose a tree of comma operators into a single list expression.
@@ -365,6 +366,11 @@ SWYM.operators = {
 			{
 				// declare a constant
 				var valueType = SWYM.CompileNode(node.children[1], cscope, executable);
+				
+				if( SWYM.TypeMatches(SWYM.VoidType, valueType) )
+				{
+					SWYM.LogError(node, "Invalid declaration - can't store a Void value.");
+				}
 				
 				SWYM.CreateLocal( node.children[0].value, valueType, cscope, executable, node );
 				return valueType;
@@ -1106,7 +1112,7 @@ SWYM.operators = {
 		}
 	},
 
-	"else": { precedence:330, infix:true, standalone:true,
+	"else": { precedence:330, infix:true, standalone:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			if( !lhs && !rhs )
@@ -1128,7 +1134,7 @@ SWYM.operators = {
 		}
 	},
 	
-	"(": { precedence:330, takeCloseBracket:")", prefix:true, infix:true, debugText:"parenth",
+	"(": { precedence:330, takeCloseBracket:")", prefix:true, infix:true, debugText:"parenth", noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			if( !lhs )
@@ -1229,7 +1235,7 @@ SWYM.operators = {
 			}
 		}
 	},
-	"{": { precedence:330, takeCloseBracket:"}", prefix:true, infix:true, debugText:"curly",
+	"{": { precedence:330, takeCloseBracket:"}", prefix:true, infix:true, debugText:"curly", noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			if( !lhs )
@@ -1283,7 +1289,7 @@ SWYM.DefaultGlobalCScope =
 {
 	"true": SWYM.BakedValue(true),
 	"false": SWYM.BakedValue(false),
-	"void": SWYM.BakedValue(null),
+	"void": {type:"type", nativeType:"Void", debugName:"Void", baked:null},
 	
 	"Callable": SWYM.BakedValue(SWYM.CallableType),
 	"Type": SWYM.BakedValue(SWYM.TypeType),
@@ -1295,6 +1301,7 @@ SWYM.DefaultGlobalCScope =
 	"Number": SWYM.BakedValue(SWYM.NumberType),
 	"Int": SWYM.BakedValue(SWYM.IntType),
 	"Anything": SWYM.BakedValue(SWYM.AnyType),
+	"Void": SWYM.BakedValue(SWYM.VoidType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
@@ -1897,7 +1904,19 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 			executable.push(isLazy? "#LazyClosureCall": "#MultiClosureCall");
-			return SWYM.ToMultivalueType(SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]) ));
+			var resultType = SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]));
+			
+			// FIXME: subtle bug - if both arguments are quantifiers, and they were supplied in the opposite order,
+			// we ought to be processing them in the opposite order.
+			if( argTypes[0].multivalueOf )
+			{
+				resultType = SWYM.ToMultivalueType( resultType, argTypes[0].quantifier );
+			}
+			if( argTypes[1].multivalueOf )
+			{
+				resultType = SWYM.ToMultivalueType( resultType, argTypes[1].quantifier );
+			}
+			return resultType;
 		}
 	},
 	{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.CallableType} },

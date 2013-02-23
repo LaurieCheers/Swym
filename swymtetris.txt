@@ -8,8 +8,8 @@
 
 Int.'image' = case(this)
 {
-  EMPTY:image("gap.png"),
-  SOLID:image("earth.png")
+  EMPTY => image("gap.png"),
+  SOLID => image("earth.png")
 }
 
 // A Grid represents a 2D array of ints
@@ -76,7 +76,10 @@ GridCell.'isBlocked'
   || board.at(.x+pieceX, .y+pieceY) != EMPTY
 }
 
-Grid.'isBlocked' = .cells.where{.value == SOLID}.some{.isBlocked}
+Grid.'isBlocked'
+{
+  .cells.where{.value == SOLID}.some{.isBlocked}
+}
 
 'tetragrams' = [
   "*** "+
@@ -170,7 +173,7 @@ tick 'dt'->
         Int:'yRead' = board.h-1
         
         // time to delete some rows!
-        forEach(board.xCoords.reverse) 'yWrite'->
+        forEach(board.yCoords.reverse) 'yWrite'->
         {
           while{ yRead.in(filledRows) }
           {
