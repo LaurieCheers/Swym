@@ -2246,7 +2246,7 @@ Array.'#th' {.at(#-1)};\
 Table.'at'('key') = key.(this);\
 Table.'at'('key','else') = .if{ key.in(.keys) }{ .at(key) } else (else);\
 Array.'at'('key','else') = .if{key >=0 && key < .length}{.at(key)} else (else);\
-Array.'atEach'(Int.Array:'keys') = [ keys.each.if{>=0 && it<this.length}.(this) ];\
+Array.'atEach'(Int.Array:'keys') = [ this.at(keys.each~where{ .in(this.keys) }) ];\
 Array.'#st'('else') {.at(#-1) else(else)};\
 Array.'#nd'('else') {.at(#-1) else(else)};\
 Array.'#rd'('else') {.at(#-1) else(else)};\

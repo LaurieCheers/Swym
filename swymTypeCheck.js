@@ -132,7 +132,7 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 {
 	// Types are only undefined if there was an error earlier - in which case, we don't care.
-	if( !valueInfo || !typeCheck || typeCheck === valueInfo || valueInfo.nativeType === "NoValues" )
+	if( !valueInfo || !typeCheck || typeCheck === valueInfo )
 	{
 		return true;
 	}
@@ -140,6 +140,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 	if( typeCheck.nativeType === "Void" )
 	{
 		return valueInfo.nativeType === "Void";
+	}
+	
+	if( valueInfo.nativeType === "NoValues" )
+	{
+		return true;
 	}
 	
 	if( valueInfo.multivalueOf !== undefined )
