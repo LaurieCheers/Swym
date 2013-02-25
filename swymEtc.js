@@ -324,10 +324,10 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		return rightTerm;
 	}
 	
-	if( rightTerm.type === "node" )
+	if( rightTerm.type === "node" || rightTerm.type === "fnnode" )
 	{
 		// parentheses have no effect and can be ignored
-		if( rightTerm.op.text === "(parentheses())" )
+		if( rightTerm.op && rightTerm.op.text === "(parentheses())" )
 		{
 			return SWYM.MergeEtc(leftTerm, rightTerm.children[0], nth, etcId);
 		}
@@ -352,12 +352,28 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 				newChildren[Idx] = SWYM.MergeEtc(leftTerm, rightTerm.children[Idx], nth, etcId);
 			}
 //			newChildren[BestIdx] = SWYM.MergeEtc(leftTerm, rightTerm.children[BestIdx], nth, etcId);
-			return {type:"node",
+			if( rightTerm.type === "node" )
+			{
+				return {type:"node",
+					pos:rightTerm.pos,
+					identity:rightTerm.identity,
 					text:rightTerm.text,
 					op:rightTerm.op,
 					children:newChildren,
 					etcExpandAround:BestIdx,
 					etcId:etcId};
+			}
+			else // rightTerm.type === "fnnode"
+			{
+				return {type:"fnnode",
+					pos:rightTerm.pos,
+					identity:rightTerm.identity,
+					name:rightTerm.name,
+					argNames:rightTerm.argNames,
+					children:newChildren,
+					etcExpandAround:BestIdx,
+					etcId:etcId};
+			}
 		}
 	}
 
@@ -386,7 +402,13 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		return parsetree;
 	
 	var collected = {op:etcOp, examples:[], afterEtc:false, finalExample:[]};
-	SWYM.CollectEtcRec(parsetree, collected);
+	
+	if( parsetree.children[1] !== undefined )
+	{
+		collected.finalExample.push(parsetree.children[1]);
+	}
+	
+	SWYM.CollectEtcRec(parsetree.children[0], collected);
 	
 	if( collected.examples.length < 1 || collected.examples.length > 4 )
 	{
@@ -399,7 +421,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	}
 	else if (etcOp.etc !== 'etc' && collected.finalExample.length !== 1)
 	{
-		SWYM.LogError(parsetree.pos, "Fsckup: Invalid number of terms for "+etcOp.etc+" expression (should have exactly 1, got "+collected.finalExample.length+")");
+		SWYM.LogError(parsetree.pos, "Fsckup: Invalid number of final examples for "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
 	}
 	else
 	{
@@ -425,7 +447,7 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 {
 	if( !parsetree )
 		return;
-
+		
 	if( (parsetree.type === "node" && parsetree.op.text === resultSoFar.op.text) ||
 		(resultSoFar.op.type === "fnnode" && parsetree.name === resultSoFar.op.name))
 	{
@@ -454,11 +476,6 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	else if ( resultSoFar.stopCollecting )
 	{
 		SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
-	}
-	else if ( resultSoFar.afterEtc )
-	{
-		resultSoFar.finalExample.push(parsetree);
-		resultSoFar.stopCollecting = true;
 	}
 	else
 	{

@@ -1306,7 +1306,8 @@ SWYM.DefaultGlobalCScope =
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
-	
+
+	// overloadable operators:
 	"fn#+":
 	[{
 		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
@@ -2393,6 +2394,8 @@ Array.Array.'Struct' = array(product[.each.length]) 'idx'->\n\
 {\n\
   [ this.structElements(idx) ]\n\
 };\
+Array.'no' = yield .none;\
+Array.'oneOrMore' = yield .some;\
 Array.'all'('body') = [.all.(body)];\
 Array.'some'('body') = [.some.(body)];\
 Array.'none'('body') = [.none.(body)];\

@@ -577,8 +577,11 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 			var etcInitializer = executable[PC+4];
 			var etcComposer = executable[PC+5];
 			var etcPostProcessor = executable[PC+6];
+			var etcHaltExecutable = executable[PC+7];
+			var etcHaltTest = executable[PC+8];
 
-			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
+			var limitTimes = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
+			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
 			var newRScope = object(rscope);
 			var etcData = {index:0};
@@ -588,7 +591,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 			SWYM.g_etcState.depth++;
 			SWYM.g_etcState.halt = false;
 
-			for( var etcIndex = 0; etcIndex < limit; ++etcIndex )
+			for( var etcIndex = 0; etcIndex < limitTimes; ++etcIndex )
 			{
 				etcData.index = etcIndex;
 				var nextResult = SWYM.ExecWithScope("EtcBody", etcBodyExecutable, newRScope, []);
@@ -598,8 +601,11 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 					newRScope["<prevEtc>"] = nextResult;
 					etcBodyExecutable = etcStepExecutable;
 				}
-
+				
 				if( SWYM.g_etcState.halt )
+					break;
+				
+				if( etcHaltTest && etcHaltTest(nextResult, haltValue) )
 					break;
 
 				etcResult = etcComposer( etcResult, nextResult );
@@ -616,7 +622,7 @@ SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
 			SWYM.g_etcState.halt = false;
 			SWYM.g_etcState.depth--;
 			stack.push( etcPostProcessor(etcResult) );
-			PC += 7;
+			PC += 9;
 			break;
 			
 		case "#EtcSequence":

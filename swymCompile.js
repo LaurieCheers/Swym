@@ -2066,13 +2066,21 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		// Hack: to prevent infinite loops, etc is not allowed to repeat more than 1000 times.
 		var limitTimes = ["#Literal", 1000];
 	}
-	
-/*	if( parsetree.op.etc === "etc..<" )
+
+	var haltExecutable = [];
+	SWYM.CompileNode(parsetree.rhs, cscope, haltExecutable);
+
+	var haltCondition;
+	if( parsetree.op.etc === "etc..<" )
 	{
-		shouldHalt = function(
+		haltCondition = function(value, haltValue){ return value >= haltValue; }
+	}
+	else if( parsetree.op.etc === "etc.." )
+	{
+		haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
 	}
 
-	if( haltCondition )
+/*	if( haltCondition )
 	{
 		var baseComposer = composer;
 		if( haltAfter )
@@ -2089,9 +2097,11 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	executable.push(limitTimes);
 	executable.push(etcExecutable);
 	executable.push(stepExecutable);
-	executable.push(initialValue); // initial value
+	executable.push(initialValue);
 	executable.push(composer);
 	executable.push(postProcessor);
+	executable.push(haltExecutable);
+	executable.push(haltCondition);
 	return returnType;
 }
 
