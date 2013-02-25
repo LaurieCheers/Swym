@@ -271,8 +271,8 @@ function runAllTests()
   runTest("[[1..4],[1..3],[1..5]].{.min{.length}, .max{.length}}", "[1..3]\n[1..5]");
   runTest("[[1..4],[2..4],[1..2],[2..5],[2..3],[1..3]].{.whereMin{.length}, .whereMax{.length}}", "[[1,2],[2,3]]\n[[1..4],[2..5]]");
   runTest("\"He1Lo\".{.uppercase,.lowercase}", "\"HE1LO\"\n\"he1lo\"");
-  runTest("[10..1].whereKey{.in[3,4,7]}", "[7,6,3]");
-  runTest("[10..1].whereKey{it>5}", "[4,3,2,1]");
+  runTest("[10..1].whereIndex{.in[3,4,7]}", "[7,6,3]");
+  runTest("[10..1].whereIndex{it>5}", "[4,3,2,1]");
   runTest("10.is{it>6}, 6.is{it>6}, 10.in[5..9], 6.in[5..9]", "true\nfalse\nfalse\ntrue");
   runTest("[1..3].reverse", "[3,2,1]");
   runTest("\"Hello\".reverse", "\"olleH\"");

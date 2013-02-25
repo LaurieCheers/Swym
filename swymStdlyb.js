@@ -2245,9 +2245,10 @@ Array.'#nd' {.at(#-1)};\
 Array.'#rd' {.at(#-1)};\
 Array.'#th' {.at(#-1)};\
 Table.'at'('key') = key.(this);\
-Table.'at'('key','else') = .if{ key.in(.keys) }{ .at(key) } else (else);\
+Table.'at'('key','else') = .if{ key.in(.indices) }{ .at(key) } else (else);\
 Array.'at'('key','else') = .if{key >=0 && key < .length}{.at(key)} else (else);\
-Array.'atEach'(Int.Array:'keys') = [ this.at(keys.each~where{ .in(this.keys) }) ];\
+Array.'atEach'(Int.Array:'indices') = [ this.at(indices.each~where{ .in(this.indices) }) ];\
+Array.'indices' = [0..<.length];\
 Array.'#st'('else') {.at(#-1) else(else)};\
 Array.'#nd'('else') {.at(#-1) else(else)};\
 Array.'#rd'('else') {.at(#-1) else(else)};\
@@ -2266,14 +2267,14 @@ Anything.'print' = output($this);\
 Anything.'println' = output(\"$this\\n\");\
 Anything.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
-'Cell' = Struct{'key','context'};\
-Cell.'value' = .context.at(.key);\
-Cell.'set'('equals') = .context.set(.key)=equals;\
-Cell.'next' = Cell.new(.key+1, .context);\
-Cell.'previous' = Cell.new(.key-1, .context);\
-Table.'cells' = array(.keys.length) 'key'->{ Cell.new(this.keys.at(key), this) };\
-Cell.Array.'table' = table[.each.key](.1st.context);\
-Cell.Array.'cellKeys' = [.each.key];\
+'Cell' = Struct{'index','array'};\
+Cell.'value' = .array.at(.index);\
+Cell.'value'('equals') = .array.at(.index)=equals;\
+Cell.'nextCell' = Cell.new(.index+1, .array);\
+Cell.'previousCell' = Cell.new(.index-1, .array);\
+Array.'cells' = array(.length) 'idx'->{ Cell.new(idx, this) };\
+Cell.Array.'table' = table[.each.index](.1st.array);\
+Cell.Array.'cellIndices' = [.each.indices];\
 Cell.Array.'cellValues' = [.each.value];\
 Array.'each'('fn') = [.each.(fn)];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
@@ -2287,9 +2288,9 @@ Array.'contains'(Block:'test') = .1st.(test) || .2nd.(test) || etc;\
 Array.'where'('test') = forEach(this){ .if(test) };\
 Array.'where'('test')('body') = forEach(this){ .if(test)(body) else {novalues}  };\
 Array.'where'('test', 'body', 'else') = forEach(this){ .if(test)(body) else (else) };\
-Array.'whereKey'('test') = forEach(.keys){ .if(test)(this) else {novalues} };\
-Array.'whereKey'('test', 'body') = forEach(.keys){ .if(test){.(this).(body)} else {novalues} };\
-Array.'whereKey'('test', 'body', 'else') = forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} };\
+Array.'whereIndex'('test') = forEach(.indices){ .if(test)(this) else {novalues} };\
+Array.'whereIndex'('test', 'body') = forEach(.indices){ .if(test){.(this).(body)} else {novalues} };\
+Array.'whereIndex'('test', 'body', 'else') = forEach(.indices){ .if(test){.(this).(body)} else {.(this).(else)} };\
 Array.'starting'(Int:'n') = .atEach[0..<n];\
 Array.'ending'(Int:'n') = .atEach[ (.length-n).clamp(min=0) ..< .length];\
 Array.'slice'(Int:'start') = .atEach[start ..< .length];\
@@ -2310,11 +2311,11 @@ Array.'trimEnd'(Int:'n') = .atEach[0 ..< .length-n];\
 Array.'startsWith'(Array:'list') = .length >= list.length && .starting(list.length) == list;\
 Array.'endsWith'(Array:'list') = .length >= list.length && .ending(list.length) == list;\
 Array.'splitAt'(Int:'n') = [ .slice(end=n), .slice(start=n) ];\
-Array.'splitAt'(Int.Array:'keys') = [0, keys.each, .length].{[this.slice(start=.1st, end=.2nd), this.slice(start=.2nd, end=.3rd), etc]};\
-Cell.Array.'split' = .1st.context.splitAt(.cellKeys);\
+Array.'splitAt'(Int.Array:'indices') = [0, indices.each, .length].{[this.slice(start=.1st, end=.2nd), this.slice(start=.2nd, end=.3rd), etc]};\
+Cell.Array.'split' = .1st.context.splitAt(.cellIndices);\
 Array.'splitWhere'(Callable:'test') = .cells.where{.value.(test)}.split;\
-Array.'splitOut'(Int.Array:'keys') = [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]};\
-Cell.Array.'splitOut' = .1st.context.splitOut(.cellKeys);\
+Array.'splitOut'(Int.Array:'indices') = [-1, indices.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]};\
+Cell.Array.'splitOut' = .1st.context.splitOut(.cellIndices);\
 Array.'splitOutWhere'(Callable:'test') = .cells.where{.value.(test)}.splitOut;\
 Array.'splitAtEnd'(Int:'n') = [ .slice(trimEnd=n), .ending(n) ];\
 Array.'tail' = .atEach[1 ..< .length];\
