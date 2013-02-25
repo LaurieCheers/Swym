@@ -42,6 +42,7 @@ SWYM.NextClassID = 8001;
 SWYM.initStdlyb = function() {
 
 SWYM.AnyType = {type:"type", debugName:"Anything"};
+SWYM.DontCareType = {type:"type", nativeType:"NoValues", debugName:"DontCare"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
@@ -1301,6 +1302,7 @@ SWYM.DefaultGlobalCScope =
 	"Number": SWYM.BakedValue(SWYM.NumberType),
 	"Int": SWYM.BakedValue(SWYM.IntType),
 	"Anything": SWYM.BakedValue(SWYM.AnyType),
+	"DontCare": SWYM.BakedValue(SWYM.DontCareType),
 	"Void": SWYM.BakedValue(SWYM.VoidType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
@@ -1624,7 +1626,7 @@ SWYM.DefaultGlobalCScope =
 	"fn#if":
 	[{
 		expectedArgs:{
-			"this":{index:0},
+			"this":{index:0, typeCheck:SWYM.DontCareType},
 			"test":{index:1, typeCheck:SWYM.CallableType},
 			"then":{index:2, typeCheck:SWYM.CallableType},
 			"else":{index:3, typeCheck:SWYM.CallableType}
@@ -1881,7 +1883,7 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 
-	"fn#do":[{  expectedArgs:{ "this":{index:0}, "fn":{index:1, typeCheck:SWYM.CallableType}},
+	"fn#do":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.DontCareType}, "fn":{index:1, typeCheck:SWYM.CallableType}},
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, argExecutables)
 		{
@@ -2279,8 +2281,8 @@ Cell.Array.'cellValues' = [.each.value];\
 Array.'each'('fn') = [.each.(fn)];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
 'forEach_lazy'('list')('fn') = array(length=.length){ list.at(it).(fn) };\
-'if'(Bool:'cond', 'then', 'else') = 404.if{ cond }{ do(then) } else { do(else) };\
-'if'(Bool:'cond', 'then') = 404.if{ cond }{ do(then) } else {};\
+'if'(Bool:'cond', 'then', 'else') = void.if{ cond }{ do(then) } else { do(else) };\
+'if'(Bool:'cond', 'then') = void.if{ cond }{ do(then) } else {};\
 Anything.'if'(Callable:'test', 'then') = .if(test)(then) else {it};\
 Anything.'if'(Callable:'test', 'else') = .if(test){it} else (else);\
 Anything.'if'(Callable:'test') = .if(test){it} else {novalues};\

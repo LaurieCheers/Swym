@@ -382,11 +382,6 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		var inputExecutable = [];
 		var inputArgName = argNames[Idx];
 		var inputType = SWYM.CompileNode( args[inputArgName], cscope, inputExecutable );
-
-		if( SWYM.TypeMatches(SWYM.VoidType, inputType) )
-		{
-			SWYM.LogError(args[inputArgName], "Got a Void argument ("+inputArgName+") while calling '"+fnName+"'");
-		}
 		
 		if( inputType && inputType.multivalueOf !== undefined )
 		{
@@ -570,9 +565,15 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 		var inputArgName = inputArgNameList[expectedArgIndex];
 		if( inputArgName !== undefined ) // undefined = default parameter
 		{
-			var expectedArgTypeCheck = theFunction.expectedArgs[expectedArgName].typeCheck;
-			if( expectedArgTypeCheck && inputArgTypes[inputArgName] )
+			if( inputArgTypes[inputArgName] )
 			{
+				var expectedArgTypeCheck = theFunction.expectedArgs[expectedArgName].typeCheck;
+
+				if( !expectedArgTypeCheck )
+				{
+					expectedArgTypeCheck = SWYM.AnyType;
+				}
+
 				overloadResult.typeChecks[inputArgName] = expectedArgTypeCheck;
 				if( !SWYM.TypeMatches(expectedArgTypeCheck, inputArgTypes[inputArgName]) )
 				{
@@ -1278,8 +1279,6 @@ SWYM.CScopeRedirect = function(cscope, argName)
 	return argName;
 }
 
-SWYM.NextArgTypeID = 501;
-
 SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 {
 	var debugName = SWYM.GetSource(braceNode.op.pos, braceNode.op.endSourcePos+1);
@@ -1317,7 +1316,7 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 	// TODO: if the argtype is declared explicitly, we could do the compile now
 	if( braceNode.children[1] === undefined )
 	{
-		SWYM.GetOutType(closureType, SWYM.AnyType);
+		SWYM.GetOutType(closureType, SWYM.DontCareType);
 	}
 	
 	return closureType;
@@ -1330,46 +1329,50 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	var cscope = compileBlock.cscope;
 	var executableBlock = compileBlock.executableBlock;
 	
-	var innerCScope = object(cscope);
+	var innerCScope;
 	var bodyExecutable = [];
-
-	var argTypeID = SWYM.NextArgTypeID;
-	SWYM.NextArgTypeID++;
-
-//	var argType = {type:"value", canConstrain:true, template:["@ArgType", argTypeID]};  //FIXME: handle arg type declarations
-	var argName;
-
-	if( !argNode )
+	
+	if( SWYM.TypeMatches(SWYM.VoidType, argType) )
 	{
-		argName = "it";
-		innerCScope["__default"] = {redirect:"it"};
-	}
-	else if( argNode.type === "decl" )
-	{
-		argName = argNode.value;
-		innerCScope["__default"] = undefined;
-		innerCScope["it"] = undefined;
-	}
-	else if ( argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
-	{
-		// destructuring an array/table arg
-		argName = "~arglist~";
-		bodyExecutable.push("#Load");
-		bodyExecutable.push("~arglist~");
-
-		SWYM.CompileDeconstructor(argNode, cscope, bodyExecutable, argType);
-
-		bodyExecutable.push("#Pop");
-		
-		//argType = {type:"swymObject", ofClass:SWYM.ArrayClass, outType:{type:"value", canConstrain:true}};
+		innerCScope = cscope;
 	}
 	else
 	{
-		SWYM.LogError(argNode, "Don't understand argument name "+argNode);
-		return {type:"novalues"};
+		var innerCScope = object(cscope);
+		var argName;
+
+		if( !argNode )
+		{
+			argName = "it";
+			innerCScope["__default"] = {redirect:"it"};
+		}
+		else if( argNode.type === "decl" )
+		{
+			argName = argNode.value;
+			innerCScope["__default"] = undefined;
+			innerCScope["it"] = undefined;
+		}
+		else if ( argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
+		{
+			// destructuring an array/table arg
+			argName = "~arglist~";
+			bodyExecutable.push("#Load");
+			bodyExecutable.push("~arglist~");
+
+			SWYM.CompileDeconstructor(argNode, cscope, bodyExecutable, argType);
+
+			bodyExecutable.push("#Pop");
+			
+			//argType = {type:"swymObject", ofClass:SWYM.ArrayClass, outType:{type:"value", canConstrain:true}};
+		}
+		else
+		{
+			SWYM.LogError(argNode, "Don't understand argument name "+argNode);
+			return {type:"novalues"};
+		}
+		
+		innerCScope[argName] = argType;
 	}
-	
-	innerCScope[argName] = argType;
 
 	var returnType = SWYM.CompileNode(node, innerCScope, bodyExecutable);
 	
@@ -1378,25 +1381,6 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 
 	//TODO: Blocks will probably want more members, such as "parseTree".
 	return {type:"type", argType:argType, outType:returnType, baked:executableBlock};
-
-//	argType.canConstrain = false;
-
-//	var finalArgType = SWYM.selectiveClone(argType, ["type", "elementType", "argType", "argTypeID", "returnType", "classID", "classIDs"]);
-
-	// FIXME: for now, all closures return a multivalue. (Horrible.)
-//	if( !returnType || !returnType.multivalue )
-//	{
-//		bodyExecutable.push("#SingletonArray");
-//		returnType = SWYM.ToMultivalueType(returnType);
-//	}
-
-	// FIXME: be smart about what variables are closed over, instead of grabbing the whole scope. (not just a nice-to-have: prevents memory leaks!)
-
-//	var debugText = ""+node;
-//	executable.push("#Closure");
-//	executable.push({debugName:debugText, argName:argName, body:bodyExecutable});
-	
-//	return SWYM.ToClosureType(finalArgType, argTypeID, returnType);
 }
 
 SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureExecutable, cscope, executable)

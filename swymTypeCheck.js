@@ -99,6 +99,11 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 		}
 	}
 	
+	if( value === null )
+	{
+		return false;
+	}
+	
 	if( value.type === "jsArray" )
 	{		
 		if( typeCheck.outType !== undefined )
@@ -132,7 +137,7 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 {
 	// Types are only undefined if there was an error earlier - in which case, we don't care.
-	if( !valueInfo || !typeCheck || typeCheck === valueInfo )
+	if( !valueInfo || !typeCheck || typeCheck === valueInfo || typeCheck.nativeType === "NoValues" )
 	{
 		return true;
 	}
