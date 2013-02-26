@@ -2396,7 +2396,13 @@ Array.'structElements'('idx')\n\
 Array.Array.'Struct' = array(product[.each.length]) 'idx'->\n\
 {\n\
   [ this.structElements(idx) ]\n\
-};\
+};\n\
+Array.'slices' =\n\
+[\n\
+  .slice(start=0..<.length-0, length=1),\n\
+  .slice(start=0..<.length-1, length=2),\n\
+  etc\n\
+];\n\
 Array.'no' = yield .none;\
 Array.'oneOrMore' = yield .some;\
 Array.'all'('body') = [.all.(body)];\

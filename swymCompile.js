@@ -2014,12 +2014,17 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		case ",":
 			postProcessor = function(list){ return SWYM.jsArray(list); };
-			returnType = SWYM.ToMultivalueType(bodyType);
 			
 			if( bodyType && bodyType.multivalueOf !== undefined )
+			{
 				composer = function(list, v){ SWYM.ConcatInPlace( list, v ); return list; };
+				returnType = bodyType;
+			}
 			else
+			{
 				composer = function(list, v){list.push(v); return list;};
+				returnType = SWYM.ToMultivalueType(bodyType);
+			}
 			break;
 
 		case "&&":
