@@ -868,68 +868,90 @@ SWYM.jsArray = function(array)
 		else
 			SWYM.ReportOutOfBounds(this,index);
 	};
+	array.keys = SWYM.indexArray(array.length);
 	return array;
 }
 
-SWYM.rangeArray = function(base, length)
-{
-	if( base === 0 )
+SWYM.indexArrayBase = {
+	type:"rangeArray",
+	first:0,
+	contains:function(value)
 	{
-		var result = {
-			type:"rangeArray",
-			length:length,
-			contains:function(value)
-			{
-				return value >= 0 && value < length && value%1==0;
-			},
-			run:function(index)
-			{
-				if( index >= 0 && index < length )
-					return index;
-				else
-					SWYM.ReportOutOfBounds(this, index);
-			}
-		}
-		
-		result.keys = result; // for the special case base = 0, the array is its own keys
-		return result;
+		return value >= 0 && value < this.length && value%1==0;
+	},
+	run:function(index)
+	{
+		if( index >= 0 && index < this.length )
+			return index;
+		else
+			SWYM.ReportOutOfBounds(this, index);
+	}
+};
+
+SWYM.rangeArrayBase = {
+	type:"rangeArray",
+	contains:function(value)
+	{
+		return value >= this.first && value <= this.last && value%1==0;
+	},
+	run:function(index)
+	{
+		if( index >= 0 && index < this.length )
+			return this.first+index;
+		else
+			SWYM.ReportOutOfBounds(this, index);
+	}
+};
+
+SWYM.indexArray = function(length)
+{
+	var indexArray = object(SWYM.indexArrayBase);
+	indexArray.length = length;
+	indexArray.last = length-1;
+	indexArray.keys = indexArray; // an index array is its own keys!
+	return indexArray;
+}
+
+SWYM.rangeArray = function(first, last)
+{
+	if( first === 0 )
+	{
+		return SWYM.indexArray(last+1);
+	}
+	else
+	{
+		var rangeArray = object(SWYM.rangeArrayBase);
+		rangeArray.length = 1+last-first;
+		rangeArray.first = first;
+		rangeArray.last = last;
+		rangeArray.keys = SWYM.indexArray(1+last-first);
+		return rangeArray;
+	}
+}
+
+SWYM.StringWrapper = function(str, isChar)
+{
+	if( str === undefined )
+	{
+		return undefined;
 	}
 	else
 	{
 		return {
-			type:"rangeArray",
-			length:length,
-			contains:function(value)
+			type:"string",
+			run: function(index)
 			{
-				return value >= base && value < base+length && value%1==0;
-			},
-			run:function(index)
-			{
-				if( index >= 0 && index < this.length )
-					return base+index;
+				if(index >= 0 && index < str.length)
+					return SWYM.StringWrapper(this.data[index], true);
 				else
 					SWYM.ReportOutOfBounds(this, index);
-			}
-		}
+			},
+			length:str.length,
+			keys:SWYM.indexArray(str.length),
+			isChar: isChar?isChar:false,
+			data:str
+		};
 	}
-}
-
-SWYM.StringWrapper = function(str)
-{
-	if( str === undefined )
-		return undefined;
-	else
-		return {type:"string",
-      run: function(index)
-      {
-        if(index >= 0 && index < str.length)
-          return SWYM.StringWrapper(this.data[index]);
-        else
-          SWYM.ReportOutOfBounds(this, index);
-      },
-      length:str.length,
-      data:str
-    };
 }
 
 SWYM.ReportOutOfBounds = function(array, index)
@@ -1124,7 +1146,7 @@ SWYM.ClosureCall = function(closure, arg)
 }
 
 SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
-{	
+{
 	if( forceStep !== undefined )
 		var step = forceStep;
 	else if ( start < end )
@@ -1137,16 +1159,15 @@ SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
 	else
 		var current = start+step;
 
-  if( step === 1 )
-  {
-    var length = end-current;
-    if( includeEnd )
-      length++;
-    
-    return SWYM.rangeArray(current, length);
-  }
+	if( step === 1 )
+	{
+		if( includeEnd )
+			return SWYM.rangeArray(current, end);
+		else
+			return SWYM.rangeArray(current, end-1);
+	}
 
-	var result = SWYM.jsArray([]);
+	var result = [];
 	if( step > 0 )
 	{
 		while( current < end )
@@ -1166,30 +1187,36 @@ SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
 	
 	if( includeEnd )
 		result.push(end);
-	return result;
+	return SWYM.jsArray(result);
 }
 
-SWYM.IsEqual = function(a,b)
+SWYM.IsEqual = function(a,b, exact)
 {
+	if( a === b )
+		return true;
+
 	if( !a || !b )
 		return a === b;
+		
+	if( exact && (a.type !== b.type || a.isChar !== b.isChar) )
+		return false;
 
 	if( a.type === "string" && b.type === "string" )
-		return a.data === b.data;
+		return a.data === b.data;	
 		
 	// 0-length strings/arrays are equal
 	if( a.length === 0 && b.length === 0 )
 		return true;
 
-	if( a.type !== "jsArray" || b.type !== "jsArray" )
+	if( a.run === undefined || a.length === undefined || b.run === undefined || b.length === undefined )
 		return a === b;
 	
-	if( a.type !== b.type || a.length !== b.length )
+	if( a.length !== b.length )
 		return false;
 		
 	for( var Idx = 0; Idx < a.length; ++Idx )
 	{
-		if (!SWYM.IsEqual(a[Idx], b[Idx]) )
+		if (!SWYM.IsEqual(a.run(Idx), b.run(Idx), exact) )
 			return false;
 	}
 	
@@ -1453,13 +1480,58 @@ SWYM.ToDebugString = function(value, loopBreaker)
 	
 	switch(value.type)
 	{
+		case "novalues":
+			return "<no_values>";
 		case "variable":
 			return "var("+SWYM.ToDebugString(value.getter? value.getter(): value.value, loopBreaker+1)+")";
 			//return SWYM.ToDebugString(value.getter? value.getter(): value.value);
 		case "string":
-			return '"'+value.data+'"';
-		case "novalues":
-			return "<no_values>";
+			if( value.debugString !== undefined )
+			{
+				return value.debugString;
+			}
+			
+			var numBrackets = 0;
+			for( var Idx = 0; Idx < value.data.length; Idx++ )
+			{
+				if( value.data[Idx] === "\"" || value.data[Idx] === "\\" || value.data[Idx] === "\n")
+				{
+					// it needs brackets
+					numBrackets = 1;
+					break;
+				}
+			}
+			
+			for( var Idx = 1; Idx < value.data.length; Idx++ )
+			{
+				if( value.data[Idx] === ">" && value.data[Idx-1] === "\"" )
+				{
+					numBrackets = 2;
+					Idx++;
+					for( ; Idx < value.data.length; Idx++ )
+					{
+						if( value.data[Idx] === ">" )
+						{
+							numBrackets++;
+						}
+						else
+						{
+							Idx--;
+							break;
+						}
+					}
+				}
+			}
+
+			var debugString = '"'+value.data+'"';
+			while( numBrackets > 0 )
+			{
+				debugString = "<"+debugString+">";
+				numBrackets--;
+			}
+			value.debugString = debugString;
+			return debugString;
+			
 		case "jsArray":
 			if( value.length === 0 )
 				return "[]";
@@ -1545,11 +1617,11 @@ SWYM.ToDebugString = function(value, loopBreaker)
 			if( value.length === 0 )
 				return "[]";
 			else if( value.length === 1 )
-				return "["+value.run(0)+"]";
+				return "["+value.first+"]";
 			else if( value.length === 2 )
-				return "["+value.run(0)+","+value.run(1)+"]";
+				return "["+value.first+","+value.last+"]";
 			else
-				return "["+value.run(0)+".."+value.run(value.length-1)+"]";
+				return "["+value.first+".."+value.last+"]";
 		}
 
 		default:

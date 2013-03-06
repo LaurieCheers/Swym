@@ -8,11 +8,13 @@ SWYM.NextClassID = 8001;
 // The .run functions are only used to identify whether a run-time object is valid.
 // At compile time we require type IDs to tell us what is a subtype of what.
 //
-//                         Anything
-//        +-----------+-------+-------+-------+------+----------+----------+
-//      Type        Array   Block   Table   Number  Bool  <structinst> <enuminst>
-//   +----+---+       |                       |
-// Struct    Enum   String                   Int
+//             DontCare
+//    +-----------+----------+
+//  Void                  Anything
+//          +-----------+-------+-------+-------+------+----------+----------+
+//        Type        Array   Block   Table   Number  Bool  <structinst> <enuminst>
+//     +----+---+       |                       |
+// Struct      Enum   String                   Int
 //
 // Interesting issue - do we need two root objects, one for callables and one for noncallables?
 // Is Array a subtype of Table? They're basically compatible, except arrays renumber their keys; tables never do. :-/
@@ -22,9 +24,13 @@ SWYM.NextClassID = 8001;
 // Maybe StructType (and EnumType) should match struct types, and Struct should match all instances of all StructTypes.
 // maybe defining Struct as a type at all would just cause confusion and be useless in practise.
 // Can you say Bool.values (or the equivalent for any given enum) to get the list of possible values?
-// Is every enum type actually an instance of a struct, to allow you to go "Color.RED" or whatever? Careful -
-// that means any function you can call on all enums (such as .values), or on all types, will conflict with
-// enum value names! A good reason to encourage enum value names to be all caps.
+// Is every enum type actually an instance of a struct, to allow you to go "Color.RED" or whatever?
+// Actually, that only requires a function Color.Literal.'RED' - no data storage required.
+// Careful - that means any function you can call on all enums (such as .values), or on all types, will conflict
+// with enum value names!
+// That's a good reason to be careful with functions you can call on all types, yes. Enum elements
+// do not conflict with it more than any other function name.
+// A good reason to encourage enum value names to be all caps?
 // Do we even have/want subtypes? What if we just do mixins for everything?
 
 // predefined mixins: GreaterThan, GreaterThanOrEq, LessThan, LessThanOrEq, MultipleOf,
@@ -49,26 +55,33 @@ SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
 SWYM.IntType = {type:"type", nativeType:"Number", multipleOf:1, debugName:"Int"};
 SWYM.VoidType = {type:"type", nativeType:"Void", debugName:"Void"};
 SWYM.TypeType = {type:"type", nativeType:"Type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Type"};
-SWYM.StringCharType = {type:"type", nativeType:"String", argType:SWYM.IntType, memberTypes:{"length":SWYM.BakedValue(1)}, debugName:"StringChar"};
+
+SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Array(Int)"};
+SWYM.IntArrayType.memberTypes["keys"] = SWYM.IntArrayType;
+
+SWYM.StringCharType = {type:"type", nativeType:"String", argType:SWYM.IntType, memberTypes:{"length":SWYM.BakedValue(1), "keys":SWYM.IntArrayType, "isChar":SWYM.BakedValue(true)}, debugName:"StringChar"};
 SWYM.StringCharType.outType = SWYM.StringCharType;
-SWYM.VariableType = {type:"type", nativeType:"Variable", contentsType:SWYM.NoValuesType, debugName:"Var"};
 
-SWYM.NativeArrayType = {type:"type", nativeType:"JSArray", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"NativeArray"};
+SWYM.VariableType = {type:"type", nativeType:"Variable", contentsType:SWYM.DontCareType, debugName:"Var"};
+
+SWYM.NativeArrayType = {type:"type", nativeType:"JSArray", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"NativeArray"};
 SWYM.NativeTableType = {type:"type", nativeType:"JSObject", argType:SWYM.StringType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"NativeTable"};
-SWYM.NativeStringType = {type:"type", nativeType:"String", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"NativeString"};
+SWYM.NativeStringType = {type:"type", nativeType:"JSString", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"NativeString"};
 
-SWYM.NoValuesType = {type:"type", nativeType:"NoValues", debugName:"NoValues"};
-SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"Array"};
-SWYM.TableType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Table"}; // fixme: needs "keys" member type.
-SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"String"};
-SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Callable"};
-SWYM.BlockType = {type:"type", argType:SWYM.NoValuesType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
+SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"Array"};
+SWYM.TableType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Table"}; // fixme: needs "keys" member type.
+SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"String"};
+SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Callable"};
+SWYM.BlockType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
 SWYM.PredicateType = {type:"type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Predicate"};
-SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Int.Array"};
-SWYM.NumberArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.NumberType, memberTypes:{"length":SWYM.IntType}, debugName:"Number.Array"};
-SWYM.StringArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringType, memberTypes:{"length":SWYM.IntType}, debugName:"String.Array"};
-SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType}, debugName:"StringChar.Array"};
-SWYM.MutableArrayType = {type:"type", isMutable:true, argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType}, debugName:"MutableArray"};
+SWYM.NumberArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.NumberType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"Number.Array"};
+SWYM.StringArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"String.Array"};
+SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"StringChar.Array"};
+SWYM.MutableArrayType = {type:"type", isMutable:true, argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"MutableArray"};
+SWYM.RangeArrayType = {type:"type", nativeType:"RangeArray", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"RangeArray"};
+
+SWYM.MultivalueRangeType = SWYM.ToMultivalueType(SWYM.IntType);
+SWYM.MultivalueRangeType.nativeType = "RangeArray";
 
 SWYM.operators = {
 	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true, noImplicitSemicolon:true,
@@ -93,16 +106,49 @@ SWYM.operators = {
 	";":  {precedence:1, infix:true, postfix:true, noImplicitSemicolon:true,
 		customCompile:function(node, cscope, executable)
 		{
-			if( node.children[1] )
+			// optimized to reduce stack size, making stdlyb easier to debug
+			var pending = [];
+			var current;
+
+			if( node.children[1] !== undefined ) 
 			{
-				SWYM.CompileNode(node.children[0], cscope, executable);
-				executable.push( "#ClearStack" );
-				return SWYM.CompileNode(node.children[1], cscope, executable);
+				pending.push(node.children[1]);
 			}
-			else
+			if( node.children[0] !== undefined ) 
 			{
-				return SWYM.CompileNode(node.children[0], cscope, executable);
+				pending.push(node.children[0]);
 			}
+			
+			current = pending.pop();
+			
+			var returnType;
+
+			while( current !== undefined )
+			{
+				if( current.op && current.op.text === ";" )
+				{	
+					if( current.children[1] !== undefined )
+					{
+						pending.push(current.children[1]);
+					}
+					current = current.children[0];
+				}
+				else
+				{
+					var oldLength = executable.length;
+					returnType = SWYM.CompileNode(current, cscope, executable);
+
+					if( executable.length > oldLength && executable[executable.length-1] !== "#ClearStack" &&
+						pending.length > 0 )
+					{
+						executable.push( "#ClearStack" );
+					}
+					
+					current = pending.pop();
+				}
+			}
+			
+			return returnType;
 		}
 	},
 
@@ -120,7 +166,7 @@ SWYM.operators = {
 
 			//FIXME: these are actually incorrect, but I'm not sure how to fix it yet. Recursive function calls are tricky.
 			parentFunction.returnType = SWYM.ArrayType;
-			parentFunction.bodyCScope["Yielded"] = SWYM.ArrayTypeContaining(SWYM.NoValuesType);
+			parentFunction.bodyCScope["Yielded"] = SWYM.ArrayTypeContaining(SWYM.DontCareType);
 
 			SWYM.pushEach(["#Load", "Yielded"], executable);
 						
@@ -657,15 +703,45 @@ SWYM.operators = {
 			else
 			{
 				SWYM.LogError(node, "Error - illegal argument to the Not operator.");
-				return SWYM.NoValuesType;
+				return SWYM.DontCareType;
 			}
 		}},
 	
 	// range operators:
 	// ascending or descending sequence that includes both endpoints.
-	"..":  {precedence:75, infix:true,
+	"..":  {precedence:75, infix:true, postfix:true, prefix:true, standalone:true,
 		customCompile:function(node, cscope, executable)
 		{
+			if( node.children[0] === undefined && node.children[1] === undefined )
+			{
+				// standalone ".." expression = minus infinity to plus infinity
+				var rangeArray = SWYM.rangeArray(-Infinity, Infinity);
+				executable.push("#Literal");
+				executable.push(rangeArray);
+				return SWYM.MultivalueRangeType;
+			}
+			if( node.children[1] === undefined )
+			{
+				// a.. expression = a to plus infinity
+				var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
+				SWYM.TypeCoerce(SWYM.IntType, type0, node.children[0]);
+				executable.push("#Native");
+				executable.push(1);
+				executable.push( function(a){ return SWYM.rangeArray(a, Infinity) });
+				return SWYM.MultivalueRangeType;
+			}
+			if( node.children[0] === undefined )
+			{
+				// ..b expression = minus infinity to b
+				var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
+				SWYM.TypeCoerce(SWYM.IntType, type1, node.children[1]);
+				executable.push("#Native");
+				executable.push(1);
+				executable.push( function(b){ return SWYM.rangeArray(-Infinity, b) });
+				return SWYM.MultivalueRangeType;
+			}
+
+			
 			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
 			if( SWYM.TypeMatches(SWYM.IntType, type0 ) )
 			{
@@ -675,7 +751,7 @@ SWYM.operators = {
 					executable.push("#Native");
 					executable.push(2);
 					executable.push( function(a,b){ return SWYM.RangeOp(a,b, true, true, undefined) });
-					return SWYM.ToMultivalueType(SWYM.IntType);
+					return SWYM.MultivalueRangeType;
 				}
 				else
 				{
@@ -694,18 +770,22 @@ SWYM.operators = {
 			return SWYM.ToMultivalueType(SWYM.StringCharType);
 		}},
 	// ascending sequence that includes left, right, neither or both endpoints
-	"..<": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, 1); }},
-	"<..": {precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, false, true, 1); }},
-	"<..<":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, false, false, 1); }},
-	"..<..":{precedence:75, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, 1); }},
+	"..<": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, 1); }, prefix:function(b){ return SWYM.rangeArray(-Infinity,b-1);} },
+	"<..": {precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, true, 1); }, postfix:function(a){ return SWYM.rangeArray(a+1,Infinity);} },
+	"<..<":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, false, 1); }},
+	"..<..":{precedence:75, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, 1); }},
 	// descending sequence that excludes left, right, neither or both endpoints
-	"..>": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, -1); }},
-	">..": {precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, false, true, -1); }},
-	">..>":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, false, false, -1); }},
-	"..>..":{precedence:75, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.ToMultivalueType(SWYM.IntType), infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, -1); }},
+	"..>": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, -1); }},
+	">..": {precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, true, -1); }},
+	">..>":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, false, -1); }},
+	"..>..":{precedence:75, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, -1); }},
 	
 	"==": {precedence:80, returnType:SWYM.BoolType, infix:SWYM.IsEqual },
 	"!=": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b)}},
+
+	// 'exactly equal' operators - useful?
+	"===": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){ return SWYM.IsEqual(a,b,true) }},
+	"!==": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b,true)}},
 
 	// "v ==any P" and "v ==some P" are the same as "P.contains(v)".
 	"==any": {precedence:80, argTypes:[SWYM.AnyType, SWYM.ArrayType], returnType:SWYM.BoolType,
@@ -1095,7 +1175,7 @@ SWYM.operators = {
 			if( lhs && lhs.type === "name" )
 			{
 				var addArgsTo;
-				if( rhs.addArgsTo !== undefined )
+				if( rhs && rhs.addArgsTo !== undefined )
 					addArgsTo = rhs.addArgsTo;
 				else
 					addArgsTo = rhs;
@@ -1174,7 +1254,7 @@ SWYM.operators = {
 				
 				executable.push("#Literal");
 				executable.push(emptyList);
-				return {type:"swymObject", ofClass:SWYM.ArrayClass, outType:SWYM.NoValuesType, baked:emptyList};
+				return {type:"swymObject", ofClass:SWYM.ArrayClass, outType:SWYM.DontCareType, baked:emptyList};
 			}
 			else
 			{
@@ -1224,6 +1304,7 @@ SWYM.operators = {
 				}
 				else if( type.isMutable )
 				{
+					// if the multivalue is a mutable array, make an immutable copy of it
 					// if the multivalue is a mutable array, make an immutable copy of it
 					executable.push("#CopyArray");
 					return SWYM.ArrayTypeContaining( type );
@@ -1308,6 +1389,9 @@ SWYM.DefaultGlobalCScope =
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
+	
+	// an implementation detail - here for testing, but should not be exposed to users.
+	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
 
 	// overloadable operators:
 	"fn#+":
@@ -1789,6 +1873,23 @@ SWYM.DefaultGlobalCScope =
 			returnType:SWYM.IntType,
 			nativeCode:function(value){  return Math.ceil(value);  }
 		}],
+		
+	"fn#Var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType} },
+			customCompileWithoutArgs:true,
+			customCompile:function(argTypes, cscope, executable, argExecutables)
+			{
+				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+				{
+					SWYM.LogError(0, "The argument to 'Var' must be a type.");
+					return SWYM.VariableTypeContaining(SWYM.AnyType);
+				}
+				else
+				{
+					var varType = argTypes[0].baked;
+					return SWYM.BakedValue(SWYM.VariableTypeContaining(varType));
+				}
+			}
+		}],
 
 	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1} },
 			customCompileWithoutArgs:true,
@@ -2114,9 +2215,13 @@ SWYM.DefaultGlobalCScope =
 			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 			{
 				SWYM.LogError(0, "Argument to the Array function is not a valid type expression!");
-				return SWYM.NoValuesType;
+				return SWYM.DontCareType;
 			}
-			return SWYM.BakedValue(SWYM.ArrayTypeContaining(argTypes[0].baked));
+			
+			var arrayType = SWYM.ArrayTypeContaining(argTypes[0].baked);
+			executable.push("#Literal");
+			executable.push(arrayType);
+			return SWYM.BakedValue(arrayType);
 		}
 	}],		
 	
@@ -2155,10 +2260,6 @@ SWYM.DefaultGlobalCScope =
 				{
 					return table.keys;
 				}
-				else if( table.length )
-				{
-					return SWYM.rangeArray(0, table.length);
-				}
 				else
 				{
 					SWYM.LogError(0, "Fsckup: no keys defined for this object");
@@ -2170,12 +2271,9 @@ SWYM.DefaultGlobalCScope =
 			{
 				return argTypes[0].memberTypes.keys;
 			}
-			else if( argTypes[0] && argTypes[0].memberTypes && argTypes[0].memberTypes.length !== undefined )
-			{
-				return SWYM.IntArrayType;
-			}
 			else
 			{
+				SWYM.LogError(0, "Fsckup: no keys defined for ostensible Table type");
 				return SWYM.ArrayType;
 			}
 		}
@@ -2247,10 +2345,10 @@ Array.'#nd' {.at(#-1)};\
 Array.'#rd' {.at(#-1)};\
 Array.'#th' {.at(#-1)};\
 Table.'at'('key') = key.(this);\
-Table.'at'('key','else') = .if{ key.in(.indices) }{ .at(key) } else (else);\
-Array.'at'('key','else') = .if{key >=0 && key < .length}{.at(key)} else (else);\
-Array.'atEach'(Int.Array:'indices') = [ this.at(indices.each~where{ .in(this.indices) }) ];\
-Array.'indices' = [0..<.length];\
+Array.'at'('idx','else') = .if{ key.in(.keys) }{.at(key)} else (else);\
+Table.'at'('key','else') = .if{ key.in(.keys) }{ .at(key) } else (else);\
+Array.'atEach'(Int.Array:'keys') = [ this.at(keys.each~where{ .in(this.keys) }) ];\
+Array.'keys' = [0..<.length];\
 Array.'#st'('else') {.at(#-1) else(else)};\
 Array.'#nd'('else') {.at(#-1) else(else)};\
 Array.'#rd'('else') {.at(#-1) else(else)};\
@@ -2269,14 +2367,14 @@ Anything.'print' = output($this);\
 Anything.'println' = output(\"$this\\n\");\
 Anything.'trace' = output(\"$$this\\n\");\
 Array.'flatten' = [ .each.each ];\
-'Cell' = Struct{'index','array'};\
-Cell.'value' = .array.at(.index);\
-Cell.'value'('equals') = .array.at(.index)=equals;\
-Cell.'nextCell' = Cell.new(.index+1, .array);\
-Cell.'previousCell' = Cell.new(.index-1, .array);\
+'Cell' = Struct{'key','array'};\
+Cell.'value' = .array.at(.key);\
+Cell.'value'('equals') = .array.at(.key)=equals;\
+Cell.'nextCell' = Cell.new(.key+1, .array);\
+Cell.'previousCell' = Cell.new(.key-1, .array);\
 Array.'cells' = array(.length) 'idx'->{ Cell.new(idx, this) };\
-Cell.Array.'table' = table[.each.index](.1st.array);\
-Cell.Array.'cellIndices' = [.each.indices];\
+Cell.Array.'table' = table[.each.key](.1st.array);\
+Cell.Array.'cellKeys' = [.each.key];\
 Cell.Array.'cellValues' = [.each.value];\
 Array.'each'('fn') = [.each.(fn)];\
 'forEach'('list')('fn') = [ list.each.(fn) ];\
@@ -2290,9 +2388,9 @@ Array.'contains'(Block:'test') = .1st.(test) || .2nd.(test) || etc;\
 Array.'where'('test') = forEach(this){ .if(test) };\
 Array.'where'('test')('body') = forEach(this){ .if(test)(body) else {novalues}  };\
 Array.'where'('test', 'body', 'else') = forEach(this){ .if(test)(body) else (else) };\
-Array.'whereIndex'('test') = forEach(.indices){ .if(test)(this) else {novalues} };\
-Array.'whereIndex'('test', 'body') = forEach(.indices){ .if(test){.(this).(body)} else {novalues} };\
-Array.'whereIndex'('test', 'body', 'else') = forEach(.indices){ .if(test){.(this).(body)} else {.(this).(else)} };\
+Array.'whereKey'('test') = forEach(.keys){ .if(test)(this) else {novalues} };\
+Array.'whereKey'('test', 'body') = forEach(.keys){ .if(test){.(this).(body)} else {novalues} };\
+Array.'whereKey'('test', 'body', 'else') = forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} };\
 Array.'starting'(Int:'n') = .atEach[0..<n];\
 Array.'ending'(Int:'n') = .atEach[ (.length-n).clamp(min=0) ..< .length];\
 Array.'slice'(Int:'start') = .atEach[start ..< .length];\
@@ -2307,23 +2405,30 @@ Array.'slice'(Int:'length',Int:'end') = .atEach[end-length..<end];\
 Array.'slice'(Int:'length',Int:'last') = .atEach[last-length-1..last];\
 Array.'slice'(Int:'start',Int:'trimEnd') = .atEach[start ..< .length-trimEnd];\
 Array.'slice'(Int:'length',Int:'trimEnd') = .atEach[.length-length-fromEnd ..< .length-trimEnd];\
-Array.'slices'(Int:'length') = array(.length+1-length) 'start'->{ this.slice(start=start, end=start+length) };\
+Array.'slice'['a'..<'b'] = [ .at(a.clamp(min=0)..<b.clamp(max=.length)) ];\
+Array.'slices'(Int:'length') = array(.length+1-length) 'start'->{ this.slice(start=start, end=start+length) };\n\
+Array.'slices' = [ .slices(length=1 .. .length).each ];\
 Array.'trimStart'(Int:'n') = .atEach[n ..< .length];\
 Array.'trimEnd'(Int:'n') = .atEach[0 ..< .length-n];\
 Array.'startsWith'(Array:'list') = .length >= list.length && .starting(list.length) == list;\
 Array.'endsWith'(Array:'list') = .length >= list.length && .ending(list.length) == list;\
 Array.'splitAt'(Int:'n') = [ .slice(end=n), .slice(start=n) ];\
-Array.'splitAt'(Int.Array:'indices') = [0, indices.each, .length].{[this.slice(start=.1st, end=.2nd), this.slice(start=.2nd, end=.3rd), etc]};\
-Cell.Array.'split' = .1st.context.splitAt(.cellIndices);\
+Array.'splitAt'(Int.Array:'keys') = if(keys == []){ this } else\n\
+{[\n\
+  .slice[..<keys.1st]\n\
+  .slice[keys.1st..<keys.2nd], .slice[keys.2nd..<keys.3rd], etc\n\
+  .slice[keys.last..]\n\
+]}\n\
+Cell.Array.'split' = .1st.context.splitAt(.cellKeys);\
 Array.'splitWhere'(Callable:'test') = .cells.where{.value.(test)}.split;\
-Array.'splitOut'(Int.Array:'indices') = [-1, indices.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]};\
-Cell.Array.'splitOut' = .1st.context.splitOut(.cellIndices);\
+Array.'splitOut'(Int.Array:'keys') = [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]};\
+Cell.Array.'splitOut' = .1st.context.splitOut(.cellKeys);\
 Array.'splitOutWhere'(Callable:'test') = .cells.where{.value.(test)}.splitOut;\
 Array.'splitAtEnd'(Int:'n') = [ .slice(trimEnd=n), .ending(n) ];\
 Array.'tail' = .atEach[1 ..< .length];\
 Array.'stem' = .atEach[0 ..< .length-1];\
 Array.'middle' = .atEach[1 ..< .length-1];\
-Array.'reverse' = .atEach[.length-1 .. 0];\
+Array.'reverse' = array(this.length) 'idx'->{ this.at(this.length-(idx+1)) };\
 Array.'emptyOr'(Callable:'body') = .if{==[]}{[]} else (body);\
 Array.'singletonOr'(Callable:'body') = .if{.length <= 1}{this} else (body);\n\
 Array.'sort' = .singletonOr\n\
@@ -2376,7 +2481,7 @@ Block.'Non' = {!.(this)};\
 Number.'neg' = -this;\
 Number.'degToRad' = this*PI/180;\
 Number.'radToDeg' = this*180/PI;\
-Number.'abs' = if(this>=0){it} else { -this};\
+Number.'abs' = if(this>=0){ this } else { -this };\
 Number.'differenceFrom'('n') = abs(this-n);\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
 String.'lines' = .splitOutWhere{==\"\\n\"};\
@@ -2397,12 +2502,6 @@ Array.Array.'Struct' = array(product[.each.length]) 'idx'->\n\
 {\n\
   [ this.structElements(idx) ]\n\
 };\n\
-Array.'slices' =\n\
-[\n\
-  .slice(start=0..<.length-0, length=1),\n\
-  .slice(start=0..<.length-1, length=2),\n\
-  etc\n\
-];\n\
 Array.'no' = yield .none;\
 Array.'oneOrMore' = yield .some;\
 Array.'all'('body') = [.all.(body)];\

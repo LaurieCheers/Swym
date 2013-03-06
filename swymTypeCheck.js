@@ -20,18 +20,27 @@ SWYM.TypeToString = function(type)
 		return ""+type;
 }
 
-SWYM.IsOfType = function(value, typeCheck, errorContext)
+SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 {
 	if( typeCheck.baked !== undefined )
 	{
-		return SWYM.IsEqual(typeCheck.baked, value);
+		return SWYM.IsEqual(typeCheck.baked, value, exact);
 	}
 	
 	if( typeCheck.memberTypes )
 	{
 		for( var memberName in typeCheck.memberTypes )
 		{
-			if( value[memberName] === undefined || !SWYM.IsOfType(value[memberName], typeCheck.memberTypes[memberName], errorContext) )
+			if( value[memberName] === undefined )
+			{
+				return false;
+			}
+			else if( value[memberName] === value && typeCheck.memberTypes[memberName] === typeCheck )
+			{
+				// handle recursive types - the indices of an IntArray are of type IntArray.
+				return true;
+			}
+			else if( !SWYM.IsOfType(value[memberName], typeCheck.memberTypes[memberName], exact, errorContext) )
 			{
 				return false;
 			}
@@ -45,11 +54,13 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 			case "Void": return false;
 			case "NoValues": return true; break;
 			case "Type":     if(value.type !== "type") return false; break;
-			case "Number":   if(typeof value !== "number") return false; break;
-			case "String":   if(typeof value !== "string") return false; break;
+			case "String":   if(value.type !== "string") return false; break;
 			case "JSArray":  if(value.type !== "jsArray") return false; break;
 			case "JSObject": if(value.type !== "jsObject") return false; break;
+			case "RangeArray":if(value.type !== "rangeArray") return false; break;
 			case "Variable": if(value.type !== "variable") return false; break;
+			case "Number":   if(typeof value !== "number") return false; break;
+			case "JSString": if(typeof value !== "string") return false; break;
 			case "Callable":
 			{
 				if(value.type !== "jsArray" && value.type !== "rangeArray" &&
@@ -110,7 +121,7 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 		{
 			for(var Idx = 0; Idx < value.length; ++Idx )
 			{
-				if( !SWYM.IsOfType(value[Idx], typeCheck.outType, errorContext) )
+				if( !SWYM.IsOfType(value[Idx], typeCheck.outType, exact, errorContext) )
 				{
 					return false;
 				}
@@ -134,7 +145,7 @@ SWYM.IsOfType = function(value, typeCheck, errorContext)
 	return true;
 }
 
-SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
+SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 {
 	// Types are only undefined if there was an error earlier - in which case, we don't care.
 	if( !valueInfo || !typeCheck || typeCheck === valueInfo || typeCheck.nativeType === "NoValues" )
@@ -166,7 +177,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact)
 	
 	if( valueInfo.baked !== undefined )
 	{
-		return SWYM.IsOfType(valueInfo.baked, typeCheck);
+		return SWYM.IsOfType(valueInfo.baked, typeCheck, exact, errorContext);
 	}
 	else if( typeCheck.baked !== undefined )
 	{
@@ -329,7 +340,7 @@ SWYM.TypeIntersect = function(typeA, typeB, errorContext)
 	// if one or both types is baked, but the above check didn't early out, then they're disjoint.
 	if( typeA.baked !== undefined || typeB !== undefined )
 	{
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 	
 	if( typeA.nativeType !== typeB.nativeType )
@@ -571,8 +582,7 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 	{
 		type:"type",
 		isMutable:isMutable,
-		nativeType:"JSArray",
-		memberTypes:{length:SWYM.IntType},
+		memberTypes:{length:SWYM.IntType, keys:SWYM.IntArrayType},
 		argType:SWYM.IntType,
 		outType:outType,
 		debugName:"Array("+SWYM.TypeToString(outType)+")"
@@ -587,6 +597,11 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 		else
 		{
 			resultType.baked = elementType.baked;
+		}
+		
+		if( elementType.nativeType !== undefined )
+		{
+			resultType.nativeType = elementType.nativeType;
 		}
 	}
 	else if( elementType.baked )
@@ -647,6 +662,10 @@ SWYM.BakedValue = function(value, errorContext)
 		result.memberTypes = object(result.memberTypes);
 		result.memberTypes.length = SWYM.BakedValue(value.length);
 	}
+	else if( value.type === "rangeArray" )
+	{
+		result = object(SWYM.RangeArrayType);
+	}
 	else if( value.type === "type" )
 	{
 		result = object(SWYM.TypeType);
@@ -680,12 +699,12 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	if( !callableType )
 	{
 		SWYM.LogError(errorContext, "GetOutType - Expected a callable, got: "+callableType);
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 	
-	if( callableType === SWYM.NoValuesType )
+	if( callableType === SWYM.DontCareType )
 	{
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 	
 	if( callableType.needsCompiling )
@@ -718,7 +737,7 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	if( !callableType.outType )
 	{
 		SWYM.LogError(errorContext, "Fsckup: OutType of callable "+SWYM.TypeToString(callableType)+" is missing. (failed to compile?)");
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 	
 	if( callableType.argType )
@@ -823,7 +842,7 @@ SWYM.VariableTypeContaining = function(contentType, errorContext)
 	if( !contentType )
 	{
 		SWYM.LogError(errorContext, "VariableTypeContaining - Expected a content type, got: "+SWYM.TypeToString(contentType));
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 
 	return {type:"type", nativeType:"Variable", contentType:contentType, debugName:"Var("+contentType.debugName+")"};
@@ -838,6 +857,6 @@ SWYM.GetVariableTypeContents = function(variableType, errorContext)
 	else
 	{
 		SWYM.LogError(errorContext, "Fsckup: GetVariableTypeContents - Expected a variable type, got: "+SWYM.TypeToString(variableType));
-		return SWYM.NoValuesType;
+		return SWYM.DontCareType;
 	}
 }

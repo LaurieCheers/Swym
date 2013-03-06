@@ -191,7 +191,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 			else
 			{
 				SWYM.LogError(0, "Fsckup: Undefined return type for operator "+parsetree.op.text);
-				return SWYM.ToMultivalueType(SWYM.NoValuesType);
+				return SWYM.ToMultivalueType(SWYM.DontCareType);
 			}
 		}
 		else
@@ -822,7 +822,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			bodyCScope["__default"] = {redirect:"this"};
 
 			precompiled.executable = [];
-			precompiled.returnType = SWYM.NoValuesType; // treat recursive calls as though they yield our least offensive type.
+			precompiled.returnType = SWYM.DontCareType; // treat recursive calls as though they yield our least offensive type.
 			precompiled.isCompiling = true;
 			precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, precompiled.executable);
 			precompiled.isCompiling = false;
@@ -949,12 +949,6 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 
 SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, cscope, executable)
 {
-	if( fnName === "fn#ref" )
-	{
-		SWYM.LogError(body, "The 'ref' function cannot be redefined.");
-		return;
-	}
-	
 //	var bodyCScope = object(cscope);
 	var bodyExecutable = [];
 	var bodyScope = object(cscope);
@@ -967,17 +961,22 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 		var finalName = argNames[argIdx];
 		var argNode = argTypes[argIdx];
 		var defaultValueNode = undefined;
-		
+
 		if( argNode.op && argNode.op.text === "(" && !argNode.children[0] )
 		{
 			argNode = argNode.children[1];
 		}
-		else if( argNode.op && argNode.op.text === ":" )
-		{
+		
+		if( argNode.op && argNode.op.text === ":" )
+		{			
+			if( argNode.children[1] && argNode.children[1].op && argNode.children[1].op.text === "=" )
+			{
+				defaultValueNode = argNode.children[1].children[1];
+			}
+			
 			argNode = argNode.children[0];
 		}
-
-		if( argNode.op && argNode.op.text === "=" )
+		else if( argNode.op && argNode.op.text === "=" )
 		{
 			defaultValueNode = argNode.children[1];
 			argNode = argNode.children[0];
@@ -1476,7 +1475,36 @@ SWYM.CompileDeconstructor = function(templateNode, cscope, executable, argType)
 	}
 	else if( templateNode.op && templateNode.op.text === "[" )
 	{
-		SWYM.CompileArrayDeconstructor(templateNode.children[1], 0, cscope, executable, argType);
+		var opName = undefined;
+		if( templateNode.children[1] && templateNode.children[1].op )
+		{
+			opName = templateNode.children[1].op.text;
+		}
+
+		if( opName === ".." )
+		{
+			// [first..last] range array deconstructor
+			SWYM.CompileRangeDeconstructor(templateNode.children[1], false, false, cscope, executable, argType);
+		}
+		else if( opName === "..<" )
+		{
+			// [first..<exclude] range array deconstructor
+			SWYM.CompileRangeDeconstructor(templateNode.children[1], false, true, cscope, executable, argType);
+		}
+		else if( opName === "<.." )
+		{
+			// [exclude<..last] range array deconstructor
+			SWYM.CompileRangeDeconstructor(templateNode.children[1], true, false, cscope, executable, argType);
+		}
+		else if( opName === "<..<" )
+		{
+			// [exclude<..<exclude] range array deconstructor
+			SWYM.CompileRangeDeconstructor(templateNode.children[1], true, true, cscope, executable, argType);
+		}
+		else
+		{
+			SWYM.CompileArrayDeconstructor(templateNode.children[1], 0, cscope, executable, argType);
+		}
 	}
 	else if( templateNode.op && templateNode.op.text === "{" )
 	{
@@ -1485,6 +1513,56 @@ SWYM.CompileDeconstructor = function(templateNode, cscope, executable, argType)
 	else
 	{
 		SWYM.LogError(templateNode, "Unexpected structure in argument declaration")
+	}
+}
+
+SWYM.CompileRangeDeconstructor = function(rangeNode, overlapStart, overlapEnd, cscope, executable, argType)
+{
+	SWYM.TypeCoerce(argType, SWYM.RangeArrayType, rangeNode);
+	
+	if( rangeNode.children[0] !== undefined && rangeNode.children[1] !== undefined )
+	{
+		executable.push("#Dup");
+	}
+	
+	if( rangeNode.children[0] !== undefined )
+	{
+		if( rangeNode.children[0].type !== "decl" )
+		{
+			SWYM.LogError(templateNode, "Unexpected expression in range deconstructor")
+			return;
+		}
+		executable.push("#Native");
+		executable.push(1);
+		if( overlapStart )
+			executable.push(function(rangeArray){ return rangeArray.first-1; });
+		else
+			executable.push(function(rangeArray){ return rangeArray.first; });
+		executable.push("#Store");
+		executable.push(rangeNode.children[0].value);
+		executable.push("#Pop");
+
+		cscope[rangeNode.children[0].value] = SWYM.IntType;
+	}
+	
+	if( rangeNode.children[1] !== undefined )
+	{
+		if( rangeNode.children[1].type !== "decl" )
+		{
+			SWYM.LogError(templateNode, "Unexpected expression in range deconstructor")
+			return;
+		}
+		executable.push("#Native");
+		executable.push(1);
+		if( overlapEnd )
+			executable.push(function(rangeArray){ return rangeArray.last+1; });
+		else
+			executable.push(function(rangeArray){ return rangeArray.last; });
+		executable.push("#Store");
+		executable.push(rangeNode.children[1].value);
+		executable.push("#Pop");
+
+		cscope[rangeNode.children[1].value] = SWYM.IntType;
 	}
 }
 
@@ -1679,8 +1757,8 @@ SWYM.CompileTable = function(node, cscope, executable)
 	var bakedKeys = [];
 	var bakedValues = [];
 	var accessors = {};
-	var commonKeyType = SWYM.NoValuesType;
-	var commonValueType = SWYM.NoValuesType;
+	var commonKeyType = SWYM.DontCareType;
+	var commonValueType = SWYM.DontCareType;
 	var elseExecutable = undefined;
 	var elseValue = undefined;
 	

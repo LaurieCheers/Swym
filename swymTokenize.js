@@ -158,8 +158,13 @@ SWYM.GenerateNextToken = function(tokenlist, ignoreDecl)
 
 	if ( SWYM.c === '"' )
 	{
-		// it's a quoted string
+		// it's a "quoted" string
 		return SWYM.GenerateString(tokenlist);
+	}
+	else if ( SWYM.c === '<' && (SWYM.PeekNext() === '"' || SWYM.PeekNext() === '<') )
+	{
+		// looks like probably a <"bracketed"> string
+		return SWYM.GenerateBracketedString(tokenlist);
 	}
 	else if (SWYM.c === "'" )
 	{
@@ -392,6 +397,77 @@ SWYM.GenerateDeclaration = function(tokenlist)
 
 //=============================================================
 
+SWYM.GenerateBracketedString = function(tokenlist)
+{
+	var stringOpenBracketPos = SWYM.sourcePos;
+
+	// current char must be "<" because we got here
+	var numOpens = 1;
+
+	SWYM.NextChar();
+	
+	while(SWYM.c === "<")
+	{
+		++numOpens;
+		SWYM.NextChar();
+	}
+	
+	if( SWYM.c !== '"' )
+	{
+		SWYM.LogError(SWYM.sourcePos, "Expected \" after <<");
+		return;
+	}
+
+	SWYM.NextChar();
+
+	// ignore the first newline, to help people lay out the string nicely
+//	if( SWYM.c === "\n" )
+//	{
+//		SWYM.NextChar();
+//	}
+	
+	var stringStartPos = SWYM.sourcePos;
+
+	while( true )
+	{
+		if ( SWYM.c === undefined )
+		{
+			SWYM.LogError(stringOpenBracketPos, "<\"Bracketed\"> string was not terminated");
+			return;
+		}
+		else if( SWYM.c === '"' )
+		{
+			var closePos = SWYM.sourcePos;
+			SWYM.NextChar();
+			var numCloses = 0;
+			while(SWYM.c === '>' && numCloses < numOpens)
+			{
+				++numCloses;
+				SWYM.NextChar();
+			}
+			
+			if( numCloses == numOpens )
+			{
+				// ignore one final newline, to allow the string to be laid out nicely.
+				//if( SWYM.source[closePos-1] === "\n" )
+				//{
+				//	--closePos;
+				//}
+				var theString = SWYM.GetSource(stringStartPos, closePos);
+				tokenlist.push(SWYM.NewToken("literal", stringOpenBracketPos, theString, theString));
+
+				return;
+			}
+		}
+		else
+		{
+			SWYM.NextChar();
+		}
+	}
+}
+
+//=============================================================
+
 SWYM.GenerateString = function(tokenlist)
 {
 	// quoted string
@@ -441,6 +517,12 @@ SWYM.GenerateString = function(tokenlist)
 		{
 			// default case, just add the character
 			parsedString = parsedString.concat(SWYM.c);
+			SWYM.NextChar();
+		}
+		else if( SWYM.PeekNext() === "\"" || SWYM.IsDigit(SWYM.PeekNext()) )
+		{
+			// treat as a literal dollar sign
+			parsedString = parsedString.concat("$");
 			SWYM.NextChar();
 		}
 		else

@@ -22,7 +22,7 @@ function runAllTests()
   addReportTable("pretests:");
 //  runTest("x:5; Number.square:{it*it}; square(x)",						"25");
   //runTest("1 + etc.. 5",												"15");
- // runTest("[10..1].whereIndex{it>5}}",							"[4,3,2,1]");
+ // runTest("[10..1].whereKey{it>5}}",							"[4,3,2,1]");
   endReportTable();
 
 //return;
@@ -99,6 +99,9 @@ function runAllTests()
   runTest("\"x\".tail", "\"\"");
   runTest("\"x\".1st.tail", "\"\"");
   runTest("[\"x\"].tail", "[]");
+  runTest("\"x\" + \"x\"", "\"xx\"");
+  runTest("[\"x\"] + [\"x\"]", "[\"x\",\"x\"]");
+  runTest("<\"bracketed\">", "\"bracketed\"");
   endReportTable();
 
   addReportTable("Basic Functions:");
@@ -130,6 +133,13 @@ function runAllTests()
   //runTest("Number.'test' { if(this>4) { return 4 } else { 5 } }; 5.test", "~error~");
   runTest("Number.'test' { yield 4; if(this>4){ return }; yield 3; }; 4.test", "[4,3]");
   runTest("Number.'test' { yield 4; if(this>4){ return }; yield 3; }; 5.test", "[4]");
+  runTest("'defaultValueFn'('x'=0){x}; defaultValueFn(5)", "5");
+  runTest("'defaultValueFn'('x'=0){x}; defaultValueFn()", "0");
+  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn(5)", "~error~");
+  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn(\"x\")", "~error~");
+  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn()", "~error~");
+  runTest("'defaultValueFn'(Int:'x'=0){x}; defaultValueFn(5)", "5");
+  runTest("'defaultValueFn'(Int:'x'=0){x}; defaultValueFn()", "0");
   endReportTable();
 
   addReportTable("Sequences:");
@@ -189,6 +199,9 @@ function runAllTests()
   runTest("[\"hi\", \"lo\"].each.each", "\"h\"\n\"i\"\n\"l\"\n\"o\"");
   runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.length", "5\n4\n7");
   runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.{.length}", "5\n4\n7");
+  runTest("array(3){it+1} == [1,2,3]", "true");
+  runTest("[1..3] == [1,2,3]", "true");
+  runTest("[1..3] == array(3){it+1}", "true");
   endReportTable();
 
   addReportTable("JSON");
@@ -209,6 +222,7 @@ function runAllTests()
   runTest("\"3\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"3\"");
   runTest("table[1..10]{^2}", "{1=>1, 2=>4, 3=>9, 4=>16, 5=>25, 6=>36, 7=>49, 8=>64, 9=>81, 10=>100}");
 //  runTest("[x:10, y:10].at(\"x\")+1", "11");
+  runTest("[\"x\", 1, \"y\", 2, \"z\", 3].{.1st=>.2nd, .3rd=>.4th, etc}", "{\"x\"=>1, \"y\"=>2, \"z\"=>3}");
   endReportTable();
 
   addReportTable("Type system torture");
@@ -252,7 +266,6 @@ function runAllTests()
   runTest("[4,5,6,7].where{>5}", "[6,7]");
   runTest("[4,5,6,7].where{.in[6..8]}", "[6,7]");
   runTest("Number.'isEven' = this%2 == 0;\n\n[1,2,3,4,5,6,7,8,9].where{.isEven};", "[2,4,6,8]");
-  runTest("Int.'ref' = 0", "~error~");
   runTest("7.is(Number)", "true");
   runTest("true.is(Number)", "false");
   runTest("7.is(String)", "false");
@@ -271,8 +284,8 @@ function runAllTests()
   runTest("[[1..4],[1..3],[1..5]].{.min{.length}, .max{.length}}", "[1..3]\n[1..5]");
   runTest("[[1..4],[2..4],[1..2],[2..5],[2..3],[1..3]].{.whereMin{.length}, .whereMax{.length}}", "[[1,2],[2,3]]\n[[1..4],[2..5]]");
   runTest("\"He1Lo\".{.uppercase,.lowercase}", "\"HE1LO\"\n\"he1lo\"");
-  runTest("[10..1].whereIndex{.in[3,4,7]}", "[7,6,3]");
-  runTest("[10..1].whereIndex{it>5}", "[4,3,2,1]");
+  runTest("[10..1].whereKey{.in[3,4,7]}", "[7,6,3]");
+  runTest("[10..1].whereKey{it>5}", "[4,3,2,1]");
   runTest("10.is{it>6}, 6.is{it>6}, 10.in[5..9], 6.in[5..9]", "true\nfalse\nfalse\ntrue");
   runTest("[1..3].reverse", "[3,2,1]");
   runTest("\"Hello\".reverse", "\"olleH\"");
@@ -300,6 +313,10 @@ function runAllTests()
   runTest("\"Hello\".startsWith(\"HelloWorld\")", "false");
   runTest("\"Hello\".startsWith(\"Hx\")", "false");
   runTest("\"Hello\".endsWith(\"llo\")", "true");
+  runTest("\"Hello\".slice[2..]", "\"llo\"");
+  runTest("\"Hello\".slice[..3]", "\"Hell\"");
+  runTest("\"Hello\".slice[2..3]", "\"ll\"");
+  runTest("\"Hello\".splitAt[1,3]", '["H","el","lo"]');
   runTest("floor~sin(1..5)", "0\n0\n0\n-1\n-1");
   endReportTable();
 
@@ -410,6 +427,10 @@ function runAllTests()
   runTest("Int.'twice' {*2}; Array.'twice' {[.each,.each]}\; 4.twice, \"4\".twice;", "8\n\"44\"");
   endReportTable();
 
+  addReportTable("Errors:");
+  runTest("1)","~error~");
+  endReportTable();
+
   addReportTable("Structs:");
   runTest("'T'=Struct{}; T.is(Type)",							"true");
   runTest("'T'=Struct{}; Type.is(T)",							"false");
@@ -422,6 +443,7 @@ function runAllTests()
   runTest("'T'=Struct{Number:'x'}; T.new(x=5).x", "5");
   runTest("'T'=Struct{Number:'last'}; T.new(last=10).last + [1..10].last",	"20");
   runTest("'T'=Struct{String:'name', Number:'num'}; T.new(name=\"Hello\", num=3).{.name.length-.num}", "2");
+  runTest("'Wrapper'=Struct{Number:'value'}; 'mut' = Wrapper.Mutable.new(value=10); mut.value=20; mut",	"20");
   runTest("'XY' = Struct{Int:'x', Int:'y'}; [ XY.new(0..1)(2..3) ]", "[XY(x:0, y:2),XY(x:0, y:3),XY(x:1, y:2),XY(x:1, y:3)]");
 
   endReportTable();
@@ -658,7 +680,7 @@ function runTest(source, target)
 
   var output = SWYM.Eval(source);
   
-  var passed = target === "~error~"? SWYM.errors !== "": output === target;
+  var passed = target === "~error~"? SWYM.errors !== undefined: output === target;
   if ( passed )
   {
     var report = testReport(source);

@@ -1,0 +1,131 @@
+
+// A Grid represents a 2D array of ints
+'Grid' = Struct
+{
+  Int:'w'
+  Int:'h'
+  Int.Array:'contents'
+}
+
+'mutableGrid'('w','h', 'equals')
+{
+  Grid.new(w,h, Int.mutableArray(w*h)=equals )
+}
+
+Grid.'xCoords' = [0 ..< .w]
+Grid.'yCoords' = [0 ..< .h]
+
+Grid.'at'('x','y') = .contents.at(x + y*.w)
+Grid.'at'('x','y','equals') = .contents.at(x + y*.w)=equals
+
+Grid.'at'('x','y','else')
+{
+  .if{ x.in(.xCoords) && y.in(.yCoords) }{ .at(x,y) } else (else)
+}
+
+Grid.'draw'('offsx', 'offsy') = forEach(.cells)
+{
+  .value.image.draw(offsx + .x*TILESIZE, offsy + .y*TILESIZE)
+}
+
+Grid.'drawWhere'('test')('offsx', 'offsy') = forEach(.cells)
+{
+  .value.if(test).image.draw(offsx + .x*TILESIZE, offsy + .y*TILESIZE)
+}
+
+Grid.'fill'('equals') = forEach(.cells)
+{
+  .value = equals
+}
+
+Grid.'rowAt'('y') = [ .at(x=.xCoords.each, y=y) ]
+
+// A GridCell represents a position in a grid
+'GridCell' = Struct
+{
+  Int:'x'
+  Int:'y'
+  Grid:'grid'
+}
+
+GridCell.'value' = .grid.at(.x, .y)
+GridCell.'value'('else') = .grid.at(.x, .y) else (else)
+GridCell.'value'('equals') = .grid.at(.x, .y)=equals
+
+Grid.'cells'
+{
+  [ GridCell.new(x=.xCoords.each, y=.yCoords.each, grid=this) ]
+}
+
+Grid.'cellAt'('x','y') = GridCell.new(x,y,this)
+
+'gridTemplate' = 
+" # # "+
+" ### "+
+"  ## "+
+" ### "+
+" #   ";
+
+'board' = Grid.new(5,5)(forEach(gridTemplate)
+{
+  " "=>0
+  "#"=>1
+})
+
+GridCell.'drawCorner'('l','u','angle')
+{
+  'dir' = case(angle)
+  {
+      0 => [0,0]
+     90 => [1,0]
+    180 => [1,1]
+    270 => [0,1]
+  }
+
+  // in the rare case that both sides are solid, we need to check the
+  // diagonal to see whether it's a concave corner, or completely solid
+  'image' = if( l && u &&
+     .value == .grid.at(.x+dir.1st*2-1, .y+dir.2nd*2-1) else{0}  )
+  {
+    "composite_internal.png".image
+  }
+  else
+  {
+    case[l, u]
+    {
+      [true,  true]  => "composite_concave.png".image
+      [true,  false] => "composite_edgeX.png".image
+      [false, true]  => "composite_edgeY.png".image
+      [false, false] => "composite_corner.png".image
+    }
+  }
+
+  image.draw(32*(.x+dir.1st), 32*(.y+dir.2nd), angle*PI/180)
+}
+
+GridCell.'draw'
+{
+  'u' = .grid.cellAt(.x, .y-1).value else{0} == .value
+  'd' = .grid.cellAt(.x, .y+1).value else{0} == .value
+  'l' = .grid.cellAt(.x-1, .y).value else{0} == .value
+  'r' = .grid.cellAt(.x+1, .y).value else{0} == .value
+
+  if( .value == 1 )
+  {
+    .drawCorner(l, u, 0)
+    .drawCorner(u, r, 90)
+    .drawCorner(r, d, 180)
+    .drawCorner(d, l, 270)
+  }
+  else
+  {
+    "gap32.png".image.draw(.x*32, .y*32)
+  }
+}
+
+tick
+{
+  clearCanvas()
+
+  board.cells.each.draw
+}

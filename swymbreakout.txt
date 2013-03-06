@@ -1,0 +1,76 @@
+Number:'ballX' = 50
+Number:'ballY' = 50
+Number:'ballVX' = 4
+Number:'ballVY' = -4
+
+Number:'paddleX' = 200
+'paddleY' = 300
+
+'gameW' = 400
+
+'Brick' = Struct{Number:'x', Number:'y', Int:'health'}
+
+'bricks' = Brick.mutableArray =
+[ Brick.new(x=(0..5)*65+5, y=(0..3)*32, health=random[0..5]) ]
+
+tick
+{
+  clearCanvas()
+  ballX = ballX+ballVX
+  ballY = ballY+ballVY
+
+  "ball.png".image.draw(ballX-16, ballY-16)
+  "paddle.png".image.draw(paddleX-32, paddleY-8)
+
+  forEach(bricks.cells) 'cell'->
+  {
+    if(cell.value.health > 0)
+    {
+      "greenbrick.png".image.draw(cell.value.x, cell.value.y)
+
+      cell.value.if{ballX+8 > .x && ballX-8 < .x+64 &&
+                      ballY+16 > .y && ballY < .y+32}
+      {
+        if(ballX+8 > .x && ballX+8-ballVX <= .x)
+        {
+          ballVX = -abs(ballVX)
+        }
+        else if(ballX-8 < .x+64 && ballX-8-ballVX >= .x+64)
+        {
+          ballVX = abs(ballVX)
+        }
+        else if(ballY+16 > .y && ballY+16-ballVY <= .y)
+        {
+          ballVY = -abs(ballVY)
+        }
+        else if(ballY < .y+32 && ballY-ballVY >= .y+32)
+        {
+          ballVY = abs(ballVY)
+        }
+
+        cell.value = Brick.new(.x, .y, .health-1)
+      }
+    }
+  }
+
+  paddleX = mouse_x.clamp(min=32, max=gameW-32)
+
+
+  if( ballX+10 > gameW )
+  {
+    ballVX = -abs(ballVX)
+  }
+  else if( ballX-10 < 0 )
+  {
+    ballVX = abs(ballVX)
+  }
+
+  if( ballY-16 < 0 )
+  {
+    ballVY = abs(ballVY)
+  }
+  else if( ballY+16 > paddleY-6 && ballX.differenceFrom(paddleX) < 32)
+  {
+    ballVY = -abs(ballVY)
+  }
+}

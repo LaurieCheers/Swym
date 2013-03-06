@@ -7,6 +7,11 @@ SWYM.Parse = function(tokenlist)
 	
 	var parsetree = SWYM.ParseLevel(0);
 	
+	if( SWYM.curToken !== undefined )
+	{
+		SWYM.LogError(SWYM.curToken.pos, "Unexpected token \""+SWYM.curToken.text+"\"");
+	}
+	
 	parsetree = SWYM.FindAndProcessEtc(parsetree, 0);
     return parsetree;//SWYM.ParseTreePostProcess(parsetree);
 }
@@ -249,7 +254,8 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 
 			// etc usually consumes the text of the following operator, if there is one - to make the etc..< and etc** keywords, for example.
 			SWYM.NextToken();
-			if( SWYM.curToken && SWYM.curToken.type === "op" && !SWYM.curToken.behaviour.isCloseBracket && SWYM.curToken.behaviour.precedence >= 50 )
+			if( SWYM.curToken && !SWYM.curToken.followsBreak && SWYM.curToken.type === "op" &&
+				!SWYM.curToken.behaviour.isCloseBracket && SWYM.curToken.behaviour.precedence >= 50 )
 			{
 				etcText += SWYM.curToken.text;
 				SWYM.NextToken();
@@ -416,13 +422,23 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 	{
 		// declaring a parameter with a default value
 		fnnode.argNames.push( paramnode.children[0].value );
-		fnnode.children.push( paramnode.children[1] );
+		fnnode.children.push( paramnode );
 	}
 	else if( paramnode && paramnode.op && paramnode.op.text === ":" &&
 				paramnode.children[1] && paramnode.children[1].type === "decl" )
 	{
 		// declaring a parameter with a type
+		// TODO: actually check the type!
 		fnnode.argNames.push( paramnode.children[1].value );
+		fnnode.children.push( paramnode );
+	}
+	else if( paramnode && paramnode.op && paramnode.op.text === ":" &&
+			paramnode.children[1] && paramnode.children[1].op && paramnode.children[1].op.text === "=" &&
+			paramnode.children[1].children[0] && paramnode.children[1].children[0].type === "decl" )
+	{
+		// declaring a parameter with a type and a default value
+		// TODO: actually check the type!
+		fnnode.argNames.push( paramnode.children[1].children[0].value );
 		fnnode.children.push( paramnode );
 	}
 	else if( paramnode && paramnode.type === "decl" )

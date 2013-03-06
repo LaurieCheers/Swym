@@ -69,6 +69,11 @@
 		{
 			var symbol = String.fromCharCode(mouseCharCode);
 			keyDownState[symbol] = true;
+			
+			if( keyPressBlock[symbol] !== undefined )
+			{
+				SWYM.ClosureCall(keyPressBlock[symbol]);
+			}
 		}
         document.onmouseup = function()
 		{
@@ -179,6 +184,7 @@
 			SWYM.EvalStdlyb();
 			SWYM.cachedImages = {};
 			SWYM.ImageType = {type:"type", nativeType:"image", debugName:"Image"};
+			SWYM.DefaultGlobalCScope["Image"] = SWYM.BakedValue(SWYM.ImageType);
 			SWYM.DefaultGlobalCScope["mouse_x"] = SWYM.NumberType;
 			SWYM.DefaultGlobalCScope["mouse_y"] = SWYM.NumberType;
 			SWYM.DefaultGlobalCScope["mouse_lmb_down"] = SWYM.BoolType;
@@ -224,11 +230,21 @@
 			}];
 			SWYM.DefaultGlobalCScope["fn#draw"] =
 			[{
-				expectedArgs:{ "this":{index:0, typeCheck:SWYM.ImageType}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType} },
+				expectedArgs:{ "this":{index:0, typeCheck:SWYM.ImageType}, "x":{index:1, typeCheck:SWYM.NumberType}, "y":{index:2, typeCheck:SWYM.NumberType}, "angle":{index:3, typeCheck:SWYM.NumberType, defaultValueNode:SWYM.NewToken("literal", -1, "0", 0) }},
 				returnType:SWYM.VoidType,
-				nativeCode:function(img, x, y)
+				nativeCode:function(img, x, y, angle)
 				{
-					ctx.drawImage(img,x,y);
+					if( angle != 0 && angle != undefined )
+					{
+						ctx.translate(x,y);
+						ctx.rotate(angle);
+						ctx.drawImage(img,0,0);
+						ctx.setTransform(1, 0, 0, 1, 0, 0);
+					}
+					else
+					{
+						ctx.drawImage(img,x,y);
+					}
 				}
 			},
 			{
