@@ -184,6 +184,8 @@ SWYM.operators = {
 			else
 				parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, SWYM.ArrayTypeContaining(yieldType));
 			parentFunction.bodyCScope["Yielded"] = parentFunction.returnType;
+			
+			return SWYM.VoidType;
 		}},
 		
 	"return": {precedence:11, prefix:true, standalone:true,
