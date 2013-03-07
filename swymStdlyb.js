@@ -2464,6 +2464,7 @@ Number.'degToRad' = this*PI/180;\
 Number.'radToDeg' = this*180/PI;\
 Number.'abs' = if(this>=0){ this } else { -this };\
 Number.'differenceFrom'('n') = abs(this-n);\
+Number.'divisibleBy'('n') = this%n == 0;\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
 String.'lines' = .splitOutWhere{==\"\\n\"};\
 String.'words' = .splitOutWhere{==any \" \\t\\n\"};\
