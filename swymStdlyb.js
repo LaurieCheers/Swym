@@ -166,7 +166,7 @@ SWYM.operators = {
 			parentFunction.yields = true;
 
 			//FIXME: these are actually incorrect, but I'm not sure how to fix it yet. Recursive function calls are tricky.
-			parentFunction.returnType = SWYM.ArrayType;
+			parentFunction.returnType = SWYM.ArrayTypeContaining(SWYM.DontCareType);
 			parentFunction.bodyCScope["Yielded"] = SWYM.ArrayTypeContaining(SWYM.DontCareType);
 
 			SWYM.pushEach(["#Load", "Yielded"], executable);
@@ -1799,7 +1799,7 @@ SWYM.DefaultGlobalCScope =
 					SWYM.LogError(nameNodes[Idx], "Undefined argument '"+argNameList[Idx]+"'");
 				}
 				
-				if( SWYM.TypeMatches(SWYM.StringType, argType) )
+				if( SWYM.TypeMatches(SWYM.StringType, argType) && argType !== SWYM.DontCareType )
 				{
 					executable.push("#Native")
 					executable.push(1)
