@@ -316,6 +316,14 @@ SWYM.TypeIntersect = function(typeA, typeB, errorContext)
 	{
 		return typeA;
 	}
+	else if( typeA === SWYM.DontCareType )
+	{
+		return typeB;
+	}
+	else if( typeB === SWYM.DontCareType )
+	{
+		return typeA;
+	}
 	
 	if( (typeA.multivalueOf !== undefined) !== (typeB.multivalueOf !== undefined) )
 	{

@@ -95,7 +95,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		// a function expression
 		if( parsetree.isDecl )
 		{
-			return SWYM.CompileFunctionDeclaration("fn#"+parsetree.name, parsetree.argNames, parsetree.children, parsetree.body, cscope, executable);
+			return SWYM.CompileFunctionDeclaration("fn#"+parsetree.name, parsetree.argNames, parsetree.children, parsetree.body, parsetree.returnTypeNode, cscope, executable);
 		}
 		else
 		{
@@ -947,7 +947,7 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 	return result;
 }
 
-SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, cscope, executable)
+SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, returnTypeNode, cscope, executable)
 {
 //	var bodyCScope = object(cscope);
 	var bodyExecutable = [];
@@ -1012,6 +1012,17 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 //		bodyCScope[finalName] = typeCheck;
 //		typeCheck.template = ["@ArgTypeNamed", finalName];
 	}
+	
+	var returnType = {type:"incomplete", debugName:"incomplete"};
+	if( returnTypeNode !== undefined )
+	{
+		var returnTypeBaked = SWYM.CompileNode(returnTypeNode, cscope, executable);
+		if( returnTypeBaked === undefined || returnTypeBaked.baked === undefined || returnTypeBaked.baked.type !== "type" )
+		{
+			SWYM.LogError(returnTypeNode, "This return type is not a type!");
+		}
+		returnType = returnTypeBaked.baked;
+	}
 
 	var cscopeFunction = {
 		bodyNode:body,
@@ -1019,7 +1030,7 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 		executable:bodyExecutable,
 //		bodyCScope:bodyCScope, // used by implicit member definitions, like 'Yielded'.
 		toString: function(){ return "'"+fnName+"'"; },
-		returnType: {type:"incomplete"}
+		returnType:returnType
 	};
 
 	SWYM.AddFunctionDeclaration(fnName, cscope, cscopeFunction);
@@ -1058,6 +1069,8 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, csc
 	{
 		SWYM.AddModifiedFunctionDeclaration("fn#==", fnName, cscope, cscopeFunction, negateExecutable);
 	}
+	
+	return SWYM.VoidType;
 }
 
 SWYM.AddFunctionDeclaration = function(fnName, cscope, cscopeFunction)
@@ -1257,7 +1270,15 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 	else
 	{
 		SWYM.pushEach(bodyExecutable, executable);
-		returnType = bodyReturnType;
+		if( theCurrentFunction.returnType !== undefined && theCurrentFunction.returnType.type !== "incomplete" )
+		{
+			SWYM.TypeCoerce(theCurrentFunction.returnType, bodyReturnType);
+			returnType = SWYM.TypeIntersect(theCurrentFunction.returnType, bodyReturnType);
+		}
+		else
+		{
+			returnType = bodyReturnType;
+		}
 	}
 	
 	if( theFunction.postExec !== undefined )
@@ -1280,7 +1301,8 @@ SWYM.CScopeRedirect = function(cscope, argName)
 
 SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 {
-	var debugName = SWYM.GetSource(braceNode.op.pos, braceNode.op.endSourcePos+1);
+	var bodyText = braceNode.op.source.substring( braceNode.op.pos, braceNode.op.endSourcePos+1 );
+	var debugName = bodyText;
 	if( argNode !== undefined )
 	{
 		if( argNode.op !== undefined && argNode.op.endSourcePos !== undefined )
@@ -1297,7 +1319,7 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 		debugName = "'it'->" + debugName;
 	}
 
-	var executableBlock = { type:"closure", debugName:debugName };
+	var executableBlock = { type:"closure", debugName:debugName, debugText:bodyText };
 
 	executable.push("#Closure");
 	executable.push(executableBlock);
@@ -2141,6 +2163,10 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	if( parsetree.op.etc === "etc..<" )
 	{
 		haltCondition = function(value, haltValue){ return value >= haltValue; }
+	}
+	else if( parsetree.op.etc === "etc..<=" )
+	{
+		haltCondition = function(value, haltValue){ return value > haltValue; }
 	}
 	else if( parsetree.op.etc === "etc.." )
 	{

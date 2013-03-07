@@ -440,18 +440,17 @@ $(x*x)
 
 <div class=demo>
 <textarea cols=70 rows=13 onfocus='saveOriginal(this)'>
-Int.'bottles' = .case
+Int.'bottles' = case(this)
 {
-  0: "no more bottles",
-  1: "1 bottle",
-  else: "$this bottles"
+  0 => "no more bottles",
+  1 => "1 bottle",
+  else => "$this bottles"
 }
 
-for(99..1)
+forEach[99..1]
 {
-  print("$it.bottles of beer on the wall, $it.bottles of beer! ");
-  print("You take one down, pass it around, ");
-  print("$((it-1).bottles) of beer on the wall.\n");
+  println("$it.bottles of beer on the wall, $it.bottles of beer!");
+  println("You take one down, pass it around, $((it-1).bottles) of beer on the wall.");
 }</textarea>
 <div class=control><input type=button class=control value="+/-" onclick='doResize(this.parentNode);'>
 <input type=button class=control value="Revert" onclick='doRevert(this.parentNode);'></div>
@@ -763,7 +762,16 @@ byPairs[1..10]
 
 <div class=demo>
 <textarea cols=70 rows=3 onfocus='saveOriginal(this)'>
-Int.'toBits' = [1,2,4,etc..<=this].where{(this/it)%2 >= 1}
+Int.'toBits'
+{
+  Int:'current' = this
+  
+  [1,2,4,etc..<=this].reverse.where{<=current} 'bit'->
+  {
+    current = current - bit
+    bit
+  }
+}
 
 19.toBits
 </textarea>

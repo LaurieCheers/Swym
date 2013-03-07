@@ -675,6 +675,7 @@ SWYM.NewToken = function(type, pos, text, value)
 	{
 		var result = object(SWYM.BaseTokens[type]);
 		result.pos = pos;
+		result.source = SWYM.source;
 		if ( text != undefined ) result.text= text;
 		
 		if ( type == "op" )

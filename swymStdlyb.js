@@ -48,6 +48,7 @@ SWYM.NextClassID = 8001;
 SWYM.initStdlyb = function() {
 
 SWYM.AnyType = {type:"type", debugName:"Anything"};
+SWYM.AnythingType = SWYM.AnyType;
 SWYM.DontCareType = {type:"type", nativeType:"NoValues", debugName:"DontCare"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
 
@@ -341,12 +342,18 @@ SWYM.operators = {
 		{
 			if( node.children[1] && node.children[1].op && node.children[1].op.text === "=" )
 			{
-				// declare a variable
 				var equalsNode = node.children[1];
 				var declName;
 				if( equalsNode.children[0].type === "decl" )
 				{
+					// it's a variable declaration
 					declName = equalsNode.children[0].value;
+				}
+				else if( equalsNode.children[0].type === "fnnode" && equalsNode.children[0].isDecl )
+				{
+					// it's a function declaration with a return type
+					equalsNode.children[0].returnTypeNode = node.children[0];
+					return SWYM.CompileNode(equalsNode, cscope, executable);
 				}
 				else if( equalsNode.children[0].type === "name" )
 				{
@@ -377,6 +384,12 @@ SWYM.operators = {
 				SWYM.CreateLocal(declName, varType, cscope, executable, node);
 				cscope[declName+"##mutable"] = true;
 				return varType;
+			}
+			else if( node.children[1].type === "fnnode" && equalsNode.children[1].isDecl )
+			{
+				// it's a function declaration with a return type
+				node.children[1].returnTypeNode = node.children[0];
+				return SWYM.CompileNode(node.children[1], cscope, executable);
 			}
 			else
 			{
@@ -771,6 +784,7 @@ SWYM.operators = {
 		}},
 	// ascending sequence that includes left, right, neither or both endpoints
 	"..<": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, 1); }, prefix:function(b){ return SWYM.rangeArray(-Infinity,b-1);} },
+	"..<=": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, 1); }, prefix:function(b){ return SWYM.rangeArray(-Infinity,b);} },
 	"<..": {precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, true, 1); }, postfix:function(a){ return SWYM.rangeArray(a+1,Infinity);} },
 	"<..<":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, false, false, 1); }},
 	"..<..":{precedence:75, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, 1); }},
@@ -1392,67 +1406,6 @@ SWYM.DefaultGlobalCScope =
 	
 	// an implementation detail - here for testing, but should not be exposed to users.
 	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
-
-	// overloadable operators:
-	"fn#+":
-	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
-		nativeCode:function(a,b){ return a+b; },
-		getReturnType:function(argTypes){ return SWYM.TypeUnify( argTypes[0], argTypes[1] ); }
-	}/* now in user code:
-	{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType}, "rhs":{index:1, typeCheck:SWYM.ArrayType} },
-		nativeCode:function(a,b){  return SWYM.Concat(a,b);  },
-		getReturnType:function(argTypes){ return SWYM.ArrayTypeContaining(SWYM.TypeUnify(SWYM.GetOutType(argTypes[0]), SWYM.GetOutType(argTypes[1]))); }
-	}*/],
-
-	"fn#>":
-	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
-		nativeCode:function(a,b){ return a>b; },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	},
-	{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
-		nativeCode:function(a,b){ return SWYM.ToTerseString(a) > SWYM.ToTerseString(b); },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	}],
-
-	"fn#>=":
-	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
-		nativeCode:function(a,b){ return a>=b; },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	},
-	{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
-		nativeCode:function(a,b){ return SWYM.ToTerseString(a) >= SWYM.ToTerseString(b); },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	}],
-
-	"fn#<":
-	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
-		nativeCode:function(a,b){ return a<b; },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	},
-	{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
-		nativeCode:function(a,b){ return SWYM.ToTerseString(a) < SWYM.ToTerseString(b); },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	}],
-
-	"fn#<=":
-	[{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType}, "rhs":{index:1, typeCheck:SWYM.NumberType} },
-		nativeCode:function(a,b){ return a<=b; },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	},
-	{
-		expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType}, "rhs":{index:1, typeCheck:SWYM.StringType} },
-		nativeCode:function(a,b){ return SWYM.ToTerseString(a) <= SWYM.ToTerseString(b); },
-		getReturnType:function(argTypes){ return SWYM.BoolType; }
-	}],
 	
 	"fn#Struct":
 	[{
@@ -1802,6 +1755,69 @@ SWYM.DefaultGlobalCScope =
 		}
 	}*/],
 
+	"fn#javascript":
+	[{
+		expectedArgs:{ "argList":{index:0, typeCheck:SWYM.BlockType}, "body":{index:1, typeCheck:SWYM.BlockType} },
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable)
+		{
+			if( !argTypes[0].baked && (!argTypes[0].needsCompiling || argTypes[0].needsCompiling.length !== 1) )
+			{
+				SWYM.LogError(0, "The body of a javascript literal must be known at compile time!");
+				return undefined;
+			}
+			
+			var argsNode = argTypes[0].baked? argTypes[0].baked.bodyNode: argTypes[0].needsCompiling[0].bodyNode;
+			var typeNodes = [];
+			var nameNodes = [];
+			var defaultValueNodes = [];
+			SWYM.CollectClassMembers(argsNode, typeNodes, nameNodes, defaultValueNodes);
+			
+			var argNameList = []
+			for( var Idx = 0; Idx < nameNodes.length; ++Idx )
+			{
+				argNameList.push( nameNodes[Idx].value );
+			}
+						
+			for( var Idx = 0; Idx < defaultValueNodes.length; ++Idx )
+			{
+				var argType;
+				if( defaultValueNodes[Idx] !== undefined )
+				{
+					argType = SWYM.CompileNode(defaultValueNodes[Idx], cscope, executable);
+				}
+				else if( cscope[argNameList[Idx]] !== undefined )
+				{
+					argType = cscope[argNameList[Idx]];
+					executable.push("#Load");
+					executable.push(argNameList[Idx]);
+				}
+				else
+				{
+					SWYM.LogError(nameNodes[Idx], "Undefined argument '"+argNameList[Idx]+"'");
+				}
+				
+				if( SWYM.TypeMatches(SWYM.StringType, argType) )
+				{
+					executable.push("#Native")
+					executable.push(1)
+					executable.push(function(str){ return str.data; })
+				}
+			}
+
+			//FIXME: this is pretty half-assed. javascript parsing uses quite different rules from swym.
+			// To do this right, we ought to have switched into javascript mode way back in the tokenizer.
+			var functionText = "var jsFunction = function("+argNameList+")"+argTypes[1].needsCompiling[0].executableBlock.debugText;
+			eval(functionText);
+
+			executable.push("#Native");
+			executable.push(defaultValueNodes.length);
+			executable.push(jsFunction);
+			
+			return SWYM.DontCareType;
+		}
+	}],
+	
 	"fn#output":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} },
 			returnType:SWYM.VoidType,
 			customCompile:function(argTypes, cscope, executable)
@@ -1839,39 +1855,9 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 
-	"fn#alert":[{  expectedArgs:{ "this":{index:0} },
-			returnType:SWYM.VoidType,
-			nativeCode:function(alertStr){ alert(SWYM.ToTerseString(alertStr), ""); }
-		}],
-
 	"fn#length":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 			returnType:SWYM.IntType,
 			nativeCode:function(value){  return value.length;  } 
-		}],
-
-	"fn#sqrt":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.NumberType,
-			nativeCode:function(value){  return Math.sqrt(value);  }
-		}],
-		
-	"fn#cos":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.NumberType,
-			nativeCode:function(value){  return Math.cos(value);  }
-		}],
-
-	"fn#sin":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.NumberType,
-			nativeCode:function(value){  return Math.sin(value);  }
-		}],
-
-	"fn#floor":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.IntType,
-			nativeCode:function(value){  return Math.floor(value);  }
-		}],
-
-	"fn#ceiling":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
-			returnType:SWYM.IntType,
-			nativeCode:function(value){  return Math.ceil(value);  }
 		}],
 		
 	"fn#Var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType} },
@@ -2291,22 +2277,7 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.ArrayTypeContaining(argTypes[0].baked);
 		}
 	}],
-	
-	"fn#lowercase":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} },
-		returnType:SWYM.StringType,
-		nativeCode:function(str)
-		{
-			return SWYM.StringWrapper( str.data.toLowerCase() );
-		}
-	}],
 
-	"fn#uppercase":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} },
-		returnType:SWYM.StringType,
-		nativeCode:function(str)
-		{
-			return SWYM.StringWrapper( str.data.toUpperCase() );
-		}
-	}],
 
 	"fn#while":[{ expectedArgs:{ "test":{index:0, typeCheck:SWYM.CallableType}, "body":{index:1, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
@@ -2334,11 +2305,19 @@ SWYM.DefaultGlobalCScope =
 SWYM.stdlyb =
 "\
 //Swym loads this library by default, to implement various useful Swym constants\n\
-//and functions.  NB: some built-in native functions (such as 'input', 'output',\n\
-//'random', 'length', 'do', 'each', 'sin', 'cos', 'sqrt', 'floor', 'array', etc)\n\
-//plus a few special constants that cannot be bootstrapped ('true', 'false' and\n\
-//'novalues'), are not defined here.\n\
+//and functions.  The code is not exactly pretty right now. :-/\n\
+//NB: some built-in native functions (such as 'input', 'output',\n\
+//'random', 'length', 'do', 'each', 'array', 'javascript', etc) plus a few special\n\
+//constants that cannot be bootstrapped ('true', 'false' and 'novalues'),\n\
+//are not defined here.\n\
+\n\
+//Default operator overloads\n\
+Int: Int.'+'(Int:'rhs') = javascript{'lhs'=this, 'rhs'}{ return lhs+rhs };\
+Number: Number.'+'(Number:'rhs') = javascript{'lhs'=this, 'rhs'}{ return lhs+rhs };\
 Array.'+'(Array:'arr') = [.each, arr.each];\
+Bool: Number.'<'(Number:'rhs') = javascript{'lhs'=this, 'rhs'}{ return lhs<rhs };\
+Bool: String.'<'(String:'rhs') = javascript{'lhs'=this, 'rhs'}{ return lhs<rhs };\
+\n\
 Array.'atEnd'('idx') {.at(.length-1-idx)};\
 Array.'#st' {.at(#-1)};\
 Array.'#nd' {.at(#-1)};\
@@ -2511,7 +2490,19 @@ Array.'no'('body') = [.no.(body)];\
 Anything.'or_if'('test')('body') = .if(test)(body) else {this};\
 Type.'mutableArray'(Int:'length', 'equals') = this.mutableArray[equals**length];\
 Array.'AnyOf' = Type~of(.1st);\
+\n\
+Void: String.'alert' = javascript{'value'=this}{ alert(value) };\
+Number: Number.'sqrt' = javascript{'value'=this}{ return Math.sqrt(value) };\
+Number: Number.'sin' = javascript{'value'=this}{ return Math.sin(value) };\
+Number: Number.'cos' = javascript{'value'=this}{ return Math.cos(value) };\
+Int: Number.'floor' = javascript{'value'=this}{ return Math.floor(value) };\
+Int: Number.'ceiling' = javascript{'value'=this}{ return Math.ceiling(value) };\
+String: String.'lowercase' = javascript{'value'=this}{ return SWYM.StringWrapper(value.toLowerCase()) };\
+String: String.'uppercase' = javascript{'value'=this}{ return SWYM.StringWrapper(value.toUpperCase()) };\
 ";/**/
+
+//Number: Number.'cos' = javascript{'x'=this}{ return cos(x); };\
+
 
 /*
 Array.'random'(Int:'length') = [.random, etc**length]
