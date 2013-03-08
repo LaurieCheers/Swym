@@ -208,7 +208,12 @@ SWYM.operators = {
 					returnType = SWYM.ToSinglevalueType(returnType);
 					executable.push("#ForceSingleValue");
 				}
-				parentFunction.returnType = returnType;
+				
+				if( parentFunction.returnType !== undefined && parentFunction.returnType.type !== "incomplete" )
+					parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, returnType);
+				else
+					parentFunction.returnType = returnType;
+
 				executable.push("#Return");
 			}
 			else
@@ -1808,7 +1813,7 @@ SWYM.DefaultGlobalCScope =
 			}
 
 			//FIXME: this is pretty half-assed. javascript parsing uses quite different rules from swym.
-			// To do this right, we ought to have switched into javascript mode way back in the tokenizer.
+			// To do this right, we need to switch into javascript mode way back in the tokenizer.
 			var functionText = "var jsFunction = function("+argNameList+")"+argTypes[1].needsCompiling[0].executableBlock.debugText;
 			eval(functionText);
 
