@@ -386,6 +386,15 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	{
 		return typeA;
 	}
+
+	if( SWYM.TypeMatches(typeA, typeB) )
+	{
+		return typeA;
+	}
+	else if( SWYM.TypeMatches(typeB, typeA) )
+	{
+		return typeB;
+	}
 	
 	if( typeA.multivalueOf )
 	{

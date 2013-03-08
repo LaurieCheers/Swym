@@ -260,6 +260,7 @@ function runAllTests()
   runTest("$5.if(String)+5", "~error~");
  //TODO runTest("$5.if(Int)+$5", "~error~");
   runTest("$5.if(Int)+5", "<no values>");
+  runTest("\"Hello, World\".at(total[2,2,3])", "\"W\"");
   endReportTable();
   
   addReportTable("Builtins");

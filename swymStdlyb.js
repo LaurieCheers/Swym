@@ -392,7 +392,7 @@ SWYM.operators = {
 				cscope[declName+"##mutable"] = true;
 				return varType;
 			}
-			else if( node.children[1].type === "fnnode" && equalsNode.children[1].isDecl )
+			else if( node.children[1].type === "fnnode" && node.children[1].isDecl )
 			{
 				// it's a function declaration with a return type
 				node.children[1].returnTypeNode = node.children[0];
@@ -2438,6 +2438,8 @@ Array.'cyclic' = .withBounds{ this.at( it%this.length ) };\
 Array.'total' = .1st + .2nd + etc;\
 Array.'sum' = .total;\
 Array.'product' = .1st * .2nd * etc;\
+Array.'total'('body') = total[.each.(body)];\
+Array.'product'('body') = product[.each.(body)];\
 Array.'map'('body') = [.each.(body)];\
 Array.'copy' = [.each];\
 Anything.'in'('array') { ==any array };\
@@ -2470,6 +2472,13 @@ Number.'radToDeg' = this*180/PI;\
 Number.'abs' = if(this>=0){ this } else { -this };\
 Number.'differenceFrom'('n') = abs(this-n);\
 Number.'divisibleBy'('n') = this%n == 0;\
+\n\
+Int.'choose'(Int:'n')\n\
+{\n\
+  if(n>this) { 0 }\n\
+  else { product[(this-n)<..this] / product[0<..n] }\n\
+};\
+\n\
 String.'toInt' = .each.{\"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4, \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9}.[].{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc };\
 String.'lines' = .splitOutWhere{==\"\\n\"};\
 String.'words' = .splitOutWhere{==any \" \\t\\n\"};\

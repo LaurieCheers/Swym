@@ -814,15 +814,20 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 		
 		if( precompiled.executable === undefined )
 		{
+			precompiled.executable = [];
+			
+			if( theFunction.returnType !== undefined && theFunction.returnType.type !== "incomplete" )
+				precompiled.returnType = theFunction.returnType;
+			else
+				precompiled.returnType = SWYM.DontCareType; // treat recursive calls as though they yield our least offensive type.
+
 			var bodyCScope = object(SWYM.MainCScope);
 			for( var Idx = 0; Idx < argNamesPassed.length; Idx++ )
 			{
 				bodyCScope[argNamesPassed[Idx]] = argTypesPassed[Idx];
 			}
 			bodyCScope["__default"] = {redirect:"this"};
-
-			precompiled.executable = [];
-			precompiled.returnType = SWYM.DontCareType; // treat recursive calls as though they yield our least offensive type.
+			
 			precompiled.isCompiling = true;
 			precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, precompiled.executable);
 			precompiled.isCompiling = false;
@@ -2074,13 +2079,19 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		// we need to set the argument "this" to <etcSoFar>, representing the output from the etc
 		// expression we've processed so far, and set the anonymous argument to be the body node.
 		var etcScope = object(cscope);
-		etcScope["<etcSoFar>"] = SWYM.NumberType; // FIXME
+		etcScope["<etcSoFar>"] = bodyType;
 
 		parsetree.op.children[0] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
 		parsetree.op.children[1] = parsetree.body;
 
 		var etcExecutable = [];
 		var returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable);
+		if( returnType !== bodyType )
+		{
+			etcScope["<etcSoFar>"] = returnType;
+			etcExecutable = [];
+			returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable);
+		}
 		etcExecutable.push("#Overwrite");
 		etcExecutable.push("<etcSoFar>");
 
