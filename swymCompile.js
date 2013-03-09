@@ -1360,6 +1360,11 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	
 	if( SWYM.TypeMatches(SWYM.VoidType, argType) )
 	{
+		if( argNode )
+		{
+			SWYM.LogError(argNode, "A block with an argument name cannot be called with a void argument.");
+		}
+		
 		innerCScope = cscope;
 	}
 	else

@@ -183,8 +183,8 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 			}
 			else
 			{
-				var newOpCanHaveRhs = curLhs? curOp.behaviour.infix: curOp.behaviour.prefix;
-				if ( !newOpCanHaveRhs )
+				var curOpCanHaveRhs = curLhs? curOp.behaviour.infix: curOp.behaviour.prefix;
+				if ( !curOpCanHaveRhs )
 				{
 					// this op is finished, might as well resolve it now
 					curLhs = SWYM.ParseTreeNode(curLhs, curOp, undefined);
@@ -304,6 +304,30 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 
 SWYM.ParseTreeNode = function(lhs, op, rhs)
 {
+	if( op && !op.etc )
+	{
+		if( lhs && rhs && !op.behaviour.infix )
+		{
+			SWYM.LogError(op, "Operator "+op.text+" cannot be used infix style");
+			return undefined;
+		}
+		else if( !lhs && rhs && !op.behaviour.prefix )
+		{
+			SWYM.LogError(op, "Operator "+op.text+" cannot be used prefix style");
+			return undefined;
+		}
+		else if( lhs && !rhs && !op.behaviour.postfix )
+		{
+			SWYM.LogError(op, "Operator "+op.text+" cannot be used postfix style");
+			return undefined;
+		}
+		else if( !lhs && !rhs && !op.behaviour.standalone )
+		{
+			SWYM.LogError(op, "Operator "+op.text+" cannot be used standalone style");
+			return undefined;
+		}
+	}
+
 	if( op && op.behaviour.customParseTreeNode )
 	{
 		return op.behaviour.customParseTreeNode(lhs, op, rhs);
@@ -375,12 +399,42 @@ SWYM.OverloadableOperatorParseTreeNode = function(name)
 {
 	return function(lhs, op, rhs)
 	{
-		return {type:"fnnode", body:undefined, isDecl:false,
-			name:name,
-			etc:op.etc,
-			children:[lhs, rhs],
-			argNames:["this", "__"]
-		};
+		if( lhs !== undefined && rhs !== undefined )
+		{
+			return {type:"fnnode", body:undefined, isDecl:false,
+				name:name,
+				etc:op.etc,
+				children:[lhs, rhs],
+				argNames:["this", "__"]
+			};
+		}
+		else if( lhs !== undefined )
+		{
+			return {type:"fnnode", body:undefined, isDecl:false,
+				name:name,
+				etc:op.etc,
+				children:[lhs],
+				argNames:["this"]
+			};
+		}
+		else if( rhs !== undefined )
+		{
+			return {type:"fnnode", body:undefined, isDecl:false,
+				name:name,
+				etc:op.etc,
+				children:[rhs],
+				argNames:["__"]
+			};
+		}
+		else
+		{
+			return {type:"fnnode", body:undefined, isDecl:false,
+				name:name,
+				etc:op.etc,
+				children:[],
+				argNames:[]
+			};
+		}
 	}
 }
 
@@ -455,80 +509,96 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 	}
 }
 
-SWYM.CombineFnNodes = function(base, add)
+SWYM.CombineFnNodes = function(lhs, rhs)
 {
-	if( !base )
+	if( !lhs )
 	{
 		SWYM.LogError(0, "Error: expected function name");
+		return undefined;
 	}
-	else if( add.name )
+	
+	if( rhs.type === "name" || rhs.type === "decl" )
 	{
-		SWYM.LogError(base.pos, "Fsckup: CombineFnNodes - add already has name "+add.name+"!?!");
+		if( lhs.type === "name" || lhs.type === "decl" )
+		{
+			SWYM.LogError(0, "Error: too many function names!?");
+			return undefined;
+		}
+		return SWYM.CombineFnNodes(rhs, lhs);
 	}
-	else if( base.type === "name" )
+	
+	if( rhs.name !== undefined && ( lhs.type === "name" || lhs.type === "decl" || lhs.name !== undefined ))
 	{
-		add.pos = base.pos;
+		SWYM.LogError(lhs.pos, "Fsckup: CombineFnNodes - combining too many names! rhs already has name "+rhs.name+"!?!");
+		return undefined;
+	}
+	
+	if( lhs.type === "name" )
+	{
+		rhs.pos = lhs.pos;
 		
-		if( base.numToken )
+		if( lhs.numToken )
 		{
 			// pass numbers via the implicit # parameter
-			add.children.push(base.numToken);
-			add.argNames.push("#");
-			add.name = "#"+base.numSuffix;
+			rhs.children.push(lhs.numToken);
+			rhs.argNames.push("#");
+			rhs.name = "#"+lhs.numSuffix;
 		}
 		else
 		{
-			add.name = base.text;
+			rhs.name = lhs.text;
 		}
 			
-		return add;
+		return rhs;
 	}
-	else if( base.type === "decl" ) 
+	else if( lhs.type === "decl" ) 
 	{
-		add.name = base.value;
-		add.isDecl = true;
-		add.pos = base.pos;
+		rhs.name = lhs.value;
+		rhs.isDecl = true;
+		rhs.pos = lhs.pos;
 
 		// declare the implicit # parameter
-		if( base.value[0] === "#" )
+		if( lhs.value[0] === "#" )
 		{
-			add.children.push(SWYM.NewToken("name", base.pos, "Number"));
-			add.argNames.push("#");
+			rhs.children.push(SWYM.NewToken("name", lhs.pos, "Number"));
+			rhs.argNames.push("#");
 		}
 
-		return add;
+		return rhs;
 	}
-	else if ( base.type === "fnnode" )
+	else if ( lhs.type === "fnnode" )
 	{
-		var addArgsTo;
-		if( base.addArgsTo !== undefined )
-			addArgsTo = base.addArgsTo;
-		else
-			addArgsTo = base;
+		var baseNode = lhs;
+		if( baseNode.addArgsTo !== undefined )
+			baseNode = baseNode.addArgsTo;
+				
+		var newChildren = [];
+		SWYM.pushEach(baseNode.children, newChildren);
+		SWYM.pushEach(rhs.children, newChildren);
 
-		if( addArgsTo.children )
-			SWYM.pushEach(add.children, addArgsTo.children);
-		else
-			SWYM.LogError(addArgsTo, "Invalid use of ~ operator!")
+		var newArgNames = [];
+		SWYM.pushEach(baseNode.argNames, newArgNames);
+		SWYM.pushEach(rhs.argNames, newArgNames);
 
-		if( addArgsTo.argNames )
-			SWYM.pushEach(add.argNames, addArgsTo.argNames);
-		else
-			SWYM.LogError(addArgsTo, "Invalid use of ~ operator!")
-		
-		if( add.body )
+		var newBody = lhs.body? lhs.body: rhs.body;
+		if( lhs.body && rhs.body )
 		{
-			if( addArgsTo.body )
-				SWYM.LogError(0, "Error: too many function bodies!");
-			else
-				addArgsTo.body = add.body;
+			SWYM.LogError(0, "Error: too many function bodies!");
 		}
-		return base;
+
+		var result = ( rhs.name !== undefined )? rhs: lhs;
+		result.body = newBody;
+
+		var addArgsTo = (result.addArgsTo !== undefined)? result.addArgsTo: result;		
+		addArgsTo.children = newChildren;
+		addArgsTo.argNames = newArgNames;
+		
+		return result;
 	}
 	else
 	{
-		SWYM.LogError(base.pos, "Error: expected a function expression, got "+base);
-		return add;
+		SWYM.LogError(lhs.pos, "Error: expected a function expression, got "+lhs);
+		return rhs;
 	}
 }
 
@@ -553,7 +623,7 @@ SWYM.BuildDotNode = function(lhs, op, rhs, wrapper)
 	}
 
 	// order matters! Put the rhs arguments into the list first, they're the ones that can be matched positionally.
-	result = SWYM.CombineFnNodes(rhs, result);
+	result = SWYM.CombineFnNodes(result, rhs);
 	
 	if( !wrapper )
 	{

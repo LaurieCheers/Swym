@@ -32,7 +32,8 @@
 			{ regex: /\b[A-z0-9#]+(?=')/gi,								css: 'variable' },		// single quoted strings
 			{ regex: /'/gi,												css: 'littlequote' },		// single quoted strings
 			{ regex: /[\(\)]/gi,										css: 'color1' },		// round brackets fainter than curlies
-			{ regex: /[\[\]]/gi,										css: 'color3' },		// square brackets
+			{ regex: /[\{\}]/gi,										css: 'color3' },		// curly brackets very heavy
+			{ regex: /[\[\]]/gi,										css: 'color3' },		// square brackets also heavy
 			{ regex: /\b([\d]+(\.[\d]+)?|0x[a-f0-9]+)\b/gi,				css: 'value' },			// numbers
 			{ regex: /\.\./gi,											css: 'plain' },			// don't treat .. as a function
 			{ regex: /(\.\!?\w*[A-Za-z0-9]+)|([A-Za-z0-9]+\w*(?=[\[\(\{]))/gi,	css: 'functions' },		// function calls

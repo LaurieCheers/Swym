@@ -27,6 +27,11 @@ SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 		return SWYM.IsEqual(typeCheck.baked, value, exact);
 	}
 	
+	if( value === null )
+	{
+		return false;
+	}
+	
 	if( typeCheck.memberTypes )
 	{
 		for( var memberName in typeCheck.memberTypes )

@@ -364,7 +364,7 @@ function runAllTests()
   runTest("[1, 1+2, etc..<100]", "[1,3,6,10,15,21,28,36,45,55,66,78,91]");
   runTest("Array.'ttl'{.1st + .2nd + etc}; [1..10].ttl", "55");
   runTest("Array.'myproduct'{.1st * .2nd * etc}; [1..5].myproduct", "120");
-  runTest("Int.'factorial'{1*2*etc..this}; 5.factorial", "120");
+  runTest("Int.'factorialX'{1*2*etc..this}; 5.factorialX", "120");
   runTest("'dotProduct'('a')('b') { a.1st*b.1st + a.2nd*b.2nd + etc }; dotProduct[1,1,2][0,5,2]", "9");
   runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[\"hello\",\"there\",\"world\"]", "[\"htw\",\"eho\",\"ler\",\"lrl\",\"oed\"]");
   runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[[1..5],[10..15],[20..25]]", "[[1,10,20],[2,11,21],[3,12,22],[4,13,23],[5,14,24]]");
@@ -386,12 +386,12 @@ function runAllTests()
   runTest("[ [[1,1],[1,2]].some.all == 2 ]","false");
   runTest("[ [[1,1],[1,2],[2,2]].all.some == 2 ]","false");
   runTest("[ [[1,2],[2,2]].all.some == 2 ]","true");
-  runTest("if[all[1..10] > 0]{ output(\"yes\") }","yes");
-  runTest("if[all[1..10] > 1]{ output(\"yes\") }","<no output>");
-  runTest("if[some[1..10] > 9]{ output(\"yes\") }","yes");
-  runTest("if[some[1..10] > 10]{ output(\"yes\") }","<no output>");
-  runTest("if[none[1..10] > 9]{ output(\"yes\") }","<no output>");
-  runTest("if[none[1..10] > 10]{ output(\"yes\") }","yes");
+  runTest("output~if[all[1..10] > 0]{ \"yes\" } else { \"no\" }","yes");
+  runTest("output~if[all[1..10] > 1]{ \"yes\" } else { \"no\" }","no");
+  runTest("output~if[some[1..10] > 9]{ \"yes\" } else { \"no\" }","yes");
+  runTest("output~if[some[1..10] > 10]{ \"yes\" } else { \"no\" }","no");
+  runTest("output~if[none[1..10] > 9]{ \"yes\" } else { \"no\" }","no");
+  runTest("output~if[none[1..10] > 10]{ \"yes\" } else { \"no\" }","yes");
   runTest("10 !=any [1..10]", "false");
   runTest("11 !=any [1..10]", "true");
   runTest("10 ==any [1..10]", "true");
@@ -430,6 +430,7 @@ function runAllTests()
 
   addReportTable("Errors:");
   runTest("1)","~error~");
+  runTest("void.'x'->{5}", "~error~");
   endReportTable();
 
   addReportTable("Structs:");
