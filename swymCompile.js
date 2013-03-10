@@ -1277,8 +1277,18 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 		SWYM.pushEach(bodyExecutable, executable);
 		if( theCurrentFunction.returnType !== undefined && theCurrentFunction.returnType.type !== "incomplete" )
 		{
-			SWYM.TypeCoerce(theCurrentFunction.returnType, bodyReturnType);
-			returnType = SWYM.TypeIntersect(theCurrentFunction.returnType, bodyReturnType);
+			if( theCurrentFunction.returnType.baked !== undefined && !SWYM.TypeMatches(theCurrentFunction.returnType, bodyReturnType) )
+			{
+				// force this return value (for Void, at least... but what about other baked types?)
+				executable.push("#ClearStack");
+				executable.push("#Literal");
+				executable.push(theCurrentFunction.returnType.baked);
+			}
+			else
+			{
+				SWYM.TypeCoerce(theCurrentFunction.returnType, bodyReturnType);
+				returnType = SWYM.TypeIntersect(theCurrentFunction.returnType, bodyReturnType);
+			}
 		}
 		else
 		{

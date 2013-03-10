@@ -113,7 +113,7 @@ function runAllTests()
   runTest("'myfor'('arg')('body'){arg.do(body)}; myfor(3){it*2}", "6");
   runTest("5.{it+2}",												"7");
   runTest("Number.'x' {1+3}; 5.x",										"4");
-  runTest("Number.'x' = .*2; 5.x",										"10");
+  runTest("Number.'x' returns .*2; 5.x",										"10");
   runTest("Number.'square' {this*this}; 7.square",							"49");
   runTest("Number.'square' {this*this}; 'x'=5; output(\"Hello $x.square!\")",	"Hello 25!");
   runTest("Number.'square' {this*this}; 'x'=5; output(\"Hello $(square(x))!\")",	"Hello 25!");
@@ -124,8 +124,8 @@ function runAllTests()
   runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else{+1}", "5");
   runTest("'elsie'('x', 'else') {x.(else)}; elsie(4)else({+1})", "5");
   runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else it+1", "5");
-  runTest("Number.'eqtest' = 4; 10.eqtest", "4");
-  runTest("Number.'eqtest' = {4}; 10.eqtest", "4");
+  runTest("Number.'eqtest' returns 4; 10.eqtest", "4");
+  runTest("Number.'eqtest' returns {4}; 10.eqtest", "'it'->{4}");
   runTest("Number.'eqtest' {4}; 10.eqtest", "4");
   runTest("Number.'test' { return this+1; }; 4.test+1", "6");
   runTest("Number.'test' { if(this>4) { return 4 } else { return 5 } }; 4.test", "5");
@@ -175,7 +175,7 @@ function runAllTests()
   runTest("[\"y\"..\"B\"]", "\"yzAB\"");
   runTest("[\"B\"..\"5\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYZ012345\"");
   runTest("[\"9\"..\"0\"]", "\"9876543210\"");
-  runTest("Number.'divides'('n') {n%this == 0};  Number.'isPrime' = length( [1..this].where{.divides(this)} ) == 2;  [0..20].where{.isPrime}", "[2,3,5,7,11,13,17,19]");
+  runTest("Number.'divides'('n') {n%this == 0};  Number.'isPrime' returns length( [1..this].where{.divides(this)} ) == 2;  [0..20].where{.isPrime}", "[2,3,5,7,11,13,17,19]");
   runTest("[10,1**5,10]", "[10,1,1,1,1,1,10]");
   runTest("[(1,2)**5]", "[1,2,1,2,1,2,1,2,1,2]");
   runTest("'list'=[\"x\",\"y\",\"z\"]; list.each.{.print; .print;}",			"xxyyzz");
@@ -189,7 +189,7 @@ function runAllTests()
 //  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Ciao\"].pretty(\" and \"); ",	"\"Ciao\"");
   runTest("[10..6].keys", "[0..4]");
   runTest("\"Hello\".keys", "[0..4]");
-  runTest("Int.'bottles' = case(this){ 0=>\"no more bottles\", 1=>\"1 bottle\", else=>\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
+  runTest("Int.'bottles' returns case(this){ 0=>\"no more bottles\", 1=>\"1 bottle\", else=>\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
 			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n\n");
   runTest("Int.'b'{\"$(.{0=>\"no more\",else=>this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
   			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n");
@@ -209,7 +209,7 @@ function runAllTests()
   runTest("{\"x\"=>10, \"y\"=>20}.at(\"x\")", "10");
   runTest("{\"x\"=>10, \"y\"=>20}.at(\"y\")", "20");
   runTest("{\"x\"=>10, \"y\"=>20}.at(\"z\")", "~error~");
-  runTest("Table.'getx' = .at(\"x\"); getx{\"x\"=>10, \"y\"=>20}", "10");
+  runTest("Table.'getx' returns .at(\"x\"); getx{\"x\"=>10, \"y\"=>20}", "10");
   runTest("0.{else=>1}", "1");
   runTest("{else=>1}.keys", "[]");
   runTest("{\"xx\"=>10, \"y\"=>20}.keys", "[\"xx\",\"y\"]");
@@ -266,7 +266,7 @@ function runAllTests()
   addReportTable("Builtins");
   runTest("[4,5,6,7].where{>5}", "[6,7]");
   runTest("[4,5,6,7].where{.in[6..8]}", "[6,7]");
-  runTest("Number.'isEven' = this%2 == 0;\n\n[1,2,3,4,5,6,7,8,9].where{.isEven};", "[2,4,6,8]");
+  runTest("Number.'isEven' returns this%2 == 0;\n\n[1,2,3,4,5,6,7,8,9].where{.isEven};", "[2,4,6,8]");
   runTest("7.is(Number)", "true");
   runTest("true.is(Number)", "false");
   runTest("7.is(String)", "false");
@@ -297,8 +297,8 @@ function runAllTests()
   runTest("[2,1,3].sort", "[1,2,3]");
   runTest("\"Hello World\".sort", "\" HWdellloor\"");
   runTest("[12..9,2,1,3,1..10].sort", "[1,1,2,2,3,3,4,5,6,7,8,9,9,10,10,11,12]");
-  runTest("Array.'isPalindrome' = .reverse == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
-  runTest("Array.'isPalindrome' = .reverse == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
+  runTest("Array.'isPalindrome' returns .reverse == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
+  runTest("Array.'isPalindrome' returns .reverse == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
   runTest("forEach[1..5]{it*it}", "[1,4,9,16,25]");
   runTest("if(this=4, test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Not string\"");
   runTest("if(this=\"\", test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Yes, string\"");
@@ -319,14 +319,17 @@ function runAllTests()
   runTest("\"Hello\".slice[2..3]", "\"ll\"");
   runTest("\"Hello\".splitAt[1,3]", '["H","el","lo"]');
   runTest("floor~sin(1..5)", "0\n0\n0\n-1\n-1");
+  runTest("toInt(\"157\")+toInt(\"12\")", "169");
+  runTest("toInt(\"157\" + \"12\")", "15712");
+  runTest("toInt(\"n\")", "~error~");
   endReportTable();
 
   addReportTable("Destructuring:");
-  runTest("['x','y'].'test' = x+y; test[5,6]", "11");
-  runTest("'test'['x','y'] = x+y; test[5,6]", "11");
-  runTest("'test'(['x','y']:'xy') = x+y; test(xy=[5,6])", "11");
-  runTest("['x','y'].'test' = x+y+.length; test[5,6]", "13");
-  runTest("[['x'],['y','z']].'test' = x+y+z; test[[5],[3,3]]", "11");
+  runTest("['x','y'].'test' returns x+y; test[5,6]", "11");
+  runTest("'test'['x','y'] returns x+y; test[5,6]", "11");
+  runTest("'test'(['x','y']:'xy') returns x+y; test(xy=[5,6])", "11");
+  runTest("['x','y'].'test' returns x+y+.length; test[5,6]", "13");
+  runTest("[['x'],['y','z']].'test' returns x+y+z; test[[5],[3,3]]", "11");
   runTest("[5,6].['x','y']->{x+y}", "11");
   endReportTable();
   
@@ -336,7 +339,7 @@ function runAllTests()
   runTest("'x' = Anything.var=[4]; x.value[5]; x", "var([5])");
   runTest("'x' = Anything.var[4]; x.value=[5]; value~of(x)", "[5]");
   runTest("'x' = Anything.var(3); 'y' = Anything.var=value(x); x.value=4; [x.value, y.value]", "[4,3]");
-  runTest("Array.'value'(Array:'equals') = .keys.each{.(this).value= .(equals)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].value=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
+  runTest("Array.'value'(Array:'equals') returns .keys.each{.(this).value= .(equals)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].value=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
 //  runTest("vars: Mutable[6,3,9]; vars.each = 1; vars",	"[1,1,1]");
 //  runTest("x:Anything.var = 3; y: Anything.var=8; z: Anything.var=9; vars: Mutable[x,y,z]; vars.each = 1; [x,y,z,vars.each]",	"[3,8,9,1,1,1]");
 //  runTest("Anything.var:x=3; :z=[x]; x=9; z",	"[3]");
@@ -404,8 +407,8 @@ function runAllTests()
   runTest("[[\"Hello\", \"Hola\", \"Bonjour\"].some.length == 6]","false");
   runTest("[[\"Hello\", \"Hola\", \"Bonjour\"].all.length > 2]","true");
   runTest("[[\"Hello\", \"Hola\", \"Bonjour\"].all.length > 4]","false");
-  runTest("Array.'isEmpty' = .length==0; [[\"Hello\", \"Hola\", \"Bonjour\"].some.isEmpty]","false");
-  runTest("Array.'isEmpty' = .length==0; [[\"\", \"Hello\", \"Hola\", \"Bonjour\"].some.isEmpty]","true");
+  runTest("Array.'isEmpty' returns .length==0; [[\"Hello\", \"Hola\", \"Bonjour\"].some.isEmpty]","false");
+  runTest("Array.'isEmpty' returns .length==0; [[\"\", \"Hello\", \"Hola\", \"Bonjour\"].some.isEmpty]","true");
   endReportTable();
 
 

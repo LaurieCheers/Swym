@@ -23,7 +23,7 @@
 	{
 		// Created by Peter Atoria @ http://iAtoria.com
 	
-		var keywords =	'etc it this return yield';
+		var keywords =	'etc it this return yield returns';
 	
 		this.regexList = [
 			{ regex: SyntaxHighlighter.regexLib.singleLineCComments,	css: 'comments' },		// one line comments
