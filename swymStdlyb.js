@@ -1077,13 +1077,7 @@ SWYM.operators = {
 		{
 			if( lhs && lhs.type === "name" )
 			{
-				var addArgsTo;
-				if( rhs && rhs.addArgsTo !== undefined )
-					addArgsTo = rhs.addArgsTo;
-				else
-					addArgsTo = rhs;
-					
-				return {type:"fnnode", addArgsTo:addArgsTo, pos:lhs.pos, body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
+				return {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:false, name:lhs.text, children:[rhs], argNames:["__"]};
 			}
 			else
 			{
