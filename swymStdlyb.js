@@ -1915,6 +1915,14 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.ToMultivalueType(SWYM.GetOutType( argTypes[0], SWYM.VoidType ));
 		}
 	}],
+	
+	"fn#compile":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "body":{index:1, typeCheck:SWYM.BlockType} },
+		customCompile:function(argTypes, cscope, executable)
+		{
+			SWYM.GetOutType(argTypes[1], argTypes[0].baked);
+			return argTypes[1];
+		}
+	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
