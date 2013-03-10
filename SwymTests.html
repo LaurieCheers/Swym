@@ -431,6 +431,11 @@ function runAllTests()
   addReportTable("Errors:");
   runTest("1)","~error~");
   runTest("void.'x'->{5}", "~error~");
+  runTest("5-", "~error~");
+  runTest("5+", "~error~");
+  runTest("+1", "~error~");
+  runTest("+", "~error~");
+  runTest("true!false", "~error~");
   endReportTable();
 
   addReportTable("Structs:");

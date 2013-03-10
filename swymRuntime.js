@@ -14,7 +14,7 @@ SWYM.Exec = function(executable)
 
 SWYM.value_novalues = {type:"novalues"};
 
-SWYM.ExecWithScope = function(debugName, executable, rscope, stack)
+SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 {
 	var PC = 0;
 

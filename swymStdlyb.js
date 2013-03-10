@@ -1157,7 +1157,7 @@ SWYM.operators = {
 				
 				executable.push("#Literal");
 				executable.push(emptyList);
-				return {type:"swymObject", ofClass:SWYM.ArrayClass, outType:SWYM.DontCareType, baked:emptyList};
+				return SWYM.BakedValue(emptyList);
 			}
 			else
 			{
@@ -2176,7 +2176,7 @@ SWYM.DefaultGlobalCScope =
 			executable.push(2);
 			executable.push(function(test, body)
 			{
-				while( SWYM.ClosureCall(test) != false )
+				while( SWYM.ClosureCall(test) != false && !SWYM.halt)
 				{
 					SWYM.ClosureCall(body);
 				}
@@ -2432,7 +2432,7 @@ Int.'factorial' = product[1<=..this];\
 Int.'choose'(Int:'n')\n\
 {\n\
   if(n>this) { 0 }\n\
-  else { product[(this-n)<..this] / n.factorial }\n\
+  else { floor( product[(this-n)<..this] / n.factorial ) }\n\
 };\
 \n\
 String.'toInt' = case(.each)\n\
