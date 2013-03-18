@@ -1,0 +1,169 @@
+//Project Euler #1
+sum( [1..<1000].where{.divisibleBy(3) || .divisibleBy(5)} )
+
+
+//Project Euler #2
+'fib'('length') returns Int.buildArray
+{
+  Int:'a' = 1
+  Int:'b' = 1
+  
+  while{ .length < length }
+  {
+    .push(a)
+    a = a+b
+    .push(b)
+    b = a+b
+  }
+}
+
+fib(50).where{ <=4000000 && .divisibleBy(2) }.sum
+
+
+//Project Euler #3
+Int.'factors' returns Int.buildArray
+{
+  Int:'remainder' = this
+  Int:'factor' = 2
+  while{ remainder >= factor }
+  {
+    if( remainder.divisibleBy(factor) )
+    {
+      remainder = floor(remainder/factor)
+      .push(factor)
+    }
+    else
+    {
+      factor = factor + 1
+    }
+  }
+}
+
+600851475143.factors.max
+
+
+//Project Euler #4
+Array.'maxWhere'('body', 'else')
+{
+  'firstIdx' = .keys.firstWhere{.(this).(body)} else { return this.(else) }
+  .ElementType:'bestValue' = firstIdx.(this)
+  
+  forEach(.slice[firstIdx<..<this.length]) 'value'->
+  {
+    if( value > bestValue && value.(body) )
+    {
+      bestValue = value
+    }
+  }
+
+  return bestValue
+}
+
+Int.'isPalindromic' returns .$.{ == .reverse }
+
+[(900..999)*(900..999)].maxWhere{.isPalindromic} else{0}
+
+
+//Project Euler #5
+Int.'factors' returns Int.buildArray
+{
+  Int:'remainder' = this
+  Int:'factor' = 2
+  while{ remainder >= factor }
+  {
+    if( remainder.divisibleBy(factor) )
+    {
+      remainder = floor(remainder/factor)
+      .push(factor)
+    }
+    else
+    {
+      factor = factor + 1
+    }
+  }
+}
+
+// bag union - given an array of sorted lists, returns a sorted list
+// containing all values in those lists.
+Number.Array.Array.'union' returns Number.buildArray 'result'->
+{
+  Number.Array.Array:'remainder' = this.where{!= []}
+  while{ remainder != [] }
+  {
+    'newResult' = min[remainder.each.1st]
+
+    result.push( newResult )
+
+    remainder = forEach(remainder) 'entry'->
+    {
+      if( entry == [newResult] ){ novalues }
+      else if( entry.1st == newResult ){ entry.tail }
+      else { entry }
+    }
+  }
+}
+
+[factors(1..20)].union.product
+
+
+//Project Euler #6
+[1..100].sum^2 - [(1..100)^2].sum
+
+//Project Euler #7
+// SWYM is not optimized for speed, so this takes a while!
+// (By this benchmark Swym is currently about 200x slower than python.)
+Int:'n' = 2
+Int:'nthPrime' = 3
+
+'sieve' = Bool.mutableArray[ false,false,true, (true,false)**60000 ]
+
+while{ nthPrime < sieve.length }
+{
+  if( sieve.at(nthPrime) )
+  {
+    if( n == 10001 )
+    {
+      print(nthPrime)
+      // a break statement would be nice
+    }
+
+    //i.e. the first multiple of nthPrime that's not already crossed off
+    Int:'multiple' = nthPrime*nthPrime
+    while{ multiple < sieve.length }
+    {
+      sieve.at(multiple) = false
+      multiple = multiple + nthPrime*2
+    }
+
+    n = n+1
+  }
+
+  nthPrime = nthPrime+2
+}
+
+
+//Project Euler #8
+'digits' = forEach("7316717653133062491922511967442657474235534919493496983520312774506326239578318016984801869478851843858615607891129494954595017379583319528532088055111254069874715852386305071569329096329522744304355766896648950445244523161731856403098711121722383113622298934233803081353362766142828064444866452387493035890729629049156044077239071381051585930796086670172427121883998797908792274921901699720888093776657273330010533678812202354218097512545405947522435258490771167055601360483958644670632441572215539753697817977846174064955149290862569321978468622482839722413756570560574902614079729686524145351004748216637048440319989000889524345065854122758866688116427171479924442928230863465674813919123162824586178664583591245665294765456828489128831426076900422421902267105562632111110937054421750694165896040807198403850962455444362981230987879927244284909188845801561660979191338754992005240636899125607176060588611646710940507754100225698315520005593572972571636269561882670428252483600823257530420752963450")
+{.toInt}
+
+max[digits.slices(length=5).each.product]
+
+
+//Project Euler #9
+//Based on the question's constraints, these are the approx limits for a and b
+forEach[pair(1..350, 200..500)] ['a','b']->
+{
+  'c' = sqrt(a^2+b^2)
+  if( a+b+c == 1000 )
+  {
+    print(a*b*c)
+    //break
+  }
+}
+
+
+//Project Euler #10
+// SWYM is too slow to implement this right now :(
+
+
+//Project Euler #11

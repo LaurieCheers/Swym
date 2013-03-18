@@ -840,6 +840,18 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 				precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, precompiled.executable);
 				precompiled.isCompiling = false;
 			}*/
+			
+			if( SWYM.errors )
+			{
+				for( var Idx = 0; Idx < theFunction.precompiled.length; ++Idx )
+				{
+					if( theFunction.precompiled[Idx] === precompiled )
+					{
+						theFunction.precompiled.splice(Idx, 1);
+						break;
+					}
+				}
+			}
 		}
 		else if( precompiled.isCompiling )
 		{
@@ -1785,6 +1797,11 @@ SWYM.ConvertSeparatorsToCommas = function(node)
 
 SWYM.CompileTable = function(node, cscope, executable)
 {
+	if( node.type === "etc" )
+	{
+		return SWYM.CompileEtc(node, cscope, executable);
+	}
+	
 	var keyNodes = [];
 	var valueNodes = [];
 	
@@ -2083,6 +2100,14 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		stepExecutable = [];
 		var bodyType = SWYM.CompileNode(parsetree.body, stepCScope, stepExecutable);			
 	}
+	else if( parsetree.body.op && parsetree.body.op.text === "=>" )
+	{
+		var keyType = SWYM.CompileNode(parsetree.body.children[0], cscope, etcExecutable);
+		var valueType = SWYM.CompileNode(parsetree.body.children[1], cscope, etcExecutable);
+		bodyType = SWYM.TableTypeFromTo(keyType, valueType);
+		etcExecutable.push("#CreateArray");
+		etcExecutable.push(2);
+	}
 	else
 	{
 		var bodyType = SWYM.CompileNode(parsetree.body, cscope, etcExecutable);
@@ -2138,35 +2163,65 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	// problem operators we'll need to worry about: , && || + and of course .
 	switch(parsetree.op.text)
 	{
-		case ",":
-			postProcessor = function(list){ return SWYM.jsArray(list); };
-			
-			if( bodyType && bodyType.multivalueOf !== undefined )
+		case ",": case ";": case "(blank_line)":
+			if( parsetree.body.op && parsetree.body.op.text === "=>" )
 			{
-				composer = function(list, v){ SWYM.ConcatInPlace( list, v ); return list; };
+				// table constructor
+				initialValue = function(){ return {table:{}, keys:[]}; };
+				composer = function(fields, pair){ fields.table[pair[0]] = pair[1]; fields.keys.push(pair[0]); return fields; };
+				postProcessor = function(fields){ return SWYM.TableWrapper(fields.table, SWYM.jsArray(fields.keys)); };
 				returnType = bodyType;
 			}
 			else
 			{
-				composer = function(list, v){list.push(v); return list;};
-				returnType = SWYM.ToMultivalueType(bodyType);
+				// array constructor
+				postProcessor = function(list){ return SWYM.jsArray(list); };
+				
+				if( bodyType && bodyType.multivalueOf !== undefined )
+				{
+					composer = function(list, v){ SWYM.ConcatInPlace( list, v ); return list; };
+					returnType = SWYM.ToMultivalueType(bodyType.multivalueOf);
+				}
+				else
+				{
+					composer = function(list, v){list.push(v); return list;};
+					returnType = SWYM.ToMultivalueType(bodyType);
+				}
 			}
 			break;
 
 		case "&&":
 			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "&&etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
-				composer = function(tru, v){ var result = SWYM.ResolveBool_Every(v); if(!result){ SWYM.g_etcState.halt = true; }; return result; };
+				composer = function(tru, v)
+				{
+					var result = SWYM.ResolveBool_Every(v);
+					if(!result){ SWYM.g_etcState.halt = true; };
+					return result;
+				};
 			else
-				composer = function(tru, v){ if(!v){ SWYM.g_etcState.halt = true; }; return v; };
+				composer = function(tru, v)
+				{
+					if(!v){ SWYM.g_etcState.halt = true; };
+					return v;
+				};
 			break;
 
 		case "||":
 			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "||etc arguments");
 			if( bodyType && bodyType.multivalueOf !== undefined )
-				composer = function(fals, v){ var result = SWYM.ResolveBool_Some(v); if(result){ SWYM.g_etcState.halt = true; }; return result; };
+				composer = function(fals, v)
+				{
+					var result = SWYM.ResolveBool_Some(v);
+					if(result){ SWYM.g_etcState.halt = true; };
+					return result;
+				};
 			else
-				composer = function(fals, result){ if(result){ SWYM.g_etcState.halt = true; }; return result; };
+				composer = function(fals, result)
+				{
+					if(result){ SWYM.g_etcState.halt = true; };
+					return result;
+				};
 			break;
 	}
 	
@@ -2286,11 +2341,11 @@ SWYM.DeclareAccessor = function(memberName, classType, memberType, cscope)
 				executable.push(1);
 				executable.push(function(obj){ return obj.members[memberName]; });
 
-        var structType;
+				var structType;
 				if( argTypes[0] && argTypes[0].multivalueOf )
-          structType = argTypes[0].multivalueOf;
-        else
-          structType = argTypes[0];
+					structType = argTypes[0].multivalueOf;
+				else
+					structType = argTypes[0];
 
 				if( structType && structType.memberTypes && structType.memberTypes[memberName] )
 				{
@@ -2304,9 +2359,24 @@ SWYM.DeclareAccessor = function(memberName, classType, memberType, cscope)
 		});
 }
 
+SWYM.DeclareMutator = function(memberName, classType, memberType, cscope)
+{
+	SWYM.AddFunctionDeclaration("fn#"+memberName, cscope,
+		{
+			expectedArgs:{"this":{index:0, typeCheck:classType}, "equals":{index:1, typeCheck:memberType}},
+			customCompile:function(argTypes, cscope, executable)
+			{
+				executable.push("#Native");
+				executable.push(2);
+				executable.push(function(obj, value){ obj.members[memberName] = value; });
+
+				return SWYM.VoidType;
+			},
+		});
+}
+
 SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 {
-	//TODO: fix default member values (at the moment they will cause runtime errors.)
 	var memberNames = [];
 	var functionData = {
 			expectedArgs:{"this":{index:0, typeCheck:SWYM.BakedValue(newStruct)}},
@@ -2318,7 +2388,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 				{
 					members[memberNames[Idx]] = arguments[Idx];
 				}
-				return {type:"struct", debugName:SWYM.TypeToString(newStruct), structType:newStruct, members:members};
+				return {type:"struct", isMutable:newStruct.isMutable, debugName:SWYM.TypeToString(newStruct), structType:newStruct, members:members};
 			},
 			getReturnType:function(argTypes)
 			{
@@ -2328,7 +2398,9 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 					memberTypes[memberNames[Idx]] = argTypes[Idx+1];
 				}
 				
-				return {type:"type", debugName:SWYM.TypeToString(argTypes[0]? argTypes[0].baked: ""), nativeType:"Struct", memberTypes:memberTypes};
+				var resultType = object(newStruct);
+				resultType.memberTypes = memberTypes;
+				return resultType;
 			}
 		};
 	

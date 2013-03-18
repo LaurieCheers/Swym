@@ -683,6 +683,10 @@ SWYM.BakedValue = function(value, errorContext)
 		result = object(SWYM.ArrayType);
 		result.memberTypes = object(result.memberTypes);
 		result.memberTypes.length = SWYM.BakedValue(value.length);
+		if( value.length === 0 )
+		{
+			result.outType = SWYM.DontCareType;
+		}
 	}
 	else if( value.type === "rangeArray" )
 	{

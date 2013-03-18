@@ -246,8 +246,20 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 		{
 			if( !curOp )
 			{
-				SWYM.LogError(SWYM.curToken.pos, "Expected an operator before 'etc'.");
-				return undefined;
+				if( SWYM.curToken.followsBreak )
+				{
+					// etc requires an operator; if it follows a line break, that operator is the implicit line break separator.
+					var result = HandleAddOp( SWYM.NewToken("op", SWYM.curToken.sourcePos, "(blank_line)"), true );
+					if ( result )
+					{
+						return result.value;
+					}
+				}
+				else
+				{
+					SWYM.LogError(SWYM.curToken.pos, "Expected an operator before 'etc'.");
+					return undefined;
+				}
 			}
 
 			var etcText = "etc";
@@ -440,6 +452,12 @@ SWYM.OverloadableOperatorParseTreeNode = function(name)
 
 SWYM.IsTableNode = function(paramnode)
 {
+	// etc-based table
+	if( paramnode && paramnode.type === "etc" && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") && paramnode.body.op && paramnode.body.op.text === "=>" )
+	{
+		return true;
+	}
+
 	while( paramnode && paramnode.children && paramnode.op &&
 			(paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
@@ -583,7 +601,7 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 		var newBody = lhs.body? lhs.body: rhs.body;
 		if( lhs.body && rhs.body )
 		{
-			SWYM.LogError(0, "Error: too many function bodies!");
+			SWYM.LogError(lhs.pos, "Error: too many function bodies!");
 		}
 
 		var result = ( rhs.name !== undefined )? rhs: lhs;

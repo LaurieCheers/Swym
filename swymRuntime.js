@@ -954,6 +954,29 @@ SWYM.StringWrapper = function(str, isChar)
 	}
 }
 
+SWYM.TableWrapper = function(table, keys)
+{
+	if( keys === undefined )
+	{
+		keys = []
+		for(var k in table)
+		{
+			keys.push(k);
+		}
+		keys = jsArray(keys);
+	}
+	
+	return {
+		type:"table",
+		run: function(key)
+		{
+			return this.data[key];
+		},
+		keys:keys,
+		data:table
+	};
+}
+
 SWYM.ReportOutOfBounds = function(array, index)
 {
   if( SWYM.g_etcState.depth > 0 )
