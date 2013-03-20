@@ -240,6 +240,11 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 
 SWYM.CompileNode = function(node, cscope, executable)
 {
+	if( SWYM.errors )
+	{
+		return SWYM.DontCare;
+	}
+	
 	var resultType = SWYM.CompileLValue(node, cscope, executable);
 	
 	while(true)
@@ -406,7 +411,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		
 	for( var Idx = 0; Idx < overloads.length; ++Idx )
 	{
-		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables);
+		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode);
 		
 		if( overloadResult.error === undefined )
 		{
@@ -506,7 +511,7 @@ SWYM.TypeChecksStricter = function(curTypeChecks, bestTypeChecks)
 }
 
 // returns {error:<an error>, executable:<an executable>, returnType:<a return type>}
-SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables)
+SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, errorNode)
 {
 	var overloadResult = {theFunction:theFunction, error:undefined, executable:[], typeChecks:{}, returnType:undefined, quality:0};
 
@@ -641,6 +646,7 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 	overloadResult.inputArgExecutables = inputArgExecutables;
 	overloadResult.theFunction = theFunction;
 	overloadResult.isMulti = isMulti;
+	overloadResult.errorNode = errorNode;
 	return overloadResult;
 }
 
@@ -703,7 +709,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			}
 			else
 			{
-				SWYM.LogError(0, "Fsckup: Missing argExecutable for arg name '"+inputArgName+"'");
+				SWYM.LogError(-1, "Fsckup: Missing argExecutable for function "+fnName+", arg '"+inputArgName+"'");
 			}
 			SWYM.TypeCoerce(theFunction.expectedArgs[expectedArgName].typeCheck, tempType, data.inputArgNodes[expectedArgName], "calling '"+fnName+"', argument "+expectedArgName);
 
@@ -751,12 +757,12 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	{
 		if( !isMulti )
 		{
-			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
+			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, data.errorNode, customArgExecutables);
 		}
 		else
 		{
 			//NB: multiCustomCompile is a special compile mode that takes raw multivalues (and/or normal values) as input.
-			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, customArgExecutables);
+			resultType = theFunction.multiCustomCompile(finalArgTypes, cscope, executable, data.errorNode, customArgExecutables);
 			didMultiCustomCompile = true;
 		}
 	}
@@ -764,7 +770,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	{
 		if( theFunction.customCompile )
 		{
-			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, customArgExecutables);
+			resultType = theFunction.customCompile(finalArgTypes, cscope, executable, data.errorNode, customArgExecutables);
 		}
 /*		else if( isMulti && theFunction.multiCustomCompile )
 		{
@@ -812,9 +818,20 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	{
 		var precompiled = SWYM.GetPrecompiled(theFunction, argTypesPassed);
 		
-		if( precompiled.executable === undefined )
+		if( precompiled.executable === undefined || (precompiled.isCompiling && !precompiled.isRecursive) )
 		{
-			precompiled.executable = [];
+			var targetExecutable = [];
+			
+			if( precompiled.isCompiling )
+			{
+				// if we're compiling recursively, don't actually keep the target executable.
+				// (only the outermost call will write the executable.)
+				precompiled.isRecursive = true;
+			}
+			else
+			{
+				precompiled.executable = targetExecutable;
+			}
 			
 			if( theFunction.returnType !== undefined && theFunction.returnType.type !== "incomplete" )
 				precompiled.returnType = theFunction.returnType;
@@ -829,7 +846,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			bodyCScope["__default"] = {redirect:"this"};
 			
 			precompiled.isCompiling = true;
-			precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, precompiled.executable);
+			precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, targetExecutable);
 			precompiled.isCompiling = false;
 			
 			/*if( precompiled.isRecursive )
@@ -852,10 +869,6 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 					}
 				}
 			}
-		}
-		else if( precompiled.isCompiling )
-		{
-			precompiled.isRecursive = true;
 		}
 
 		resultType = precompiled.returnType;
@@ -1235,7 +1248,7 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 			}
 			else
 			{
-				SWYM.LogError(0, "Fsckup: Failed to pass argument "+argName);
+				SWYM.LogError(-1, "Fsckup: Failed to pass argument "+argName);
 			}
 		}
 	}
@@ -1298,7 +1311,7 @@ SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
 			}
 			else
 			{
-				SWYM.TypeCoerce(theCurrentFunction.returnType, bodyReturnType);
+				SWYM.TypeCoerce(theCurrentFunction.returnType, bodyReturnType, theFunction.bodyNode);
 				returnType = SWYM.TypeIntersect(theCurrentFunction.returnType, bodyReturnType);
 			}
 		}
@@ -1917,7 +1930,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 					if( this.elseValue !== undefined )
 						return this.elseValue;
 					else
-						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+						SWYM.LogError(-1, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
 				},
 				keys:bakedKeys,
 				jsTable:table,
@@ -1945,7 +1958,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 					if( this.elseValue !== undefined )
 						return this.elseValue;
 					else
-						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+						SWYM.LogError(-1, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
 				},
 				keys:bakedKeys,
 				jsTable:table,
@@ -1973,7 +1986,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 					if( this.elseValue !== undefined )
 						return this.elseValue;
 					else
-						SWYM.LogError(0, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
+						SWYM.LogError(-1, "Invalid table lookup. No key equals "+SWYM.ToDebugString(key));
 				},
 				keys:bakedKeys,
 				values:values,
@@ -2328,7 +2341,7 @@ SWYM.DeclareAccessor = function(memberName, classType, memberType, cscope)
 	SWYM.AddFunctionDeclaration("fn#"+memberName, cscope,
 		{
 			expectedArgs:{"this":{index:0, typeCheck:classType}},
-			customCompile:function(argTypes, cscope, executable)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
 				if( argTypes[0] && argTypes[0].multivalueOf !== undefined )
 				{
@@ -2364,7 +2377,7 @@ SWYM.DeclareMutator = function(memberName, classType, memberType, cscope)
 	SWYM.AddFunctionDeclaration("fn#"+memberName, cscope,
 		{
 			expectedArgs:{"this":{index:0, typeCheck:classType}, "equals":{index:1, typeCheck:memberType}},
-			customCompile:function(argTypes, cscope, executable)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
 				executable.push("#Native");
 				executable.push(2);

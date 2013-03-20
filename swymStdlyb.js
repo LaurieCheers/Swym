@@ -262,19 +262,7 @@ SWYM.operators = {
 			{
 				var executableN = [];
 				var typeN = SWYM.CompileNode( args[Idx], cscope, executableN );
-				
-				if( bakedArray !== undefined )
-				{
-					if( typeN && typeN.baked !== undefined )
-					{
-						bakedArray.push(typeN.baked);
-					}
-					else
-					{
-						bakedArray = undefined;
-					}
-				}
-				
+								
 				if( typeN && typeN.multivalueOf !== undefined )
 				{
 					if( !isMulti )
@@ -290,11 +278,38 @@ SWYM.operators = {
 							resultType = SWYM.ToMultivalueType(resultType);
 						}
 					}
+					
+					if( bakedArray !== undefined )
+					{
+						if( typeN && typeN.baked !== undefined )
+						{
+							SWYM.pushEach(typeN.baked, bakedArray);
+						}
+						else
+						{
+							bakedArray = undefined;
+						}
+					}
 				}
-				else if ( isMulti )
+				else
 				{
-					executableN.push("#SingletonArray");
-					typeN = SWYM.ToMultivalueType(typeN);
+					if( bakedArray !== undefined )
+					{
+						if( typeN && typeN.baked !== undefined )
+						{
+							bakedArray.push(typeN.baked);
+						}
+						else
+						{
+							bakedArray = undefined;
+						}
+					}
+
+					if ( isMulti )
+					{
+						executableN.push("#SingletonArray");
+						typeN = SWYM.ToMultivalueType(typeN);
+					}
 				}
 
 				if( resultType !== undefined )
@@ -406,7 +421,7 @@ SWYM.operators = {
 				else
 				{
 					varType = typeType.baked;
-					SWYM.TypeCoerce(varType, initialValueType);
+					SWYM.TypeCoerce(varType, initialValueType, node);
 				}
 				
 				SWYM.CreateLocal(declName, varType, cscope, executable, node);
@@ -419,7 +434,7 @@ SWYM.operators = {
 				var typeType = SWYM.CompileNode(node.children[0], cscope, unusedExecutable);				
 				var rhsType = SWYM.CompileNode(node.children[1], cscope, executable);
 				
-				SWYM.TypeCoerce(typeType.baked, rhsType);
+				SWYM.TypeCoerce(typeType.baked, rhsType, node);
 				return typeType.baked;
 			}
 		}
@@ -483,7 +498,7 @@ SWYM.operators = {
 					newValueType = SWYM.ToSinglevalueType(newValueType);
 				}
 				
-				SWYM.TypeCoerce(varType, newValueType);
+				SWYM.TypeCoerce(varType, newValueType, node);
 				
 				executable.push( "#Overwrite" );
 				executable.push( node.children[0].text );
@@ -1267,7 +1282,7 @@ SWYM.DefaultGlobalCScope =
 	[{
 		expectedArgs:{ "body":{index:0, typeCheck:SWYM.BlockType} },
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			if( !argTypes[0].baked && (!argTypes[0].needsCompiling || argTypes[0].needsCompiling.length !== 1) )
 			{
@@ -1313,7 +1328,7 @@ SWYM.DefaultGlobalCScope =
 	[{
 		expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType} },
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			if( !argTypes[0].baked || argTypes[0].baked.nativeType !== "Struct")
 			{
@@ -1440,7 +1455,7 @@ SWYM.DefaultGlobalCScope =
 	[{
 		expectedArgs:{"this":{index:0, typeCheck:SWYM.AnyType}},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			if( !argTypes[0] || !argTypes[0].baked )
 			{
@@ -1459,7 +1474,7 @@ SWYM.DefaultGlobalCScope =
 	[{
 		expectedArgs:{"this":{index:0}},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var result = argTypes[0];
 			
@@ -1468,7 +1483,7 @@ SWYM.DefaultGlobalCScope =
 			
 			return SWYM.BakedValue(result);
 		},
-		multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
+		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var result = argTypes[0];
 			
@@ -1486,7 +1501,7 @@ SWYM.DefaultGlobalCScope =
 			"test":{index:1, typeCheck:SWYM.CallableType}
 		},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			if( !argTypes[0] || !argTypes[0].baked || !argTypes[0].baked.describesType )
 			{
@@ -1495,7 +1510,7 @@ SWYM.DefaultGlobalCScope =
 			}
 			var baseTypeValue = argTypes[0].baked;
 			var condType = SWYM.GetOutType(argTypes[1], baseTypeValue.describesType);
-			SWYM.TypeCoerce(SWYM.BoolType, condType, "SubType");
+			SWYM.TypeCoerce(SWYM.BoolType, condType, errorNode);
 			
 			// at runtime, this just composes the two closures with an &&.
 			SWYM.pushEach(argExecutables[0], executable);
@@ -1535,7 +1550,7 @@ SWYM.DefaultGlobalCScope =
 			"then":{index:2, typeCheck:SWYM.CallableType},
 			"else":{index:3, typeCheck:SWYM.CallableType}
 		},
-		customCompile:function(argTypes, cscope, executable, errorContext)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var isMulti = (argTypes[0] && argTypes[0].multivalueOf !== undefined) ||
 						(argTypes[1] && argTypes[1].multivalueOf !== undefined) || 
@@ -1548,13 +1563,13 @@ SWYM.DefaultGlobalCScope =
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
-				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked, errorContext);
+				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked, errorNode);
 			}
 			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType);
 			
 			// TODO: do some kind of type-subtract so we can pass selfType minus bodyType in here.
 			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType);
-			SWYM.TypeCoerce(SWYM.BoolType, condType, "if");
+			SWYM.TypeCoerce(SWYM.BoolType, condType, errorNode);
 			
 			// optimizations needed -
 			// 1) don't bother to use self at all, if the blocks don't use it
@@ -1614,7 +1629,7 @@ SWYM.DefaultGlobalCScope =
 	[{
 		expectedArgs:{ "argList":{index:0, typeCheck:SWYM.BlockType}, "body":{index:1, typeCheck:SWYM.BlockType} },
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			if( !argTypes[0].baked && (!argTypes[0].needsCompiling || argTypes[0].needsCompiling.length !== 1) )
 			{
@@ -1675,7 +1690,7 @@ SWYM.DefaultGlobalCScope =
 	
 	"fn#output":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.StringType} },
 			returnType:SWYM.VoidType,
-			customCompile:function(argTypes, cscope, executable)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
 				executable.push("#Native", 1, function(value)
 				{
@@ -1717,7 +1732,7 @@ SWYM.DefaultGlobalCScope =
 		
 	"fn#Var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType} },
 			customCompileWithoutArgs:true,
-			customCompile:function(argTypes, cscope, executable, argExecutables)
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 			{
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
@@ -1734,7 +1749,7 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1} },
 			customCompileWithoutArgs:true,
-			customCompile:function(argTypes, cscope, executable, argExecutables)
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 			{
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
@@ -1744,7 +1759,7 @@ SWYM.DefaultGlobalCScope =
 				else
 				{
 					var varType = argTypes[0].baked;
-					SWYM.TypeCoerce(varType, argTypes[1]); //TODO: missing error info!
+					SWYM.TypeCoerce(varType, argTypes[1], errorNode);
 					
 					SWYM.pushEach(argExecutables[1], executable);
 					executable.push(argTypes[1] && argTypes[1].multivalueOf !== undefined? "#MultiNative": "#Native");
@@ -1776,7 +1791,7 @@ SWYM.DefaultGlobalCScope =
 		}],
 
 	"fn#value":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
-			customCompile:function(argTypes, cscope, executable)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
 				executable.push("#VariableContents");
 				return SWYM.GetVariableTypeContents(argTypes[0]);
@@ -1784,16 +1799,16 @@ SWYM.DefaultGlobalCScope =
 		},
 		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
 			returnType:SWYM.VoidType,
-			customCompile:function(argTypes, cscope, executable)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
-				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1]); //TODO: missing error info!
+				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1], errorNode);
 				executable.push("#VariableAssign");
 			}
 		}],
 
 	"fn#mutableArray":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1, typeCheck:SWYM.ArrayType} },
 			customCompileWithoutArgs:true,
-			customCompile:function(argTypes, cscope, executable, argExecutables)
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 			{
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
@@ -1803,7 +1818,7 @@ SWYM.DefaultGlobalCScope =
 				else
 				{
 					var varType = argTypes[0].baked;
-					SWYM.TypeCoerce(varType, argTypes[1].outType); //TODO: missing error info!
+					SWYM.TypeCoerce(varType, argTypes[1].outType, errorNode);
 
 					SWYM.pushEach(argExecutables[1], executable);
 					executable.push("#CopyArray");
@@ -1827,13 +1842,13 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#do":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.DontCareType}, "fn":{index:1, typeCheck:SWYM.CallableType}},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var returnType = SWYM.GetOutType( argTypes[1], argTypes[0] );
 			SWYM.CompileClosureCall(argTypes[0], argExecutables[0], argTypes[1], argExecutables[1], cscope, executable);
 			return returnType;
 		},
-		multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
+		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var isLazy = false;
 			for( var Idx = 0; Idx < argExecutables.length; ++Idx )
@@ -1867,13 +1882,13 @@ SWYM.DefaultGlobalCScope =
 	{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var returnType = SWYM.GetOutType( argTypes[0], SWYM.VoidType );
 			SWYM.CompileClosureCall(SWYM.VoidType, ["#Literal", undefined], argTypes[0], argExecutables[0], cscope, executable);
 			return returnType;
 		},
-		multiCustomCompile:function(argTypes, cscope, executable, argExecutables)
+		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			executable.push("#Literal");
 			var undefArray = [undefined];
@@ -1889,7 +1904,7 @@ SWYM.DefaultGlobalCScope =
 	}],
 	
 	"fn#compile":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "body":{index:1, typeCheck:SWYM.BlockType} },
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			SWYM.GetOutType(argTypes[1], argTypes[0].baked);
 			return argTypes[1];
@@ -1897,27 +1912,27 @@ SWYM.DefaultGlobalCScope =
 	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
 	}],
 	
 	"fn#some":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); }, // no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayToMultivalueType(argTypes[0], ["OR"]); }, // no-op!
 	}],
 
 	"fn#all":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); }, // no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayToMultivalueType(argTypes[0], ["AND"]); }, // no-op!
 	}],
 
 	"fn#none":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); }, // no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayToMultivalueType(argTypes[0], ["NOR"]); }, // no-op!
 	}],
 
 	"fn#lazy":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.LazyArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
 	}],
 
 	"fn#eager":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
-		customCompile:function(argTypes, cscope, executable) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
+		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
 	}],
 	
 	"fn#accumulate":[
@@ -1927,7 +1942,7 @@ SWYM.DefaultGlobalCScope =
 			"array":{index:1, typeCheck:SWYM.ArrayType}, 
 			"body":{index:2, typeCheck:SWYM.CallableType}
 		},
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var outType = SWYM.GetOutType(argTypes[2], SWYM.ArrayTypeContaining(argTypes[0]));
 			
@@ -1972,7 +1987,7 @@ SWYM.DefaultGlobalCScope =
 			"this":{index:0},
 			"body":{index:1, typeCheck:SWYM.CallableType}
 		},
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var outType = SWYM.GetOutType(argTypes[1], argTypes[0]);
 			
@@ -2002,7 +2017,7 @@ SWYM.DefaultGlobalCScope =
 	
 	"fn#isLazy":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var result = argTypes[0] && argTypes[0].isLazy == true;
 			executable.push("#Literal");
@@ -2018,7 +2033,7 @@ SWYM.DefaultGlobalCScope =
 			"isLazy":{index:2, typeCheck:SWYM.BoolType, defaultValueNode:SWYM.NewToken("literal", -1, "false", false)}
 			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
 		},
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var elementType = SWYM.GetOutType(argTypes[1], SWYM.IntType);
 			executable.push("#Native");
@@ -2059,7 +2074,7 @@ SWYM.DefaultGlobalCScope =
 			"this":{index:0, typeCheck:SWYM.TypeType},
 		},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 			{
@@ -2078,7 +2093,7 @@ SWYM.DefaultGlobalCScope =
 			"this":{index:0, typeCheck:SWYM.TypeType},
 		},
 		customCompileWithoutArgs:true,
-		customCompile:function(argTypes, cscope, executable, argExecutables)
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 			{
@@ -2118,7 +2133,7 @@ SWYM.DefaultGlobalCScope =
 	}],
 	
 	"fn#keys":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.TableType} },
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			executable.push("#Native");
 			executable.push(1);
@@ -2148,7 +2163,7 @@ SWYM.DefaultGlobalCScope =
 	}],
 	
   "fn#values":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.EnumType} },
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
       if( !argTypes[0] || !argTypes[0].baked || !argTypes[0].baked.enumValues )
       {
@@ -2162,7 +2177,7 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#while":[{ expectedArgs:{ "test":{index:0, typeCheck:SWYM.CallableType}, "body":{index:1, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
-		customCompile:function(argTypes, cscope, executable)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			executable.push("#Native");
 			executable.push(2);
@@ -2174,7 +2189,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 
-			SWYM.TypeCoerce(SWYM.BoolType, SWYM.GetOutType(argTypes[0], SWYM.VoidType));
+			SWYM.TypeCoerce(SWYM.BoolType, SWYM.GetOutType(argTypes[0], SWYM.VoidType), errorNode);
 			SWYM.GetOutType(argTypes[1], SWYM.VoidType);
 			return SWYM.VoidType;
 		}

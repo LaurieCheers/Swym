@@ -75,7 +75,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var varname = executable[PC+1];
 			if( rscope[varname] !== undefined )
 			{
-				SWYM.LogError(0, "Fsckup: Variable "+varname+" already defined");
+				SWYM.LogError(-1, "Fsckup: Variable "+varname+" already defined");
 				return;
 			}
 			var storingValue = stack.pop();
@@ -90,7 +90,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			if( rscope[varname] === undefined )
 			{
-				SWYM.LogError(0, "Fsckup: Variable "+varname+" not defined");
+				SWYM.LogError(-1, "Fsckup: Variable "+varname+" not defined");
 				return;
 			}
 			var targetScope = rscope;
@@ -106,7 +106,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var varname = executable[PC+1];
 			if( rscope[varname] === undefined )
 			{
-				SWYM.LogError(0, "Fsckup: Variable "+varname+" is undefined");
+				SWYM.LogError(-1, "Fsckup: Variable "+varname+" is undefined");
 				return;
 			}
 			stack.push( rscope[varname] );
@@ -118,12 +118,12 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var closure = stack.pop();
 			if( !closure || !closure.scope )
 			{
-				SWYM.LogError(0, "Fsckup: Trying to access "+varname+", but closure has no scope!?");
+				SWYM.LogError(-1, "Fsckup: Trying to access "+varname+", but closure has no scope!?");
 				return;
 			}
 			else if( closure.scope[varname] === undefined )
 			{
-				SWYM.LogError(0, "Fsckup: Closure variable "+varname+" is undefined");
+				SWYM.LogError(-1, "Fsckup: Closure variable "+varname+" is undefined");
 				return;
 			}
 			stack.push( closure.scope[varname] );
@@ -334,7 +334,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 					SWYM.halt = true;
 				}
 				else
-					SWYM.LogError(0, "at: Index out of bounds - "+SWYM.ToDebugString(table)+".at("+SWYM.ToDebugString(index)+")");
+					SWYM.LogError(-1, "at: Index out of bounds - "+SWYM.ToDebugString(table)+".at("+SWYM.ToDebugString(index)+")");
 			}
 			else
 			{
@@ -356,7 +356,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 						SWYM.halt = true;
 					}
 					else
-						SWYM.LogError(0, "at: Index out of bounds - "+SWYM.ToDebugString(table)+".at("+SWYM.ToDebugString(index)+")");
+						SWYM.LogError(-1, "at: Index out of bounds - "+SWYM.ToDebugString(table)+".at("+SWYM.ToDebugString(index)+")");
 				}
 				else
 				{
@@ -371,7 +371,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var variable = stack.pop();
 			if( variable === undefined )
 			{
-				SWYM.LogError(0, "Fsckup: undefined variable for #VariableContents instruction");
+				SWYM.LogError(-1, "Fsckup: undefined variable for #VariableContents instruction");
 				stack.push( undefined );
 			}
 			else if ( variable.getter !== undefined )
@@ -389,7 +389,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 				var v = variables[Idx];
 				if( v === undefined )
 				{
-					SWYM.LogError(0, "Fsckup: undefined variable for #MultiVariableContents instruction");
+					SWYM.LogError(-1, "Fsckup: undefined variable for #MultiVariableContents instruction");
 					stack.push( undefined );
 				}
 				else if( v.getter !== undefined )
@@ -635,7 +635,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var returnData = rscope["<returned>"];
 			if( !returnData )
 			{
-				SWYM.LogError(0, "Fsckup: return value without any returnData!?");
+				SWYM.LogError(-1, "Fsckup: return value without any returnData!?");
 			}
 			else
 			{
@@ -654,13 +654,13 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			SWYM.ExecWithScope("ReceiveReturn", bodyExecutable, returnScope, []);
 			if( !SWYM.halt )
 			{
-				SWYM.LogError(0, "Fsckup: Function failed to return at all!?");
+				SWYM.LogError(-1, "Fsckup: Function failed to return at all!?");
 			}
 			else if( returnData.halt )
 			{
 				if( returnData.value === undefined )
 				{
-					SWYM.LogError(0, "Fsckup: Function failed to return a value!?");
+					SWYM.LogError(-1, "Fsckup: Function failed to return a value!?");
 				}
 				else
 				{
@@ -691,7 +691,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			
 		default:
 			//error!
-			SWYM.LogError(0, "Fsckup: SWYM.Exec can't understand opcode "+executable[PC]);
+			SWYM.LogError(-1, "Fsckup: SWYM.Exec can't understand opcode "+executable[PC]);
 			return;
 		}
 	}
@@ -706,7 +706,7 @@ SWYM.CollectArgs = function(stack, numArgs)
 {
 	if( stack.length < numArgs )
 	{
-		SWYM.LogError(0, "Fsckup: should have "+numArgs+" items on the stack now, got only "+stack.length+"!");
+		SWYM.LogError(-1, "Fsckup: should have "+numArgs+" items on the stack now, got only "+stack.length+"!");
 		return [];
 	}
 	
@@ -1059,7 +1059,7 @@ SWYM.Flatten = function(array)
 	var result = [];
 	if( !array )
 	{
-		SWYM.LogError(0, "Fsckup: tried to Flatten '"+subArray+"'");
+		SWYM.LogError(-1, "Fsckup: tried to Flatten '"+subArray+"'");
 	}
 	else
 	{
@@ -1068,7 +1068,7 @@ SWYM.Flatten = function(array)
 			var subArray = array.run(Idx);
 			if( !subArray || subArray.length === undefined )
 			{
-				SWYM.LogError(0, "Fsckup: SWYM.Flatten encountered invalid sub-array: "+subArray);
+				SWYM.LogError(-1, "Fsckup: SWYM.Flatten encountered invalid sub-array: "+subArray);
 			}
 			else
 			{
@@ -1152,7 +1152,7 @@ SWYM.ClosureCall = function(closure, arg)
 {
 	if( !closure )
 	{
-		SWYM.LogError(0, "Fsckup: missing closure body");
+		SWYM.LogError(-1, "Fsckup: missing closure body");
 	}
 	else if ( closure.run )
 	{
@@ -1164,7 +1164,7 @@ SWYM.ClosureCall = function(closure, arg)
 	}
 	else
 	{
-		SWYM.LogError(0, "'"+SWYM.ToDebugString(closure)+"' is not a callable object!");
+		SWYM.LogError(-1, "'"+SWYM.ToDebugString(closure)+"' is not a callable object!");
 	}
 }
 
@@ -1255,7 +1255,7 @@ SWYM.ForceSingleValue = function(multivalue)
 {
 	if( !multivalue )
 	{
-		SWYM.LogError(0, "Fsckup: unable to flatten <"+multivalue+">");
+		SWYM.LogError(-1, "Fsckup: unable to flatten <"+multivalue+">");
 		return SWYM.value_novalues;
 	}
 	else if( multivalue.length === 0 )
@@ -1268,7 +1268,7 @@ SWYM.ForceSingleValue = function(multivalue)
 	}
 	else
 	{
-		SWYM.LogError(0, "Expected single value, got <"+SWYM.ToMultiDebugString(multivalue)+">");
+		SWYM.LogError(-1, "Expected single value, got <"+SWYM.ToMultiDebugString(multivalue)+">");
 		return undefined;
 	}
 }
@@ -1407,7 +1407,7 @@ SWYM.ValueToClosure = function(val)
 			return val;
 	}
 
-	SWYM.LogError(0, "Error, illegal argument: expected a callable, got "+SWYM.ToDebugString(arr));
+	SWYM.LogError(-1, "Error, illegal argument: expected a callable, got "+SWYM.ToDebugString(arr));
 }
 
 SWYM.ArrayToClosure = function(arr)
@@ -1648,7 +1648,7 @@ SWYM.ToDebugString = function(value, loopBreaker)
 		}
 
 		default:
-			SWYM.LogError(0, "ToDebugString error: don't understand type "+value.type+" on <"+value+">");
+			SWYM.LogError(-1, "ToDebugString error: don't understand type "+value.type+" on <"+value+">");
 			return "";
 	}
 }

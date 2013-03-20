@@ -70,7 +70,7 @@ SWYM.TextPosForLine = function(text, linenum)
 
 SWYM.LineForTextPos = function(text, textpos)
 {
-  if( textpos === undefined )
+  if( textpos === undefined || textpos === -1 )
 	return '?';
 
   var result = 1;
@@ -84,7 +84,7 @@ SWYM.LineForTextPos = function(text, textpos)
 
 SWYM.LineTextForTextPos = function(text, textpos)
 {
-  if( textpos === undefined )
+  if( textpos === undefined || textpos === -1 )
 	return "";
 
   var startPos = 0;
@@ -109,7 +109,7 @@ SWYM.LineTextForTextPos = function(text, textpos)
 
 SWYM.PosInLineForTextPos = function(text, textpos)
 {
-  if( textpos === undefined )
+  if( textpos === undefined || textpos === -1 )
 	return '?';
 
   var result = 1;

@@ -762,7 +762,11 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	
 	if( !callableType.outType )
 	{
-		SWYM.LogError(errorContext, "Fsckup: OutType of callable "+SWYM.TypeToString(callableType)+" is missing. (failed to compile?)");
+		if( !SWYM.errors )
+		{
+			// This tends to be caused by a previous error, no point raising an additional one
+			SWYM.LogError(errorContext, "Fsckup: OutType of callable "+SWYM.TypeToString(callableType)+" is missing. (failed to compile?)");
+		}
 		return SWYM.DontCareType;
 	}
 	
