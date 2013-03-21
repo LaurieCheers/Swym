@@ -37,7 +37,7 @@ SWYM.IsLetter = function(c) { if (!c) c = SWYM.c; return (c >= 'a' && c <= 'z') 
 SWYM.IsDigit = function(c) { if (!c) c = SWYM.c; return (c >= '0' && c <= '9'); }
 SWYM.IsLetterOrDigit = function(c) { return SWYM.IsLetter(c) || SWYM.IsDigit(c); }
 
-SWYM.whitespaceString = " \n\t\r";
+SWYM.whitespaceString = " \xA0\n\t\r"; //A0 = non-breaking space
 SWYM.IsWhitespace = function(c) { return SWYM.whitespaceString.indexOf(c?c:SWYM.c) >= 0; }
 
 SWYM.symbolString = ".:!$%^|&*-=+;@~,/?<>(){}[]";
