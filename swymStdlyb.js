@@ -2455,6 +2455,21 @@ Int.'choose'(Int:'n')\n\
   else { floor( product[(this-n)<..this] / n.factorial ) }\n\
 }\n\
 \n\
+Int.Array.'lcm' returns .reduce{ floor(.product/.gcd) }\n\
+\n\
+Int.Array.'gcd' returns .reduce\n\
+{\n\
+  Int:'a' = .max\n\
+  Int:'b' = .min\n\
+  Int:'r' = 0\n\
+  while{b != 0} {\n\
+    r = a % b\n\
+    a = b\n\
+    b = r\n\
+  }\n\
+  a\n\
+}\n\
+\n\
 String.'toInt' returns forEach(this)\n\
 {\n\
   \"0\"=>0, \"1\"=>1, \"2\"=>2, \"3\"=>3, \"4\"=>4,\n\
