@@ -2299,9 +2299,9 @@ Array.'trimStart'(Int:'n') returns .atEach[n ..< .length]\n\
 Array.'trimEnd'(Int:'n') returns .atEach[0 ..< .length-n]\n\
 Array.'startsWith'(Array:'list') returns .length >= list.length && .starting(list.length) == list\n\
 Array.'endsWith'(Array:'list') returns .length >= list.length && .ending(list.length) == list\n\
-Array.'splitAt'(Int:'n') returns [ .slice(end=n), .slice(start=n) ]\n\
+Array.'splitAt'(Int:'n') returns [ .slice[..<n], .slice[n..] ]\n\
 \n\
-Array.'splitAt'(Int.Array:'keys') returns if(keys == []){ this } else\n\
+Array.'splitAt'(Int.Array:'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
   .slice[..<keys.1st]\n\
   .slice[keys.1st..<keys.2nd], .slice[keys.2nd..<keys.3rd], etc\n\
