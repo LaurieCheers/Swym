@@ -2524,6 +2524,7 @@ Anything.'trace' { output(\"$$this\\n\") }\n\
 \n\
 'if'(Bool:'cond', 'then', 'else') returns void.if{ cond }(then) else (else)\n\
 'if'(Bool:'cond', 'then') returns void.if{ cond }(then) else { novalues }\n\
+Anything.'if'(Callable:'test', 'then') returns .if(test)(then) else { void }\n\
 Anything.'if'(Bool:'cond') returns .if{cond}{it} else {novalues}\n\
 Anything.'if'(Callable:'test') returns .if(test){it} else {novalues}\n\
 Anything.'if'(Bool:'cond', 'else') returns .if{cond}{it} else (else)\n\
