@@ -32,19 +32,6 @@
 	var mouseCharCode = 224;
 	var paused = false;
 
-	window.onload = function()
-	{
-		var regex = new RegExp( "[\\?&](.*)" );
-		var results = regex.exec( window.location.href );
-		if( results && results[1] )
-		{
-			var initialCode = unescape(results[1]);
-			
-			var interpSource = document.getElementById('swymsource');
-			interpSource.value = initialCode;
-		}
-	}
-
 	function saveURL()
 	{
 		var baseURL = window.location.href;
@@ -59,6 +46,16 @@
 
     function init()
 	{
+		var regex = new RegExp( "[\\?&](.*)" );
+		var results = regex.exec( window.location.href );
+		if( results && results[1] )
+		{
+			var initialCode = unescape(results[1]);
+			
+			var interpSource = document.getElementById('swymsource');
+			interpSource.value = initialCode;
+		}
+
 		setInterval(tick,30); 
 		document.onmousemove = function(event)
 		{
