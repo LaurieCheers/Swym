@@ -128,6 +128,12 @@
 		var dest = document.getElementById("swymoutput");
 		lastRunSrc = src.value;
 		if(paused) togglePause();
+
+		var baseURL = window.location.href;
+		var cutIndex = baseURL.indexOf("?");
+		if( cutIndex >= 0 )
+			baseURL = baseURL.slice(0, cutIndex);
+		window.history.replaceState( {} , 'Swym Canvas', baseURL + "?" + escape(lastRunSrc) );	
 		
 		dest.value = "";
 		SWYM.DisplayOutput = showOutputAndScroll;

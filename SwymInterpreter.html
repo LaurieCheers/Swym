@@ -69,7 +69,7 @@ function saveURL()
 	var cutIndex = baseURL.indexOf("?");
 	if( cutIndex >= 0 )
 		baseURL = baseURL.slice(0, cutIndex);
-		
+	
 	var interpSource = document.getElementById('interpSource');
 
 	window.location.href = "SwymDisplay.html?" + escape(interpSource.value);
@@ -106,7 +106,13 @@ function runDemo(div)
 	var fields = getTextfields(div);
 		
 	fields.dest.value = "...waiting...";
-  
+
+	var baseURL = window.location.href;
+	var cutIndex = baseURL.indexOf("?");
+	if( cutIndex >= 0 )
+		baseURL = baseURL.slice(0, cutIndex);
+	window.history.replaceState( {} , 'Swym Interpreter', baseURL + "?" + escape(fields.source.value) );	
+	
 	// call out to the main "eval" method
 	SWYM.DisplayOutput = function(a){ fields.dest.value = a; SWYM.DisplayOutput = function(b){ fields.dest.value += b; }; };
 	SWYM.DisplayError = function(e){ fields.dest.value = e; SWYM.DisplayOutput = function(){}; };
@@ -128,8 +134,8 @@ function clearOutput(div)
 <textarea cols=70 rows=10 id=interpSource>
 "Hello, World!"</textarea><br>
 <input type=button value=Run style="vertical-align: top;" onclick='runDemo(this.parentNode);'>
-<input type=button value="Clear Output" style="vertical-align: top;" onclick='clearOutput(this.parentNode);'>
-<input type=button value="Program URL" style="vertical-align: top;" onclick='saveURL();'><br>
+<input type=button value="Erase Output" style="vertical-align: top;" onclick='clearOutput(this.parentNode);'>
+<input type=button value="Display Mode" style="vertical-align: top;" onclick='saveURL();'><br>
 <textarea cols=70 rows=10 class=outputarea id=outputbox readonly="yes"></textarea>
 </div>
 </body>
