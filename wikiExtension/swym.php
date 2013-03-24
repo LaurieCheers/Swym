@@ -10,17 +10,11 @@ function wfSwymSetup( Parser $parser )
  
 function wfSwymRender( $text, array $args, Parser $parser, PPFrame $frame )
 {
-	$parser->disableCache();
+	//$parser->disableCache();
 	$body = htmlspecialchars(trim($text, " \n"));
-	$main = "";
-	if( strpos($body, "\n") === false )
-	{
-		$main = "<code>" . $body . "</code></br>";
-	}
-	else
-	{
-		$main = "<pre>" . $body . "</pre>";
-	}
 
-    return "<div>".$main."<a onclick=\"SWYM.RunExample(this)\"><img src=\"play.png\">Run</a><br><pre style=\"display: none;\"></pre></div>";
+    return "<div><pre>" . $body . "</pre>" .
+	"<a onclick=\"SWYM.RunExample(this)\"><img src=\"play.png\">Run</a>".
+	"<a onclick=\"SWYM.OpenEditor(this)\"><img src=\"edit.png\" style=\"margin-left:20px;\">Edit</a><br>".
+	"<pre style=\"display: none;\"></pre></div>";
 }

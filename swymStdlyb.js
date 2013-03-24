@@ -2470,6 +2470,15 @@ Int.Array.'gcd' returns .reduce\n\
   a\n\
 }\n\
 \n\
+'Maybe' = Struct{ Array:'container' }\n\
+\n\
+Maybe.Literal.'new'('equals') returns Maybe.new( container=[equals] )\n\
+Maybe.Literal.'none' returns Maybe.new( container=[] )\n\
+Maybe.'hasValue' returns .container.length > 0\n\
+Maybe.'value' returns .container.each\n\
+Maybe.'value'('else') returns if(.hasValue){.container.1st} else (else)\n\
+Maybe.'value'('body')('else') returns if(.hasValue){.container.1st.(body)} else (else)\n\
+\n\
 String.'toInt' returns forEach(this)\n\
 {\n\
   \"0\"=>0, \"1\"=>1, \"2\"=>2, \"3\"=>3, \"4\"=>4,\n\
@@ -2532,7 +2541,7 @@ Anything.'if'(Callable:'test', 'else') returns .if(test){it} else (else)\n\
 Anything.'or_if'('cond')('body') returns .if{cond}(body) else {it}\n\
 Anything.'or_if'('test')('body') returns .if(test)(body) else {it}\n\
 \n\
-String.'alert' returns Void: javascript{'value'=this}{ alert(value) }\n\
+String.'alert' { javascript{'value'=this}{ alert(value) }; void }\n\
 String.'log' returns Void: javascript{'value'=this}{ console.log(value) }\n\
 Number.'sqrt' returns Number: javascript{'value'=this}{ return Math.sqrt(value) }\n\
 Number.'sin' returns Number: javascript{'value'=this}{ return Math.sin(value) }\n\
