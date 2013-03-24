@@ -16,5 +16,5 @@ function wfSwymRender( $text, array $args, Parser $parser, PPFrame $frame )
     return "<div><pre>" . $body . "</pre>" .
 	"<a onclick=\"SWYM.RunExample(this)\"><img src=\"play.png\">Run</a>".
 	"<a onclick=\"SWYM.OpenEditor(this)\"><img src=\"edit.png\" style=\"margin-left:20px;\">Edit</a><br>".
-	"<pre style=\"display: none;\"></pre></div>";
+	"<pre style=\"display: none; background-color:rgb(217, 243, 219)\"></pre></div>";
 }
