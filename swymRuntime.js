@@ -541,8 +541,11 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 		case "#EtcSimple":
 			var etcLimit = executable[PC+1];
 			var etcStepExecutable = executable[PC+2];
+			var etcHaltExecutable = executable[PC+3];
+			var etcHaltTest = executable[PC+4];
 
 			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
+			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
 			var etcData = {index:0};
 			rscope["<etcData>"] = etcData;
@@ -558,6 +561,9 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 				if( SWYM.g_etcState.halt )
 					break;
+
+				if( etcHaltTest && etcHaltTest(rscope["<etcSoFar>"], haltValue) )
+					break;
 			}
 
 			if( SWYM.g_etcState.halt && SWYM.halt && !SWYM.errors )
@@ -567,7 +573,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			SWYM.g_etcState.halt = false;
 			SWYM.g_etcState.depth--;
-			PC += 3;
+			PC += 5;
 			break;
 		
 		case "#Etc":
@@ -1471,9 +1477,24 @@ SWYM.ToMultiDebugString = function(value)
 		return "<no values>";
 	
 	var result = SWYM.ToDebugString(value.run(0));
-	for( var Idx = 1; Idx < value.length; Idx++ )
+	var maxIdx = value.length;
+	
+	// failsafe
+	if( maxIdx > 10010 )
+		maxIdx = 10000;
+	
+	for( var Idx = 1; Idx < maxIdx; Idx++ )
 	{
 		result += "\n"+SWYM.ToDebugString(value.run(Idx));
+	}
+	
+	if( maxIdx < value.length )
+	{
+		result += "\n..";
+		if( value.length !== Infinity )
+		{
+			result += "\n..\n"+SWYM.ToDebugString(value.run(value.length-1));
+		}
 	}
 	return result;
 }

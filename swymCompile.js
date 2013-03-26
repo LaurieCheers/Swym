@@ -2125,7 +2125,37 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		var bodyType = SWYM.CompileNode(parsetree.body, cscope, etcExecutable);
 	}
+
+	var haltExecutable = [];
+	var haltCondition = undefined;
 	
+	if( parsetree.op.etc === "etc**" )
+	{
+		var limitTimes = [];
+		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimes);
+		SWYM.TypeCoerce(SWYM.IntType, limitType, parsetree, "etc** number of times");
+	}
+	else
+	{
+		// FIXME: to prevent infinite loops, etc is not allowed to repeat more than 1000 times.
+		var limitTimes = ["#Literal", 1000];
+
+		SWYM.CompileNode(parsetree.rhs, cscope, haltExecutable);
+
+		if( parsetree.op.etc === "etc..<" )
+		{
+			haltCondition = function(value, haltValue){ return value >= haltValue; }
+		}
+		else if( parsetree.op.etc === "etc..<=" )
+		{
+			haltCondition = function(value, haltValue){ return value > haltValue; }
+		}
+		else if( parsetree.op.etc === "etc.." )
+		{
+			haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
+		}
+	}
+
 	if( parsetree.op.type === "fnnode" )
 	{
 		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a node.
@@ -2153,8 +2183,10 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		executable.push("#Store");
 		executable.push("<etcSoFar>");
 		executable.push("#EtcSimple");
-		executable.push(["#Literal", 1000]); //TODO: handle limits properly
+		executable.push(limitTimes);
 		executable.push(etcExecutable);
+		executable.push(haltExecutable);
+		executable.push(haltCondition);
 		executable.push("#Load");
 		executable.push("<etcSoFar>");
 		
@@ -2238,35 +2270,6 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 	}
 	
-	if( parsetree.op.etc === "etc**" )
-	{
-		var limitTimes = [];
-		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimes);
-		SWYM.TypeCoerce(SWYM.IntType, limitType, parsetree, "etc** number of times");
-	}
-	else
-	{
-		// Hack: to prevent infinite loops, etc is not allowed to repeat more than 1000 times.
-		var limitTimes = ["#Literal", 1000];
-	}
-
-	var haltExecutable = [];
-	SWYM.CompileNode(parsetree.rhs, cscope, haltExecutable);
-
-	var haltCondition;
-	if( parsetree.op.etc === "etc..<" )
-	{
-		haltCondition = function(value, haltValue){ return value >= haltValue; }
-	}
-	else if( parsetree.op.etc === "etc..<=" )
-	{
-		haltCondition = function(value, haltValue){ return value > haltValue; }
-	}
-	else if( parsetree.op.etc === "etc.." )
-	{
-		haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
-	}
-
 /*	if( haltCondition )
 	{
 		var baseComposer = composer;
