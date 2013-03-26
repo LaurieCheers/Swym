@@ -2182,6 +2182,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		executable.push(parsetree.op.identity);
 		executable.push("#Store");
 		executable.push("<etcSoFar>");
+		executable.push("#Pop");
 		executable.push("#EtcSimple");
 		executable.push(limitTimes);
 		executable.push(etcExecutable);
