@@ -1190,7 +1190,9 @@ SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
 
 	if( step === 1 )
 	{
-		if( includeEnd )
+		if( start > end )
+			return SWYM.jsArray([]);
+		else if( includeEnd )
 			return SWYM.rangeArray(current, end);
 		else
 			return SWYM.rangeArray(current, end-1);
