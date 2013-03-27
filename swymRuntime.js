@@ -920,7 +920,11 @@ SWYM.indexArray = function(length)
 
 SWYM.rangeArray = function(first, last)
 {
-	if( first === 0 )
+	if( first > last )
+	{
+		return SWYM.jsArray([]);
+	}
+	else if( first === 0 )
 	{
 		return SWYM.indexArray(last+1);
 	}
@@ -1190,9 +1194,7 @@ SWYM.RangeOp = function(start, end, includeStart, includeEnd, forceStep)
 
 	if( step === 1 )
 	{
-		if( start > end )
-			return SWYM.jsArray([]);
-		else if( includeEnd )
+		if( includeEnd )
 			return SWYM.rangeArray(current, end);
 		else
 			return SWYM.rangeArray(current, end-1);
