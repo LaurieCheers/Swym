@@ -937,32 +937,10 @@ SWYM.operators = {
 		},
 		infix:function(a,b){return a-b}, prefix:function(v){return -v}
 	},
-*/	"-": {precedence:101, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("-") },
-
-	"+": {precedence:102, infix:true,
-		customParseTreeNode:function(lhs, op, rhs)
-		{
-			// The + operator just ends up calling the + function. ("fn#+", below.)
-			return {type:"fnnode", body:undefined, isDecl:false,
-				name:"+",
-				pos:op.pos,
-				etc:op.etc,
-				identity:0,
-				children:[lhs, rhs],
-				argNames:["this", "__"]
-			};
-		}},
-		
-	"*": {precedence:103, argTypes:[SWYM.NumberType,SWYM.NumberType],
-		getReturnType:function(a,b)
-		{
-			if( SWYM.TypeMatches(SWYM.IntType, a) && SWYM.TypeMatches(SWYM.IntType, b) )
-				return SWYM.IntType;
-			else
-				return SWYM.NumberType;
-		},
-		infix:function(a,b){return a*b}, identity:function(){return 1;}
-	},
+*/
+	"-": {precedence:101, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("-") },
+	"+": {precedence:102, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("+") },
+	"*": {precedence:103, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("*") },
 	"/": {precedence:104, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("/") },
 	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("%") },
 	"^": {precedence:106, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("^") },
@@ -1107,7 +1085,14 @@ SWYM.operators = {
 				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
 
 			// function call
-			var params = {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
+			var params = {type:"fnnode", etc:op.etc, pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
+			
+			if( op.etc !== undefined )
+			{
+				params.children.push(undefined);
+				params.argNames.push("__");
+			}
+			
 			SWYM.ReadParamBlock(rhs, params);
 			return SWYM.CombineFnNodes(lhs, params);
 		},
@@ -1827,7 +1812,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 		}],
-			
+		
 	"fn#random":[{  expectedArgs:{ "this":{index:0} },
 		getReturnType:function(argTypes)
 		{
@@ -2210,16 +2195,20 @@ SWYM.stdlyb =
 //Default operator overloads\n\
 '-'(Int:'rhs') returns Int: javascript{'rhs'}{ return -rhs }\n\
 Int.'-'(Int:'rhs') returns Int: javascript{'lhs'=this, 'rhs'}{ return lhs-rhs }\n\
-Int.'+'(Int:'rhs') returns Int: javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
+Int.'+'(Int:'rhs', '__identity'=0) returns Int: javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
+Int.'*'(Int:'rhs', '__identity'=1) returns Int: javascript{'lhs'=this, 'rhs'}{ return lhs*rhs }\n\
 Int.'%'(Int:'rhs') returns Int: javascript{'lhs'=this, 'rhs'}{ return lhs%rhs }\n\
 Int.'^'(Int:'rhs') returns Int: javascript{'lhs'=this, 'rhs'}{ return Math.pow(lhs,rhs) }\n\
 '-'(Number:'rhs') returns Number: javascript{'rhs'}{ return -rhs }\n\
 Number.'-'(Number:'rhs') returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs-rhs }\n\
-Number.'+'(Number:'rhs') returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
+Number.'+'(Number:'rhs', '__identity'=0) returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
+Number.'*'(Number:'rhs', '__identity'=1) returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs*rhs }\n\
 Number.'/'(Number:'rhs') returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs/rhs }\n\
 Number.'%'(Number:'rhs') returns Number: javascript{'lhs'=this, 'rhs'}{ return lhs%rhs }\n\
 Number.'^'(Number:'rhs') returns Number: javascript{'lhs'=this, 'rhs'}{ return Math.pow(lhs,rhs) }\n\
-Array.'+'(Array:'arr') returns [.each, arr.each]\n\
+Array.'+'(Array:'arr', '__identity'=[]) returns [.each, arr.each]\n\
+Array.'*'(Int:'times')  returns  array(length=.length*times) 'index'->{ this.at( index%this.length ) }\n\
+String.'+'(String:'str', '__identity'=\"\") returns [.each, str.each]\n\
 Number.'<'(Number:'rhs') returns Bool: javascript{'lhs'=this, 'rhs'}{ return lhs<rhs }\n\
 String.'<'(String:'rhs') returns Bool: javascript{'lhs'=this, 'rhs'}{ return lhs<rhs }\n\
 \n\
@@ -2546,6 +2535,7 @@ String.'log' returns Void: javascript{'value'=this}{ console.log(value) }\n\
 Number.'sqrt' returns Number: javascript{'value'=this}{ return Math.sqrt(value) }\n\
 Number.'sin' returns Number: javascript{'value'=this}{ return Math.sin(value) }\n\
 Number.'cos' returns Number: javascript{'value'=this}{ return Math.cos(value) }\n\
+/*Number.'toInt' returns Int: javascript{'value'=this}{ return value|0 }*/\n\
 Number.'floor' returns Int: javascript{'value'=this}{ return Math.floor(value) }\n\
 Number.'ceiling' returns Int: javascript{'value'=this}{ return Math.ceiling(value) }\n\
 String.'lowercase' returns String: javascript{'value'=this}{ return SWYM.StringWrapper(value.toLowerCase()) }\n\

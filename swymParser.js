@@ -33,7 +33,7 @@ SWYM.PeekNextToken = function()
 
 //=============================================================
 
-SWYM.ParseLevel = function(minpriority, startingLhs)
+SWYM.ParseLevel = function(minpriority, startingLhs, openBracketOp)
 {
 	var curLhs = startingLhs;
 	var curOp = undefined;
@@ -138,7 +138,7 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 					autoLhs = SWYM.NewToken("name", SWYM.curToken.sourcePos, "__default");
 				}
 
-				var rhs = SWYM.ParseLevel(0, autoLhs);
+				var rhs = SWYM.ParseLevel(0, autoLhs, newOp);
 
 				if ( SWYM.curToken && SWYM.curToken.text === newOp.behaviour.takeCloseBracket )
 				{
@@ -244,7 +244,8 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 		// handle the special "etc" keyword
 		else if ( SWYM.curToken.type === "name" && SWYM.curToken.text === "etc" )
 		{
-			if( !curOp )
+			// valid options: etc follows an operator; or etc follows an open bracket.
+			if( !curOp && (curLhs || openBracketOp === undefined))
 			{
 				if( SWYM.curToken.followsBreak )
 				{
@@ -273,7 +274,10 @@ SWYM.ParseLevel = function(minpriority, startingLhs)
 				SWYM.NextToken();
 			}
 			
-			curOp.etc = etcText;
+			if( curOp )
+				curOp.etc = etcText;
+			else
+				openBracketOp.etc = etcText;
 		}
 		else if ( SWYM.curToken.behaviour )
 		{
@@ -411,7 +415,7 @@ SWYM.OverloadableOperatorParseTreeNode = function(name)
 {
 	return function(lhs, op, rhs)
 	{
-		if( lhs !== undefined && rhs !== undefined )
+		if( lhs !== undefined && (rhs !== undefined || op.etc !== undefined))
 		{
 			return {type:"fnnode", body:undefined, isDecl:false,
 				name:name,

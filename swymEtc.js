@@ -403,12 +403,21 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	
 	var collected = {op:etcOp, examples:[], afterEtc:false, finalExample:[]};
 	
-	if( parsetree.children[1] !== undefined )
+	if( etcOp.children && etcOp.children[1] !== undefined )
 	{
-		collected.finalExample.push(parsetree.children[1]);
+		collected.finalExample.push(etcOp.children[1]);
 	}
 	
-	SWYM.CollectEtcRec(parsetree.children[0], collected);
+	if( etcOp === parsetree )
+	{
+		// left-associative op: the etc node is the root, and its left child is the examples
+		SWYM.CollectEtcRec(parsetree.children[0], collected);
+	}
+	else
+	{
+		// right-associative op: the node we found is the root, and its right child contains the etcOp 
+		SWYM.CollectEtcRec(parsetree, collected);
+	}
 	
 	if( collected.examples.length < 1 || collected.examples.length > 4 )
 	{
@@ -419,9 +428,13 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	{
 		SWYM.LogError(parsetree.pos, "Cannot have additional terms after "+etcOp.etc+" expression");
 	}
-	else if (etcOp.etc !== 'etc' && collected.finalExample.length !== 1)
+	else if (etcOp.etc !== 'etc' && etcOp.etc !== 'etc..' && collected.finalExample.length !== 1)
 	{
 		SWYM.LogError(parsetree.pos, "Fsckup: Invalid number of final examples for "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
+	}
+	else if (collected.finalExample.length > 1)
+	{
+		SWYM.LogError(parsetree.pos, "Too many additional terms after "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
 	}
 	else
 	{
@@ -540,7 +553,7 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 	for(var Idx = 0; Idx < sequence.length; Idx++ )
 	{
 		var resultAtIdx = generator(Idx);
-		if( resultAtIdx !== sequence[Idx] )
+		if( resultAtIdx + 0.0000000001 < sequence[Idx] || resultAtIdx - 0.0000000001 > sequence[Idx] )
 			return false;
 	}
 	
@@ -567,45 +580,47 @@ SWYM.EtcCreateGenerator = function(sequence)
 		}
 	}
 		
-	var next = sequence[1];
-	var arithmetic = function(index){ return base + (next-base)*index; };
+	var second = sequence[1];
+	var arithmetic = function(index){ return base + (second-base)*index; };
 	
+	// this will match all 2-element sequences.
 	if ( SWYM.EtcTryGenerator(sequence, arithmetic) )
 	{
-		if( next > base )
+		if( second > base )
 			sequence.direction = "ascending";
-		else if ( next < base )
+		else if ( second < base )
 			sequence.direction = "descending";
 			
-		sequence.integer = base%1==0 && next%1==0;
+		sequence.integer = base%1==0 && second%1==0;
 
 		return arithmetic;
 	}
 
 	if (base != 0 )
 	{
-		var geometric = function(index){ return base * Math.pow(next/base, index); };
+		var geometric = function(index){ return base * Math.pow(second/base, index); };
 
 		if (SWYM.EtcTryGenerator(sequence, geometric ))
 		{
-			if( next > base )
+			if( second > base )
 				sequence.direction = "ascending";
-			else if ( next < base )
+			else if ( second < base )
 				sequence.direction = "descending";
 				
-			sequence.integer = base%1==0 && (next/base)%1==0;
+			sequence.integer = base%1==0 && (second/base)%1==0;
 			
 			return geometric;
 		}
 	}
 	
-	var second = sequence[1];
 	var third = sequence[2];
-  
+	var firstDiff = second-base;
+	
 	if( sequence.length >= 4 )
 	{	
-		// quadratic requires 4 examples, because literally all 3-value sequences fit a parabola.
-		// Goodbye error detection...
+		// try a quadratic sequence, e.g. 1, 3, 7, 10
+		// only try this when there are 4 examples, because literally all 3-value sequences can fit a quadratic sequence.
+		// - which would make it impossible to detect when someone made a mistake in an arithmetic or geometric sequence.
 		var firstDiff = second-base;
 		var pDiff = (third-second) - firstDiff;
 		var quadratic = function(index){
@@ -623,7 +638,45 @@ SWYM.EtcCreateGenerator = function(sequence)
 
 			return quadratic;
 		}
-   	}
+
+		var factor = (third-second) / firstDiff;
+		var lastIndex = 0;
+		var lastValue = base;
+
+		// last resort: try a cumulative geometric sequence, e.g. 0, 0.1, 0.11, 0.111, etc
+		// feels like there should be a simpler way to generate it than this. :-/
+		// also, doing it this way accumulates some nasty floating point errors.
+		var cumgeometric = function(index)
+		{
+			if( lastIndex > index )
+			{
+				lastIndex = 0;
+				lastValue = base;
+			}
+			
+			while( lastIndex < index )
+			{
+				lastValue += firstDiff*Math.pow(factor, lastIndex);
+				lastIndex++;
+			}
+			return lastValue;
+		};
+
+		if (SWYM.EtcTryGenerator(sequence, cumgeometric))
+		{
+			if( factor > 0 )
+			{
+				if( firstDiff > 0 )
+					sequence.direction = "ascending";
+				else if ( firstDiff < 0 )
+					sequence.direction = "descending";
+			}
+				
+			sequence.integer = base%1==0 && firstDiff%1==0 && factor%1==0;
+
+			return cumgeometric;
+		}
+	}
    	
 	if( sequence.length < 4 )
 	{

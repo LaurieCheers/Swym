@@ -544,18 +544,17 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var etcHaltExecutable = executable[PC+3];
 			var etcHaltTest = executable[PC+4];
 
-			var limit = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
+			var limit = etcLimit? SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []): 1000; //FIXME
 			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
-			var etcData = {index:0};
-			rscope["<etcData>"] = etcData;
+			rscope["<etcIndex>"] = 0;
 
 			SWYM.g_etcState.depth++;
 			SWYM.g_etcState.halt = false;
 
 			for( var etcIndex = 0; etcIndex < limit; ++etcIndex )
 			{
-				etcData.index = etcIndex;
+				rscope["<etcIndex>"] = etcIndex;
 				
 				SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
 
@@ -586,12 +585,11 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var etcHaltExecutable = executable[PC+7];
 			var etcHaltTest = executable[PC+8];
 
-			var limitTimes = SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []);
+			var limitTimes = etcLimit? SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []): 1000; // FIXME
 			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
 			var newRScope = object(rscope);
-			var etcData = {index:0};
-			newRScope["<etcData>"] = etcData;
+			newRScope["<etcIndex>"] = 0;
 			var etcResult = etcInitializer();
 			
 			SWYM.g_etcState.depth++;
@@ -599,7 +597,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			for( var etcIndex = 0; etcIndex < limitTimes; ++etcIndex )
 			{
-				etcData.index = etcIndex;
+				newRScope["<etcIndex>"] = etcIndex;
 				var nextResult = SWYM.ExecWithScope("EtcBody", etcBodyExecutable, newRScope, []);
 
 				if( etcStepExecutable !== undefined )
@@ -633,7 +631,12 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			
 		case "#EtcSequence":
 			var etcGenerator = executable[PC+1];
-			stack.push(etcGenerator(rscope["<etcData>"].index));
+			var index = rscope["<etcIndex>"];
+			if( index === undefined )
+			{
+				SWYM.LogError(-1, "Fsckup: missing etcIndex!");
+			}
+			stack.push(etcGenerator(index));
 			PC += 2;
 			break;
 			
@@ -1459,9 +1462,20 @@ SWYM.ToTerseString = function(value)
 		case "rangeArray":
 		case "lazyArray":
 			var result = "";
-			for( var Idx = 0; Idx < value.length; Idx++ )
+			if( value.length > 10000 )
 			{
-				result += SWYM.ToTerseString(value.run(Idx));
+				for( var Idx = 0; Idx < 10000; Idx++ )
+				{
+					result += SWYM.ToTerseString(value.run(Idx));
+				}
+				result += "..."
+			}
+			else
+			{
+				for( var Idx = 0; Idx < value.length; Idx++ )
+				{
+					result += SWYM.ToTerseString(value.run(Idx));
+				}
 			}
 			return result;
 		

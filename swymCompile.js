@@ -355,7 +355,7 @@ SWYM.GetPositionalName = function(theFunction, expectedArgName)
 	return "__"+targetIdx;
 }
 
-SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
+SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 {
 	var fnName = fnNode.name;
 	
@@ -486,6 +486,11 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable)
 		}
 	}
 
+	if(OUT !== undefined)
+	{
+		OUT.theFunction = chosenOverload.theFunction;
+	}
+	
 	return SWYM.CompileFunctionOverload( fnName, chosenOverload, cscope, executable );
 }
 
@@ -2128,18 +2133,16 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 
 	var haltExecutable = [];
 	var haltCondition = undefined;
+	var limitTimesExecutable = undefined;
 	
 	if( parsetree.op.etc === "etc**" )
 	{
-		var limitTimes = [];
-		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimes);
+		limitTimesExecutable = [];
+		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimesExecutable);
 		SWYM.TypeCoerce(SWYM.IntType, limitType, parsetree, "etc** number of times");
 	}
-	else
+	else if( parsetree.rhs )
 	{
-		// FIXME: to prevent infinite loops, etc is not allowed to repeat more than 1000 times.
-		var limitTimes = ["#Literal", 1000];
-
 		SWYM.CompileNode(parsetree.rhs, cscope, haltExecutable);
 
 		if( parsetree.op.etc === "etc..<" )
@@ -2154,37 +2157,102 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		{
 			haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
 		}
+		else
+		{
+			SWYM.LogError(parsetree, "Fsckup: can't have a rhs on a "+parsetree.op.etc);
+		}
 	}
 
 	if( parsetree.op.type === "fnnode" )
 	{
-		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a node.
-		// we need to set the argument "this" to <etcSoFar>, representing the output from the etc
-		// expression we've processed so far, and set the anonymous argument to be the body node.
+		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a fnnode.
+		
+		var etcArgIndex = -1;
+		for( var Idx = 0; Idx < parsetree.op.children.length; ++Idx )
+		{
+			if( parsetree.op.children[Idx] === undefined )
+			{
+				etcArgIndex = Idx;
+				break;
+			}
+		}
+		
 		var etcScope = object(cscope);
-		etcScope["<etcSoFar>"] = bodyType;
+		if( parsetree.op.argNames[etcArgIndex] === "this" )
+		{
+			// if we're recursing on the 'this' argument, we need to set the argument "this"
+			// to <etcSoFar>, representing the output from the etc expression we've processed so far,
+			// and set the anonymous argument to be the body node.
+			etcScope["<etcSoFar>"] = bodyType;
 
-		parsetree.op.children[0] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
-		parsetree.op.children[1] = parsetree.body;
+			parsetree.op.children[0] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
+			parsetree.op.children[1] = parsetree.body;
+		}
+		else
+		{
+			// yikes... not enough information here to tell the difference between
+			// a.fn(b.fn(etc)) and x.fn(a).fn(b).fn(etc).
+
+			// Ideally, we should also accept:
+			// a.fn("arg1", b.fn("arg2", etc))
+			// a.fn("arg1", b.fn("arg2", c.etc)) ???
+			// a.fn("arg1", b.fn("arg2", c.fn(etc)))
+			// a.fn(b.fn(etc, "arg2"), "arg1") ???
+			// a.fn(argname = b.fn(argname = etc)) ???
+			// x.fn(a, "arg1").fn(b, "arg2").fn(etc)
+			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)
+			// x.fn(a, "arg1").fn(b, "arg2").fn(etc, "arg3")
+			// x.fn(a).fn(b).etc
+			
+			// ok, so x.fn(etc) and x.etc give no information about args
+			// (the latter gives no information about function name either).
+			// x.fn(foo, etc) or x.fn(argname=etc) mean we're recursing on one specific arg
+
+			// each arg needs its own sequence:
+			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)  ...not sure if this should be legal,
+			// the position of etc doesn't actually signify anything important.
+			// this = x/<etcSoFar>, __0 = a/b/c, __1 = "arg1"/"arg2"
+			var test = 0;
+		}
 
 		var etcExecutable = [];
-		var returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable);
+		var chosenFunction = {};
+		var returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable, chosenFunction);
 		if( returnType !== bodyType )
 		{
 			etcScope["<etcSoFar>"] = returnType;
 			etcExecutable = [];
-			returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable);
+			returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable, chosenFunction);
 		}
+		
+		var identityValue = undefined;
+		if( chosenFunction.theFunction !== undefined )
+		{
+			var identityArg = chosenFunction.theFunction.expectedArgs["__identity"];
+			if( identityArg !== undefined && identityArg.defaultValueNode !== undefined )
+			{
+				var identityType = SWYM.CompileNode(identityArg.defaultValueNode, etcScope, []);
+				if( !identityType || identityType.baked === undefined )
+				{
+					SWYM.LogError(identityArg.defaultValueNode, "Invalid identity value");
+				}
+				else
+				{
+					identityValue = identityType.baked;
+				}
+			}
+		}
+		
 		etcExecutable.push("#Overwrite");
 		etcExecutable.push("<etcSoFar>");
 
 		executable.push("#Literal");
-		executable.push(parsetree.op.identity);
+		executable.push(identityValue);
 		executable.push("#Store");
 		executable.push("<etcSoFar>");
 		executable.push("#Pop");
 		executable.push("#EtcSimple");
-		executable.push(limitTimes);
+		executable.push(limitTimesExecutable);
 		executable.push(etcExecutable);
 		executable.push(haltExecutable);
 		executable.push(haltCondition);
@@ -2218,9 +2286,36 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 				postProcessor = function(fields){ return SWYM.TableWrapper(fields.table, SWYM.jsArray(fields.keys)); };
 				returnType = bodyType;
 			}
+			else if( limitTimesExecutable === undefined &&
+					haltCondition === undefined &&
+					parsetree.op.etc === "etc.." )
+			{
+				// lazy array constructor
+				// FIXME: need a way to detect out-of-bounds termination
+				executable.push("#Closure");
+				executable.push({
+					type:"closure",
+					debugName:"lazy etc",
+					debugText:"<etc expression>", //FIXME
+					argName:"<etcIndex>",
+					body:etcExecutable
+				});
+				executable.push("#Native");
+				executable.push(1)
+				executable.push(function(lookup)
+				{
+					return{
+						type:"lazyArray",
+						length:Infinity,
+						run:function(key){ return SWYM.ClosureCall(lookup,key); }
+					};
+				});
+				
+				return SWYM.ToMultivalueType(bodyType, undefined, undefined, SWYM.BakedValue(Infinity));
+			}
 			else
 			{
-				// array constructor
+				// eager array constructor
 				postProcessor = function(list){ return SWYM.jsArray(list); };
 				
 				if( bodyType && bodyType.multivalueOf !== undefined )
@@ -2285,7 +2380,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	}*/
 	
 	executable.push("#Etc");
-	executable.push(limitTimes);
+	executable.push(limitTimesExecutable);
 	executable.push(etcExecutable);
 	executable.push(stepExecutable);
 	executable.push(initialValue);

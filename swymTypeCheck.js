@@ -600,11 +600,13 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 	}
 
 	var outType = SWYM.ToSinglevalueType(elementType);
+	var lengthType = elementType.length === undefined? SWYM.IntType: elementType.length;
+
 	var resultType =
 	{
 		type:"type",
 		isMutable:isMutable,
-		memberTypes:{length:SWYM.IntType, keys:SWYM.IntArrayType},
+		memberTypes:{length:lengthType, keys:SWYM.IntArrayType},
 		argType:SWYM.IntType,
 		outType:outType,
 		debugName:"Array("+SWYM.TypeToString(outType)+")"
@@ -636,16 +638,23 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 
 SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 {
+	var result;
 	if( arrayType && arrayType.isLazy )
 	{
-		var result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType.isMutable);
+		result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType.isMutable);
 		result.isLazy = true;
-		return result;
 	}
 	else
 	{
-		return SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType? arrayType.isMutable: undefined);
+		result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType? arrayType.isMutable: undefined);
 	}
+
+	if( arrayType && arrayType.memberTypes && arrayType.memberTypes.length !== SWYM.IntType )
+	{
+		result.length = arrayType.memberTypes.length;
+	}
+	
+	return result;
 }
 
 SWYM.TableTypeFromTo = function(keyType, valueType, accessors)
@@ -832,7 +841,7 @@ SWYM.ToLazyMultivalueType = function(type)
 	return result;
 }
 
-SWYM.ToMultivalueType = function(type, quantifier, isMutable)
+SWYM.ToMultivalueType = function(type, quantifier, isMutable, lengthType)
 {
 	if( type && type.multivalueOf !== undefined )
 	{
@@ -850,12 +859,13 @@ SWYM.ToMultivalueType = function(type, quantifier, isMutable)
 			if( quantifier_B === undefined )
 				quantifier_B = ["EACH"];
 			
-			return {type:"type", multivalueOf:type.multivalueOf, isMutable:isMutable, quantifier:quantifier_A.concat(quantifier_B), debugName:type.debugName};
+			return {type:"type", multivalueOf:type.multivalueOf, isMutable:isMutable, quantifier:quantifier_A.concat(quantifier_B), length:lengthType, debugName:type.debugName};
 //		}
 	}
 	else
 	{
-		return {type:"type", multivalueOf:type, isMutable:isMutable, quantifier:quantifier, debugName:SWYM.TypeToString(type)+"*"};
+		return {type:"type", multivalueOf:type, isMutable:isMutable, quantifier:quantifier,
+			length:lengthType, debugName:SWYM.TypeToString(type)+"*" };
 	}
 }
 
