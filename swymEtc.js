@@ -615,72 +615,116 @@ SWYM.EtcCreateGenerator = function(sequence)
 	
 	var third = sequence[2];
 	var firstDiff = second-base;
+	var term4s = [];
 	
-	if( sequence.length >= 4 )
-	{	
-		// try a quadratic sequence, e.g. 1, 3, 7, 10
-		// only try this when there are 4 examples, because literally all 3-value sequences can fit a quadratic sequence.
-		// - which would make it impossible to detect when someone made a mistake in an arithmetic or geometric sequence.
-		var firstDiff = second-base;
-		var pDiff = (third-second) - firstDiff;
-		var quadratic = function(index){
-			return base + firstDiff*index + pDiff*index*(index-1)/2;
-		};
+	// try a quadratic sequence, e.g. 1, 3, 7, 10
+	var firstDiff = second-base;
+	var pDiff = (third-second) - firstDiff;
+	var quadratic = function(index){
+		return base + firstDiff*index + pDiff*index*(index-1)/2;
+	};
 
-		if (SWYM.EtcTryGenerator(sequence, quadratic))
-		{
-			if( firstDiff >= 0 && pDiff >= 0 )
-				sequence.direction = "ascending";
-			else if ( firstDiff <= 0 && pDiff <= 0 )
-				sequence.direction = "descending";
-				
-			sequence.integer = base%1==0 && firstDiff%1==0 && pDiff%1==0;
-
-			return quadratic;
-		}
-
-		var factor = (third-second) / firstDiff;
-		var lastIndex = 0;
-		var lastValue = base;
-
-		// last resort: try a cumulative geometric sequence, e.g. 0, 0.1, 0.11, 0.111, etc
-		// feels like there should be a simpler way to generate it than this. :-/
-		// also, doing it this way accumulates some nasty floating point errors.
-		var cumgeometric = function(index)
-		{
-			if( lastIndex > index )
-			{
-				lastIndex = 0;
-				lastValue = base;
-			}
+	// only try this when there are 4 examples, because literally all 3-value sequences can fit a quadratic sequence.
+	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, quadratic))
+	{
+		if( firstDiff >= 0 && pDiff >= 0 )
+			sequence.direction = "ascending";
+		else if ( firstDiff <= 0 && pDiff <= 0 )
+			sequence.direction = "descending";
 			
-			while( lastIndex < index )
-			{
-				lastValue += firstDiff*Math.pow(factor, lastIndex);
-				lastIndex++;
-			}
-			return lastValue;
-		};
+		sequence.integer = base%1==0 && firstDiff%1==0 && pDiff%1==0;
 
-		if (SWYM.EtcTryGenerator(sequence, cumgeometric))
+		return quadratic;
+	}
+	else
+	{
+		term4s.push( quadratic(3) );
+	}
+
+	var factor = (third-second) / firstDiff;
+	var lastIndex = 0;
+	var lastValue = base;
+
+	// try a cumulative geometric sequence, e.g. 1, 11, 111, 1111, etc
+	// feels like there should be a simpler way to generate it than this. :-/
+	// also, doing it this way accumulates some nasty floating point errors.
+	var cumgeometric = function(index)
+	{
+		if( lastIndex > index )
 		{
-			if( factor > 0 )
-			{
-				if( firstDiff > 0 )
-					sequence.direction = "ascending";
-				else if ( firstDiff < 0 )
-					sequence.direction = "descending";
-			}
-				
-			sequence.integer = base%1==0 && firstDiff%1==0 && factor%1==0;
-
-			return cumgeometric;
+			lastIndex = 0;
+			lastValue = base;
 		}
+		
+		while( lastIndex < index )
+		{
+			lastValue += firstDiff*Math.pow(factor, lastIndex);
+			lastIndex++;
+		}
+		return lastValue;
+	};
+
+	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, cumgeometric))
+	{
+		if( factor > 0 )
+		{
+			if( firstDiff > 0 )
+				sequence.direction = "ascending";
+			else if ( firstDiff < 0 )
+				sequence.direction = "descending";
+		}
+			
+		sequence.integer = base%1==0 && firstDiff%1==0 && factor%1==0;
+
+		return cumgeometric;
+	}
+	else
+	{
+		term4s.push( cumgeometric(3) );
+	}
+
+	// try an arithmetic times geometric sequence, e.g. 1, 20, 300, 4000, etc
+	var sqrtTerm = Math.sqrt(1 + 1/((second*second/(base*third)) - 1)); // math, how does it even work, amirite
+	var arithStep = -base / ( 1-sqrtTerm );
+	var geoFactor = second/(base+arithStep)
+	var arithxgeo = function(index)
+	{
+		return (base + arithStep*index) * Math.pow(geoFactor, index);
+	};
+
+	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeo))
+	{
+		sequence.integer = base%1==0 && arithStep%1==0 && geoFactor%1==0;
+
+		return arithxgeo;
+	}
+	else
+	{
+		term4s.push( arithxgeo(3) );
+	}
+
+	// arithxgeo formula has two solutions - plus or minus sqrt.
+	var arithStepB = -base / ( 1+sqrtTerm )
+	var geoFactorB = second/(base+arithStepB)
+	var arithxgeoB = function(index)
+	{
+		return (base + arithStepB*index) * Math.pow(geoFactorB, index);
+	};
+
+	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeoB))
+	{
+		sequence.integer = base%1==0 && arithStepB%1==0 && geoFactorB%1==0;
+
+		return arithxgeoB;
+	}
+	else
+	{
+		term4s.push( arithxgeoB(3) );
 	}
    	
-	if( sequence.length < 4 )
+	if( sequence.length == 3 )
 	{
-		SWYM.LogError(0, "etc - can't find a rule for sequence ["+sequence+"]. (For a quadratic sequence, give at least 4 examples.)");
+		SWYM.LogError(0, "etc - ambiguous sequence ["+sequence+"]. Please provide a 4th term. Known ways to continue this sequence: "+term4s+")");
 	}
 	else
 	{

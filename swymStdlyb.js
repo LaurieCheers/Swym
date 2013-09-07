@@ -938,8 +938,8 @@ SWYM.operators = {
 		infix:function(a,b){return a-b}, prefix:function(v){return -v}
 	},
 */
-	"-": {precedence:101, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("-") },
-	"+": {precedence:102, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("+") },
+	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("+") },
+	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("-") },
 	"*": {precedence:103, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("*") },
 	"/": {precedence:104, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("/") },
 	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("%") },

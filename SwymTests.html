@@ -45,6 +45,7 @@ function runAllTests()
   runTest("8/(4*2)", "1");
   runTest("(1,2)+1", "2\n3");
   runTest("1+(1,2)", "2\n3");
+  runTest("-1+2", "1");
   runTest("(1,2)+(10,20)", "11\n21\n12\n22");
   runTest("// this will print \"true\".\nprint( 4+5 == (32-5)/3 );", "true");
   runTest("floor((15.2345*15.2345 - 14.2345*14.2345)+2+(15.2345*15.2345))", "263");
@@ -428,7 +429,7 @@ function runAllTests()
   runTest("+1", "~error~");
   runTest("+", "~error~");
   runTest("true!false", "~error~");
-  runTest("Number.'test' returns this/1+this/2+this/4+etc\n5.test", "10");
+  runTest("Number.'test' returns this/1+this/2+this/4+etc; 5.test", "10");
   endReportTable();
 
   addReportTable("Structs:");
