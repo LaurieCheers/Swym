@@ -387,7 +387,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 		var inputExecutable = [];
 		var inputArgName = argNames[Idx];
 		var inputType = SWYM.CompileNode( args[inputArgName], cscope, inputExecutable );
-		
+
 		if( inputType && inputType.multivalueOf !== undefined )
 		{
 			isMulti = true;
@@ -2166,14 +2166,23 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	if( parsetree.op.type === "fnnode" )
 	{
 		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a fnnode.
-		
+		// or maybe we're dealing with an overloadable operator, like "+".
+		// might be nice if we could unify operators and fnnodes so we don't need to worry about three different cases...
+
 		var etcArgIndex = -1;
-		for( var Idx = 0; Idx < parsetree.op.children.length; ++Idx )
+		if( parsetree.op.etc !== undefined )
 		{
-			if( parsetree.op.children[Idx] === undefined )
+			etcArgIndex = 1;
+		}
+		else
+		{
+			for( var Idx = 0; Idx < parsetree.op.children.length; ++Idx )
 			{
-				etcArgIndex = Idx;
-				break;
+				if( parsetree.op.children[Idx] === undefined )
+				{
+					etcArgIndex = Idx;
+					break;
+				}
 			}
 		}
 		
@@ -2209,10 +2218,31 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			// x.fn(foo, etc) or x.fn(argname=etc) mean we're recursing on one specific arg
 
 			// each arg needs its own sequence:
-			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)  ...not sure if this should be legal,
-			// the position of etc doesn't actually signify anything important.
+			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)  ...maybe that should be illegal,
+			// the position of etc there doesn't really mean anything.
 			// this = x/<etcSoFar>, __0 = a/b/c, __1 = "arg1"/"arg2"
-			var test = 0;
+			
+			// OTOH, that positioning does seem natural in this case -
+            // x.fn("arg1").fn("arg2").fn(etc)
+            // and probably even here -
+            // x.fn(0, "arg1").fn(0, "arg2").fn(0, etc)
+            // NB: equivalent to fn( fn( fn(x, 0, "arg1"), 0, "arg2"), 0, etc) (?)
+
+            // still, I think I prefer:
+            // x.fn(0, "arg1").fn(0, "arg2").etc
+			// equivalent:
+            // etc( fn( fn(x, 0, "arg1"), 0, "arg2")
+            // ok, that seems doable. The argument to the etc function must be a fnnode,
+            // and exactly one of the arguments to that fnnode must be another call to the same function.
+            // __0 = x/<etcSoFar>, __1 = 0, __2 = "arg1"/"arg2"
+			
+			// this still leaves us with a question about 1+etc. 
+			// oh, I guess it's not exactly a recursive function call, but we could just treat it as one.
+			etcScope["<etcSoFar>"] = bodyType;
+
+			parsetree.op.children[0] = parsetree.body;
+			parsetree.op.children[etcArgIndex] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
+//			var test = 0;
 		}
 
 		var etcExecutable = [];

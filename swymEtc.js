@@ -464,7 +464,17 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	if( (parsetree.type === "node" && parsetree.op.text === resultSoFar.op.text) ||
 		(resultSoFar.op.type === "fnnode" && parsetree.name === resultSoFar.op.name))
 	{
-		for( var Idx = 0; Idx < parsetree.children.length; Idx++ )
+		var idxLimit = parsetree.children.length;
+		if( idxLimit > 1 && parsetree.op !== undefined && parsetree.op.etc !== undefined )
+		{
+			for( var Idx = 1; Idx < idxLimit; Idx++ )
+			{			
+				resultSoFar.finalExample.push( parsetree.children[Idx] );
+			}
+			idxLimit = 1;
+		}
+		
+		for( var Idx = 0; Idx < idxLimit; Idx++ )
 		{			
 			SWYM.CollectEtcRec(parsetree.children[Idx], resultSoFar);
 		}
