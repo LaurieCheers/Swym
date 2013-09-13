@@ -158,13 +158,16 @@ SWYM.GenerateNextToken = function(tokenlist, ignoreDecl)
 
 	if ( SWYM.c === '"' )
 	{
-		// it's a "quoted" string
-		return SWYM.GenerateString(tokenlist);
-	}
-	else if ( SWYM.c === '<' && (SWYM.PeekNext() === '"' || SWYM.PeekNext() === '<') )
-	{
-		// looks like probably a <"bracketed"> string
-		return SWYM.GenerateBracketedString(tokenlist);
+		if ( SWYM.PeekNext() === '"' && SWYM.PeekNext(2) === '"' )
+		{
+			// looks like a """triple quoted""" string
+			return SWYM.GenerateTripleQuotedString(tokenlist);
+		}
+		else
+		{
+			// it's a "quoted" string
+			return SWYM.GenerateString(tokenlist);
+		}			
 	}
 	else if (SWYM.c === "'" )
 	{
@@ -397,34 +400,11 @@ SWYM.GenerateDeclaration = function(tokenlist)
 
 //=============================================================
 
-SWYM.GenerateBracketedString = function(tokenlist)
+SWYM.GenerateTripleQuotedString = function(tokenlist)
 {
-	var stringOpenBracketPos = SWYM.sourcePos;
+	var stringOpenQuotesPos = SWYM.sourcePos;
 
-	// current char must be "<" because we got here
-	var numOpens = 1;
-
-	SWYM.NextChar();
-	
-	while(SWYM.c === "<")
-	{
-		++numOpens;
-		SWYM.NextChar();
-	}
-	
-	if( SWYM.c !== '"' )
-	{
-		SWYM.LogError(SWYM.sourcePos, "Expected \" after <<");
-		return;
-	}
-
-	SWYM.NextChar();
-
-	// ignore the first newline, to help people lay out the string nicely
-//	if( SWYM.c === "\n" )
-//	{
-//		SWYM.NextChar();
-//	}
+	SWYM.NextChar(3);
 	
 	var stringStartPos = SWYM.sourcePos;
 
@@ -432,32 +412,22 @@ SWYM.GenerateBracketedString = function(tokenlist)
 	{
 		if ( SWYM.c === undefined )
 		{
-			SWYM.LogError(stringOpenBracketPos, "<\"Bracketed\"> string was not terminated");
+			SWYM.LogError(stringOpenQuotesPos, "\"\"\"Triple Quoted\"\"\" string was not terminated");
 			return;
 		}
-		else if( SWYM.c === '"' )
+		else if( SWYM.c === '"' && SWYM.PeekNext() === '"' && SWYM.PeekNext(2) === '"' )
 		{
-			var closePos = SWYM.sourcePos;
-			SWYM.NextChar();
-			var numCloses = 0;
-			while(SWYM.c === '>' && numCloses < numOpens)
-			{
-				++numCloses;
-				SWYM.NextChar();
-			}
+			// ignore one final newline, to allow the string to be laid out nicely.
+			//if( SWYM.source[closePos-1] === "\n" )
+			//{
+			//	--closePos;
+			//}
+			var theString = SWYM.GetSource(stringStartPos, SWYM.sourcePos);
+			tokenlist.push(SWYM.NewToken("literal", stringOpenQuotesPos, theString, theString));
 			
-			if( numCloses == numOpens )
-			{
-				// ignore one final newline, to allow the string to be laid out nicely.
-				//if( SWYM.source[closePos-1] === "\n" )
-				//{
-				//	--closePos;
-				//}
-				var theString = SWYM.GetSource(stringStartPos, closePos);
-				tokenlist.push(SWYM.NewToken("literal", stringOpenBracketPos, theString, theString));
+			SWYM.NextChar(3);
 
-				return;
-			}
+			return;
 		}
 		else
 		{

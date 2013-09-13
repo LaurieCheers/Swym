@@ -79,7 +79,7 @@ function runAllTests()
   addReportTable("Basic Strings:");
   runTest("\"\"",										"\"\"");
   runTest("\"Hello, World!\"",										"\"Hello, World!\"");
-  runTest("\"\\\"Hello\\\", \\$World!\"",					"\"\"Hello\", $World!\"");
+  runTest("\"\\\"Hello\\\", \\$World!\"",					"\"\\\"Hello\\\", $World!\"");
   runTest("\"Hello\" + \"World\"",									"\"HelloWorld\"");
   runTest("\"Hello \" + ($93) + \"!\"",								"\"Hello 93!\"");
   runTest("'world'=\"Earth\"; \"Hello $world!\"",	"\"Hello Earth!\"");
@@ -102,7 +102,8 @@ function runAllTests()
   runTest("[\"x\"].tail", "[]");
   runTest("\"x\" + \"x\"", "\"xx\"");
   runTest("[\"x\"] + [\"x\"]", "[\"x\",\"x\"]");
-  runTest("<\"bracketed\">", "\"bracketed\"");
+  runTest("\"\"\"triple quoted\"\"\"", "\"triple quoted\"");
+  runTest("\"\"\"triple<\n>quoted<\n>\"\"\"", "\"triple<\\n>quoted<\\n>\"");
   endReportTable();
 
   addReportTable("Basic Functions:");
@@ -327,6 +328,8 @@ function runAllTests()
   runTest("toInt(\"157\")+toInt(\"12\")", "169");
   runTest("toInt(\"157\" + \"12\")", "15712");
   runTest("toInt(\"n\")", "~error~");
+  runTest("\"Hello Small World!\".words", "[\"Hello\",\"Small\",\"World!\"]");
+  runTest("\"\"\"Hello Small\nWorld!\"\"\".lines", "[\"Hello Small\",\"World!\"]");
   endReportTable();
 
   addReportTable("Destructuring:");

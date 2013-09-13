@@ -1553,44 +1553,34 @@ SWYM.ToDebugString = function(value, loopBreaker)
 				return value.debugString;
 			}
 			
-			var numBrackets = 0;
+			var needsEscape = false;
+			var debugString = '"';
 			for( var Idx = 0; Idx < value.data.length; Idx++ )
 			{
-				if( value.data[Idx] === "\"" || value.data[Idx] === "\\" || value.data[Idx] === "\n")
+				if( value.data[Idx] === "\n" )
 				{
-					// it needs brackets
-					numBrackets = 1;
-					break;
+					debugString += "\\n";
+				}
+				else if( value.data[Idx] === "\r" )
+				{
+					debugString += "\\r";
+				}
+				else if( value.data[Idx] === "\t" )
+				{
+					debugString += "\\t";
+				}
+				else
+				{
+					if( value.data[Idx] === "\"" || value.data[Idx] === "\\" )
+					{
+						// it needs escaping
+						debugString += "\\";
+					}
+					debugString += value.data[Idx];
 				}
 			}
 			
-			for( var Idx = 1; Idx < value.data.length; Idx++ )
-			{
-				if( value.data[Idx] === ">" && value.data[Idx-1] === "\"" )
-				{
-					numBrackets = 2;
-					Idx++;
-					for( ; Idx < value.data.length; Idx++ )
-					{
-						if( value.data[Idx] === ">" )
-						{
-							numBrackets++;
-						}
-						else
-						{
-							Idx--;
-							break;
-						}
-					}
-				}
-			}
-
-			var debugString = '"'+value.data+'"';
-			while( numBrackets > 0 )
-			{
-				debugString = "<"+debugString+">";
-				numBrackets--;
-			}
+			debugString += '"';
 			value.debugString = debugString;
 			return debugString;
 			

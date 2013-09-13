@@ -2288,7 +2288,7 @@ Array.'trimStart'(Int:'n') returns .atEach[n ..< .length]\n\
 Array.'trimEnd'(Int:'n') returns .atEach[0 ..< .length-n]\n\
 Array.'startsWith'(Array:'list') returns .length >= list.length && .starting(list.length) == list\n\
 Array.'endsWith'(Array:'list') returns .length >= list.length && .ending(list.length) == list\n\
-Array.'splitAt'(Int:'n') returns [ .slice[..<n], .slice[n..] ]\n\
+Array.'splitAt'(Int:'key') returns [ .slice[..<key], .slice[key..] ]\n\
 \n\
 Array.'splitAt'(Int.Array:'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
@@ -2297,10 +2297,10 @@ Array.'splitAt'(Int.Array:'keys') returns if(keys == []){ [this] } else\n\
   .slice[keys.last..]\n\
 ]}\n\
 \n\
-Cell.Array.'split' returns .1st.context.splitAt(.cellKeys)\n\
+Cell.Array.'split' returns .1st.array.splitAt(.cellKeys)\n\
 Array.'splitWhere'(Callable:'test') returns .cells.where{.value.(test)}.split\n\
 Array.'splitOut'(Int.Array:'keys') returns [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]}\n\
-Cell.Array.'splitOut' returns .1st.context.splitOut(.cellKeys)\n\
+Cell.Array.'splitOut' returns .1st.array.splitOut(.cellKeys)\n\
 Array.'splitOutWhere'(Callable:'test') returns .cells.where{.value.(test)}.splitOut\n\
 Array.'splitAtEnd'(Int:'n') returns [ .slice(trimEnd=n), .ending(n) ]\n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
