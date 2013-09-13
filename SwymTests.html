@@ -111,7 +111,7 @@ function runAllTests()
   runTest("({true})", "'it'->{true}");
   runTest("'x'->{x}", "'x'->{x}");
   runTest("['x']->{x}", "['x']->{x}");
-  runTest("for(3){*2}", "6");
+  runTest("for(3){it*2}", "6");
   runTest("'myfor'('arg')('body'){arg.do(body)}; myfor(3){it*2}", "6");
   runTest("5.{it+2}",												"7");
   runTest("Number.'x' {1+3}; 5.x",										"4");
@@ -121,10 +121,10 @@ function runAllTests()
   runTest("Number.'square' {this*this}; 'x'=5; output(\"Hello $(square(x))!\")",	"Hello 25!");
   runTest("Anything.'twice'('f'){ yield .do(f); yield .do(f) }\n \"Boo\".twice{it}.each.println",	"Boo\nBoo\n");
   //runTest("::test = {2+it}; 4.{test()}",                        "2");
-  runTest("Number.'double' {*2}\ndouble(4);", "8");
+  runTest("Number.'double' {this*2}\ndouble(4);", "8");
   runTest("Number.'double' {this*2};\n4.double;", "8");
-  runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else{+1}", "5");
-  runTest("'elsie'('x', 'else') {x.(else)}; elsie(4)else({+1})", "5");
+  runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else{it+1}", "5");
+  runTest("'elsie'('x', 'else') {x.(else)}; elsie(4)else({it+1})", "5");
   runTest("'elsie'('x', 'else') {x.do(else)}; elsie(4)else it+1", "5");
   runTest("Number.'eqtest' returns 4; 10.eqtest", "4");
   runTest("Number.'eqtest' returns {4}; 10.eqtest", "'it'->{4}");
@@ -226,7 +226,7 @@ function runAllTests()
   runTest("\"1\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"1\"");
   runTest("\"2\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"2\"");
   runTest("\"3\".{\"1\"=>$1, \"2\"=>$2, else=>$3}", "\"3\"");
-  runTest("table[1..10]{^2}", "{1=>1, 2=>4, 3=>9, 4=>16, 5=>25, 6=>36, 7=>49, 8=>64, 9=>81, 10=>100}");
+  runTest("table[1..10]{it^2}", "{1=>1, 2=>4, 3=>9, 4=>16, 5=>25, 6=>36, 7=>49, 8=>64, 9=>81, 10=>100}");
 //  runTest("[x:10, y:10].at(\"x\")+1", "11");
   runTest("[\"x\", 1, \"y\", 2, \"z\", 3].{{.1st=>.2nd, .3rd=>.4th, etc}}", "{\"x\"=>1, \"y\"=>2, \"z\"=>3}");
   endReportTable();
@@ -234,24 +234,24 @@ function runAllTests()
   addReportTable("Type system torture");
   runTest("true+1", "~error~");
   runTest("Bool:'b' = [false, true].1st", "false");
-  runTest("4.{+1}+1", "6");
+  runTest("4.{it+1}+1", "6");
   runTest("4.{it}+1", "5");
-  runTest("true.{+1}", "~error~");
+  runTest("true.{it+1}", "~error~");
   runTest("true.{it}+1", "~error~");
   runTest("true.( 4.'x'->{{x}} )+1", "5");
   runTest("true.( true.'x'->{{x}} )+1", "~error~");
   runTest("4.( true.'x'->{{it}} )+1", "5");
   runTest("true.do( true.do 'x'->{{it}} )+1", "~error~");
-  runTest("{+1}.do( 4.'x'->{{ x.(it) }} )+1", "6");
-  runTest("{+1}.( true.'x'->{{ x.(it) }} )+1", "~error~");
-  runTest("4.do( {+1}.do 'x'->{{.do(x)}} )+1", "6");
-  runTest("true.do( {+1}.do 'x'->{{.do(x)}} )+1", "~error~");
+  runTest("{it+1}.do( 4.'x'->{{ x.(it) }} )+1", "6");
+  runTest("{it+1}.( true.'x'->{{ x.(it) }} )+1", "~error~");
+  runTest("4.do( {it+1}.do 'x'->{{.do(x)}} )+1", "6");
+  runTest("true.do( {it+1}.do 'x'->{{.do(x)}} )+1", "~error~");
   runTest("'test'('x'){x+1}; test(4)+1", "6");
   runTest("'test'('x'){x+1}; test(true)+1", "~error~");
-  runTest("'test'('x'){4.do(x)}; 'test2'('x') {test(x)}; test2{+1}", "5");
-  runTest("'test'('x'){true.do(x)}; 'test2'('x') {test(x)}; test2{+1}", "~error~");
-  runTest("'test'('x'){4.do(x)}; test{+1}", "5");
-  runTest("'test'('x'){true.do(x)}; test{+1}", "~error~");
+  runTest("'test'('x'){4.do(x)}; 'test2'('x') {test(x)}; test2{it+1}", "5");
+  runTest("'test'('x'){true.do(x)}; 'test2'('x') {test(x)}; test2{it+1}", "~error~");
+  runTest("'test'('x'){4.do(x)}; test{it+1}", "5");
+  runTest("'test'('x'){true.do(x)}; test{it+1}", "~error~");
   runTest("'test'('x'){4.do(x)}; test{it}+1", "5");
   runTest("'test'('x'){true.do(x)}; test{it}+1", "~error~");
   runTest("'test'('x'){{.do(x)}}; 4.do( test{it} )+1", "5");
@@ -421,7 +421,7 @@ function runAllTests()
   endReportTable();
 
   addReportTable("Overloaded Functions:");
-  runTest("Int.'twice' {*2}; Array.'twice' {[.each,.each]}\; 4.twice, \"4\".twice;", "8\n\"44\"");
+  runTest("Int.'twice' {this*2}; Array.'twice' {[.each,.each]}\; 4.twice, \"4\".twice;", "8\n\"44\"");
   endReportTable();
 
   addReportTable("Errors:");

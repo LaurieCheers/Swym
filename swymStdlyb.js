@@ -789,31 +789,42 @@ SWYM.operators = {
 	">=..":{precedence:75, argTypes:[SWYM.NumberType,SWYM.IntType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, -1); }},
 	">=..>=":{precedence:75, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, true, -1); }},
 	
-	"==": {precedence:80, returnType:SWYM.BoolType, infix:SWYM.IsEqual },
-	"!=": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b)}},
+	"==": {precedence:80, returnType:SWYM.BoolType, infix:SWYM.IsEqual,
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
+	},
+	"!=": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b)},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
+	},
 
 	// 'exactly equal' operators - useful?
-	"===": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){ return SWYM.IsEqual(a,b,true) }},
-	"!==": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b,true)}},
+	"===": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){ return SWYM.IsEqual(a,b,true) },
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
+	},
+	"!==": {precedence:80, returnType:SWYM.BoolType, infix:function(a,b){return !SWYM.IsEqual(a,b,true)},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
+	},
 
 	// "v ==any P" and "v ==some P" are the same as "P.contains(v)".
 	"==any": {precedence:80, argTypes:[SWYM.AnyType, SWYM.ArrayType], returnType:SWYM.BoolType,
-		infix:function(a,b) { return SWYM.ArrayContains(b, a); }
+		infix:function(a,b) { return SWYM.ArrayContains(b, a); },
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 
 	"==some": {precedence:80, argTypes:[SWYM.AnyType, SWYM.ArrayType], returnType:SWYM.BoolType,
-		infix:function(a,b) { return SWYM.ArrayContains(b, a); }
+		infix:function(a,b) { return SWYM.ArrayContains(b, a); },
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 
 	// "v !=any P" is the same as "P.!contains(v)"
 	"!=any": {precedence:80, argTypes:[SWYM.AnyType, SWYM.ArrayType], returnType:SWYM.BoolType,
-		infix:function(a,b){ return !SWYM.ArrayContains(b, a); }
+		infix:function(a,b){ return !SWYM.ArrayContains(b, a); },
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 
-	">": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode(">") },
-	">=": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode(">=") },
-	"<": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("<") },
-	"<=": {precedence:81, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("<=") },
+	">": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode(">"), prefix:true },
+	">=": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode(">="), prefix:true },
+	"<": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode("<"), prefix:true },
+	"<=": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode("<="), prefix:true },
 	
 /*	">":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>b} },
 	">=": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>=b} },
@@ -827,7 +838,8 @@ SWYM.operators = {
 				if( a <= b.run(Idx) )
 					return false;
 			return true;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	">=every": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -836,7 +848,8 @@ SWYM.operators = {
 				if( a < b.run(Idx) )
 					return false;
 			return true;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	"<every":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -845,7 +858,8 @@ SWYM.operators = {
 				if( a >= b.run(Idx) )
 					return false;
 			return true;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	"<=every": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -854,7 +868,8 @@ SWYM.operators = {
 				if( a > b.run(Idx) )
 					return false;
 			return true;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	">some":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -863,7 +878,8 @@ SWYM.operators = {
 				if( a > b.run(Idx) )
 					return true;
 			return false;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	">=some": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -872,7 +888,8 @@ SWYM.operators = {
 				if( a >= b.run(Idx) )
 					return true;
 			return false;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	"<some":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -881,7 +898,8 @@ SWYM.operators = {
 				if( a < b.run(Idx) )
 					return true;
 			return false;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 	"<=some": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
@@ -890,7 +908,8 @@ SWYM.operators = {
 				if( a <= b.run(Idx) )
 					return true;
 			return false;
-		}
+		},
+		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 
 	// nice to have, though probably not as useful: "==every", ">every", "<every", ">=every", "<=every", ">some", "<some", ">=some", "<=some"
@@ -938,12 +957,12 @@ SWYM.operators = {
 		infix:function(a,b){return a-b}, prefix:function(v){return -v}
 	},
 */
-	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("+") },
-	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("-") },
-	"*": {precedence:103, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("*") },
-	"/": {precedence:104, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("/") },
-	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("%") },
-	"^": {precedence:106, infix:true, customParseTreeNode:SWYM.OverloadableOperatorParseTreeNode("^") },
+	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("+") },
+	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("-") },
+	"*": {precedence:103, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("*") },
+	"/": {precedence:104, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("/") },
+	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("%") },
+	"^": {precedence:106, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("^") },
 
 	".": { precedence:300, prefix:true, infix:true,
 		customParseTreeNode:function(lhs, op, rhs)
@@ -1217,9 +1236,6 @@ SWYM.operators = {
 				return SWYM.CompileLambda(node, node.op.argName, cscope, executable);
 		}
 	},
-
-	// this isn't really an operator, it's just here so the tokenizer can complain about it.
-	"{-": { precedence:330, takeCloseBracket:"}", debugText:"curlyMinus" },
 
 	")": { isCloseBracket:true },
 	"]": { isCloseBracket:true },
@@ -2262,8 +2278,6 @@ Array.'where'('test', 'body', 'else') returns forEach(this){ .if(test)(body) els
 Array.'whereKey'('test') returns forEach(.keys){ .if(test)(this) else {novalues} }\n\
 Array.'whereKey'('test', 'body') returns forEach(.keys){ .if(test){.(this).(body)} else {novalues} }\n\
 Array.'whereKey'('test', 'body', 'else') returns forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} }\n\
-Array.'starting'(Int:'n') returns .atEach[0..<n]\n\
-Array.'ending'(Int:'n') returns .atEach[ (.length-n).clamp(min=0) ..< .length]\n\
 Array.'slice'(Int:'start') returns .atEach[start ..< .length]\n\
 Array.'slice'(Int:'length') returns .atEach[0..<length]\n\
 Array.'slice'(Int:'end') returns .atEach[0..<end]\n\
@@ -2286,9 +2300,10 @@ Array.'slices'(Int:'length') returns array(.length+1-length) 'start'->\n\
 Array.'slices' returns [ .slices(length=1 .. .length).each ]\n\
 Array.'trimStart'(Int:'n') returns .atEach[n ..< .length]\n\
 Array.'trimEnd'(Int:'n') returns .atEach[0 ..< .length-n]\n\
-Array.'startsWith'(Array:'list') returns .length >= list.length && .starting(list.length) == list\n\
-Array.'endsWith'(Array:'list') returns .length >= list.length && .ending(list.length) == list\n\
+Array.'startsWith'(Array:'list') returns .length >= list.length && .stem(list.length) == list\n\
+Array.'endsWith'(Array:'list') returns .length >= list.length && .tail(list.length) == list\n\
 Array.'splitAt'(Int:'key') returns [ .slice[..<key], .slice[key..] ]\n\
+Array.'splitAtEnd'(Int:'n') returns [ .slice(trimEnd=n), .tail(n) ]\n\
 \n\
 Array.'splitAt'(Int.Array:'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
@@ -2302,9 +2317,14 @@ Array.'splitWhere'(Callable:'test') returns .cells.where{.value.(test)}.split\n\
 Array.'splitOut'(Int.Array:'keys') returns [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]}\n\
 Cell.Array.'splitOut' returns .1st.array.splitOut(.cellKeys)\n\
 Array.'splitOutWhere'(Callable:'test') returns .cells.where{.value.(test)}.splitOut\n\
-Array.'splitAtEnd'(Int:'n') returns [ .slice(trimEnd=n), .ending(n) ]\n\
+Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
+Array.'splitOnAny'(Array:'values') returns .splitOutWhere{==any values}\n\
+String.'lines' returns .splitOn(\"\\n\")\n\
+String.'words' returns .splitOnAny(\" \\t\\n\")\n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
+Array.'tail'(Int:'length') returns .atEach[ (.length-length).clamp(min=0) ..< .length]\n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
+Array.'stem'(Int:'length') returns .atEach[0..<length]\n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
 Array.'emptyOr'(Callable:'body') returns .if{==[]}{[]} else (body)\n\
@@ -2474,8 +2494,6 @@ String.'toInt' returns forEach(this)\n\
   \"5\"=>5, \"6\"=>6, \"7\"=>7, \"8\"=>8, \"9\"=>9\n\
 }.{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc }\n\
 \n\
-String.'lines' returns .splitOutWhere{==\"\\n\"}\n\
-String.'words' returns .splitOutWhere{==any \" \\t\\n\"}\n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
 Type.'mutableArray'(Int:'length', 'equals') returns this.mutableArray[equals**length]\n\

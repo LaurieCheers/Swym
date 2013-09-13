@@ -196,11 +196,6 @@ SWYM.GenerateNextToken = function(tokenlist, ignoreDecl)
 		}
 		while(!op && --peekoffs > 0);
 
-		if( possibleOpText === "{-" )
-		{
-			SWYM.LogError(opStartPos, "Ambiguous minus sign. To negate a number, add a space: '{ -'. To subtract, add an explicit 'it':  '{it-'.");
-		}
-
 		if ( op )
 		{
 			// matched an operator

@@ -33,9 +33,9 @@ SWYM.PeekNextToken = function()
 
 //=============================================================
 
-SWYM.ParseLevel = function(minpriority, startingLhs, openBracketOp)
+SWYM.ParseLevel = function(minpriority, openBracketOp)
 {
-	var curLhs = startingLhs;
+	var curLhs = undefined;
 	var curOp = undefined;
 	
 	var HandleAddOp = function(newOp, isImplicit)
@@ -130,15 +130,7 @@ SWYM.ParseLevel = function(minpriority, startingLhs, openBracketOp)
             
 			if( newOp.behaviour.takeCloseBracket )
 			{
-				var autoLhs;
-
-				// special case: if we see an operator requiring a lhs, immediately after a {, auto-insert "__default".
-				if( newOp.text === "{" && SWYM.curToken && SWYM.curToken.behaviour && !SWYM.curToken.behaviour.prefix && !SWYM.curToken.behaviour.standalone && !SWYM.curToken.behaviour.isCloseBracket )
-				{
-					autoLhs = SWYM.NewToken("name", SWYM.curToken.sourcePos, "__default");
-				}
-
-				var rhs = SWYM.ParseLevel(0, autoLhs, newOp);
+				var rhs = SWYM.ParseLevel(0, newOp);
 
 				if ( SWYM.curToken && SWYM.curToken.text === newOp.behaviour.takeCloseBracket )
 				{
@@ -411,7 +403,7 @@ SWYM.FunctionesqueParseTreeNode = function(name)
 	}
 }
 
-SWYM.OverloadableOperatorParseTreeNode = function(name)
+SWYM.OverloadableParseTreeNode = function(name)
 {
 	return function(lhs, op, rhs)
 	{
@@ -621,6 +613,24 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 	{
 		SWYM.LogError(lhs.pos, "Error: expected a function expression, got "+lhs);
 		return rhs;
+	}
+}
+
+SWYM.AutoLhsParseTreeNode = function(lhs, op, rhs)
+{
+	if( !lhs )
+		lhs = SWYM.NewToken("name", op.pos, "__default"); // ".foo" means "__default.foo".
+	return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+}
+
+SWYM.AutoLhsOverloadableParseTreeNode = function(name)
+{
+	var convertor = SWYM.OverloadableParseTreeNode(name);
+	return function(lhs, op, rhs)
+	{
+		if( !lhs )
+			lhs = SWYM.NewToken("name", op.pos, "__default"); // ".foo" means "__default.foo".
+		return convertor(lhs, op, rhs);
 	}
 }
 
