@@ -2325,6 +2325,7 @@ Array.'tail' returns .atEach[1 ..< .length]\n\
 Array.'tail'(Int:'length') returns .atEach[ (.length-length).clamp(min=0) ..< .length]\n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
 Array.'stem'(Int:'length') returns .atEach[0..<length]\n\
+Array.'stemWhere'(Callable:'test') returns .stem(length=.cells.firstWhere{.value.!(test)}.key)\n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
 Array.'emptyOr'(Callable:'body') returns .if{==[]}{[]} else (body)\n\
@@ -2442,6 +2443,9 @@ Array.'firstWhere'('test', 'then', 'else')\n\
 Array.'lastWhere'('test') returns .reverse.firstWhere(test)\n\
 Array.'lastWhere'('test', 'else') returns .reverse.firstWhere(test) else (else)\n\
 Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then) else (else)\n\
+\n\
+Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}.key\n\
+Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
 \n\
 'Empty' = {.length == 0}\n\
 'PI' = 3.1415926535897926\n\
