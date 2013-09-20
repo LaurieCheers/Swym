@@ -137,11 +137,11 @@ function runAllTests()
   runTest("Number.'test' { yield 4; if(this>4){ return }; yield 3; }; 5.test", "[4]");
   runTest("'defaultValueFn'('x'=0){x}; defaultValueFn(5)", "5");
   runTest("'defaultValueFn'('x'=0){x}; defaultValueFn()", "0");
-  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn(5)", "~error~");
-  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn(\"x\")", "~error~");
-  runTest("'defaultValueFn'(String:'x'=0){x}; defaultValueFn()", "~error~");
-  runTest("'defaultValueFn'(Int:'x'=0){x}; defaultValueFn(5)", "5");
-  runTest("'defaultValueFn'(Int:'x'=0){x}; defaultValueFn()", "0");
+  runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn(5)", "~error~");
+  runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn(\"x\")", "~error~");
+  runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn()", "~error~");
+  runTest("'defaultValueFn'(Int 'x'=0){x}; defaultValueFn(5)", "5");
+  runTest("'defaultValueFn'(Int 'x'=0){x}; defaultValueFn()", "0");
   endReportTable();
 
   addReportTable("Sequences:");
@@ -235,7 +235,7 @@ function runAllTests()
 
   addReportTable("Type system torture");
   runTest("true+1", "~error~");
-  runTest("Bool:'b' = [false, true].1st", "false");
+  runTest("Bool 'b' = [false, true].1st", "false");
   runTest("4.{it+1}+1", "6");
   runTest("4.{it}+1", "5");
   runTest("true.{it+1}", "~error~");
@@ -339,7 +339,7 @@ function runAllTests()
   addReportTable("Destructuring:");
   runTest("['x','y'].'test' returns x+y; test[5,6]", "11");
   runTest("'test'['x','y'] returns x+y; test[5,6]", "11");
-  runTest("'test'(['x','y']:'xy') returns x+y; test(xy=[5,6])", "11");
+  runTest("'test'(['x','y'] 'xy') returns x+y; test(xy=[5,6])", "11");
   runTest("['x','y'].'test' returns x+y+.length; test[5,6]", "13");
   runTest("[['x'],['y','z']].'test' returns x+y+z; test[[5],[3,3]]", "11");
   runTest("[5,6].['x','y']->{x+y}", "11");
@@ -351,7 +351,7 @@ function runAllTests()
   runTest("'x' = Anything.var=[4]; x.value[5]; x", "var([5])");
   runTest("'x' = Anything.var[4]; x.value=[5]; value~of(x)", "[5]");
   runTest("'x' = Anything.var(3); 'y' = Anything.var=value(x); x.value=4; [x.value, y.value]", "[4,3]");
-  runTest("Array.'value'(Array:'equals') returns .keys.each{.(this).value= .(equals)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].value=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
+  runTest("Array.'value'(Array 'equals') returns .keys.each{.(this).value= .(equals)}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].value=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
 //  runTest("vars: Mutable[6,3,9]; vars.each = 1; vars",	"[1,1,1]");
 //  runTest("x:Anything.var = 3; y: Anything.var=8; z: Anything.var=9; vars: Mutable[x,y,z]; vars.each = 1; [x,y,z,vars.each]",	"[3,8,9,1,1,1]");
 //  runTest("Anything.var:x=3; :z=[x]; x=9; z",	"[3]");
@@ -446,13 +446,13 @@ function runAllTests()
   runTest("'T'=Struct{}; 'obj'=new(T); obj.is(T)",				"true");
   runTest("'T'=Struct{}; 'obj'=new(T); obj == obj",				"true");
   runTest("'T'=Struct{}; 'obj1'=new(T); 'obj2'=new(T); obj1 == obj2", "false");
-  runTest("'A'=Struct{Int:'a'}; 'B'=Struct{Int:'b'}; A.'fnTest' returns \"a!\"; B.'fnTest' returns \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
+  runTest("'A'=Struct{Int 'a'}; 'B'=Struct{Int 'b'}; A.'fnTest' returns \"a!\"; B.'fnTest' returns \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
   runTest("'T'=Struct{'x'}; T.new(x=5).x", "5");
-  runTest("'T'=Struct{Number:'x'}; T.new(x=5).x", "5");
-  runTest("'T'=Struct{Number:'last'}; T.new(last=10).last + [1..10].last",	"20");
-  runTest("'T'=Struct{String:'name', Number:'num'}; T.new(name=\"Hello\", num=3).{.name.length-.num}", "2");
-  runTest("'Wrapper'=Struct{Number:'value'}; 'mut' = Wrapper.Mutable.new(value=10); mut.value=20; mut.value",	"20");
-  runTest("'XY' = Struct{Int:'x', Int:'y'}; [ XY.new(0..1)(2..3) ]", "[XY(x:0, y:2),XY(x:0, y:3),XY(x:1, y:2),XY(x:1, y:3)]");
+  runTest("'T'=Struct{Number 'x'}; T.new(x=5).x", "5");
+  runTest("'T'=Struct{Number 'last'}; T.new(last=10).last + [1..10].last",	"20");
+  runTest("'T'=Struct{String 'name', Number 'num'}; T.new(name=\"Hello\", num=3).{.name.length-.num}", "2");
+  runTest("'Wrapper'=Struct{Number 'value'}; 'mut' = Wrapper.Mutable.new(value=10); mut.value=20; mut.value",	"20");
+  runTest("'XY' = Struct{Int 'x', Int 'y'}; [ XY.new(0..1)(2..3) ]", "[XY(x=0, y=2),XY(x=0, y=3),XY(x=1, y=2),XY(x=1, y=3)]");
   endReportTable();
 
 }

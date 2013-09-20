@@ -1646,7 +1646,7 @@ SWYM.ToDebugString = function(value, loopBreaker)
 				if( result !== "" )
 					result += ", ";
 
-				result += memberName+":"+SWYM.ToDebugString(value.members[memberName], loopBreaker);
+				result += memberName+"="+SWYM.ToDebugString(value.members[memberName], loopBreaker);
 			}
 			return value.structType.debugName+"("+result+")";
 		}

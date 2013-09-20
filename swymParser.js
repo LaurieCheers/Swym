@@ -271,15 +271,6 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 			else
 				openBracketOp.etc = etcText;
 		}
-		else if ( SWYM.curToken.behaviour )
-		{
-			// adding an operator
-			var result = HandleAddOp( SWYM.curToken );
-			if ( result )
-			{
-				return result.value;
-			}
-		}
 		else if ( SWYM.curToken.type === "decl" && SWYM.PeekNextToken() && SWYM.PeekNextToken().text === "->" )
 		{
 			// it's a 'foo'->{...} block expression
@@ -293,6 +284,15 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 			else
 			{
 				SWYM.curToken.argName = declToken;
+			}
+		}
+		else if ( SWYM.curToken.behaviour )
+		{
+			// adding an operator
+			var result = HandleAddOp( SWYM.curToken );
+			if ( result )
+			{
+				return result.value;
 			}
 		}
 		else
@@ -490,23 +490,6 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 	{
 		// declaring a parameter with a default value
 		fnnode.argNames.push( paramnode.children[0].value );
-		fnnode.children.push( paramnode );
-	}
-	else if( paramnode && paramnode.op && paramnode.op.text === ":" &&
-				paramnode.children[1] && paramnode.children[1].type === "decl" )
-	{
-		// declaring a parameter with a type
-		// TODO: actually check the type!
-		fnnode.argNames.push( paramnode.children[1].value );
-		fnnode.children.push( paramnode );
-	}
-	else if( paramnode && paramnode.op && paramnode.op.text === ":" &&
-			paramnode.children[1] && paramnode.children[1].op && paramnode.children[1].op.text === "=" &&
-			paramnode.children[1].children[0] && paramnode.children[1].children[0].type === "decl" )
-	{
-		// declaring a parameter with a type and a default value
-		// TODO: actually check the type!
-		fnnode.argNames.push( paramnode.children[1].children[0].value );
 		fnnode.children.push( paramnode );
 	}
 	else if( paramnode && paramnode.type === "decl" )

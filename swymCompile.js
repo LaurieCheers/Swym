@@ -997,55 +997,53 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		var argNode = argTypes[argIdx];
 		var defaultValueNode = undefined;
 
+		var argData = {finalName:finalName, index:argIdx};
+
 		if( argNode.op && argNode.op.text === "(" && !argNode.children[0] )
 		{
 			argNode = argNode.children[1];
 		}
 		
-		if( argNode.op && argNode.op.text === ":" )
-		{			
-			if( argNode.children[1] && argNode.children[1].op && argNode.children[1].op.text === "=" )
-			{
-				defaultValueNode = argNode.children[1].children[1];
-			}
-			
-			argNode = argNode.children[0];
-		}
-		else if( argNode.op && argNode.op.text === "=" )
+		if( argNode !== undefined && argNode.op && argNode.op.text === "=" )
 		{
-			defaultValueNode = argNode.children[1];
+			argData.defaultValueNode = argNode.children[1];
 			argNode = argNode.children[0];
 		}
 		
-		if ( argNode.type === "node" && argNode.op.text === "[" )
+		if( argNode !== undefined && argNode.type === "decl" )
 		{
-			// deconstructing arg
-			expectedArgs[finalName] = {finalName:finalName, index:argIdx, deconstructNode:argNode};//, typeCheck:typeCheck};
-		}
-		else if( argNode.type !== "decl" )
-		{
-			var typeCheckType = SWYM.GetTypeFromExpression(argNode, cscope);
-
-			if( typeCheckType === undefined && argNode !== undefined )
+			if( argNode.children !== undefined )
 			{
-				SWYM.LogError(argNode, "Invalid type expression");
+				argNode = argNode.children[0];
 			}
-
-			expectedArgs[finalName] = {finalName:finalName, index:argIdx, typeCheck:typeCheckType};
-		}
-		else
-		{
-			// simple untyped declaration
-			expectedArgs[finalName] = {finalName:finalName, index:argIdx};
+			else
+			{
+				argNode = undefined;
+			}
 		}
 		
-		if( defaultValueNode )
+		if( argNode !== undefined )
 		{
-			expectedArgs[finalName].defaultValueNode = defaultValueNode;
-		}
+			if ( argNode.type === "node" && argNode.op.text === "[" )
+			{
+				// deconstructing arg
+				argData.deconstructNode = argNode;
+			}
+			else
+			{
+				// a type check
+				var typeCheckType = SWYM.GetTypeFromExpression(argNode, cscope);
 
-//		bodyCScope[finalName] = typeCheck;
-//		typeCheck.template = ["@ArgTypeNamed", finalName];
+				if( typeCheckType === undefined && argNode !== undefined )
+				{
+					SWYM.LogError(argNode, "Invalid type expression");
+				}
+
+				argData.typeCheck = typeCheckType;
+			}
+		}
+		
+		expectedArgs[finalName] = argData;
 	}
 	
 	var returnType = {type:"incomplete", debugName:"incomplete"};

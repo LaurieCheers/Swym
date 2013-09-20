@@ -643,8 +643,10 @@ SWYM.NewToken = function(type, pos, text, value)
 		result.source = SWYM.source;
 		if ( text != undefined ) result.text= text;
 		
-		if ( type == "op" )
+		if ( type === "op" )
 			result.behaviour = SWYM.operators[text];
+		else if( type === "decl" )
+			result.behaviour = SWYM.operators["(decl)"];
 		else
 			result.behaviour = SWYM.operators[type];
 		
