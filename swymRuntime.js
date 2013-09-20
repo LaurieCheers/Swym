@@ -1620,7 +1620,7 @@ SWYM.ToDebugString = function(value, loopBreaker)
 					if( result !== "" )
 						result += ", ";
 
-					result += SWYM.ToDebugString(key, loopBreaker)+"=>"+SWYM.ToDebugString(value.run(key), loopBreaker);
+					result += SWYM.ToDebugString(key, loopBreaker)+":"+SWYM.ToDebugString(value.run(key), loopBreaker);
 				}
 			}
 			else

@@ -351,10 +351,10 @@ SWYM.operators = {
 		}
 	},
 
-	"=>":  {precedence:25, infix:true,
+	":":  {precedence:25, infix:true,
 		customCompile:function(node, cscope, executable)
 		{
-			SWYM.LogError(node, "'=>' can only be used within a table declaration.");
+			SWYM.LogError(node, "':' can only be used within a table declaration.");
 			return SWYM.VoidType;
 		}
 	},
@@ -2496,8 +2496,8 @@ Maybe.'value'('body')('else') returns if(.hasValue){.container.1st.(body)} else 
 \n\
 String.'toInt' returns forEach(this)\n\
 {\n\
-  \"0\"=>0, \"1\"=>1, \"2\"=>2, \"3\"=>3, \"4\"=>4,\n\
-  \"5\"=>5, \"6\"=>6, \"7\"=>7, \"8\"=>8, \"9\"=>9\n\
+  \"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4,\n\
+  \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9\n\
 }.{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc }\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\

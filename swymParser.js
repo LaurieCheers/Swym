@@ -165,7 +165,7 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 			}
 			else if (newOp.text === "else" )
 			{
-				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== "=" && SWYM.curToken.text !== "=>" ) )
+				if( SWYM.curToken.type !== "op" || (SWYM.curToken.text !== "{" && SWYM.curToken.text !== "(" && SWYM.curToken.text !== "=" && SWYM.curToken.text !== ":" ) )
 				{
 					// 'else' consumes either a {} pair, or the entire next sequence until a semicolon is reached.
 					var rhs = SWYM.ParseLevel(2);
@@ -449,7 +449,7 @@ SWYM.OverloadableParseTreeNode = function(name)
 SWYM.IsTableNode = function(paramnode)
 {
 	// etc-based table
-	if( paramnode && paramnode.type === "etc" && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") && paramnode.body.op && paramnode.body.op.text === "=>" )
+	if( paramnode && paramnode.type === "etc" && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") && paramnode.body.op && paramnode.body.op.text === ":" )
 	{
 		return true;
 	}
@@ -467,7 +467,7 @@ SWYM.IsTableNode = function(paramnode)
 		}
 	}
 	
-	return ( paramnode && paramnode.op && paramnode.op.text === "=>" );
+	return ( paramnode && paramnode.op && paramnode.op.text === ":" );
 }
 
 SWYM.ReadParamBlock = function(paramnode, fnnode)

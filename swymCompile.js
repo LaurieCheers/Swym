@@ -1678,7 +1678,7 @@ SWYM.CompileTableDeconstructor = function(templateNode, cscope, executable, argT
 			argType
 		);
 	}
-	else if( templateNode.op && templateNode.op.text === "=>" )
+	else if( templateNode.op && templateNode.op.text === ":" )
 	{
 		//Explicit table key
 		var tempExecutable = [];
@@ -1727,7 +1727,7 @@ SWYM.CompileTableElementDeconstructor = function(readName, writeName, cscope, ex
 
 SWYM.AddKeyAndValue = function(keyNode, valueNode, keyNodes, valueNodes)
 {
-	if( keyNode && keyNode.op && keyNode.op.text === "=>" )
+	if( keyNode && keyNode.op && keyNode.op.text === ":" )
 	{
 		SWYM.AddKeyAndValue(keyNode.children[0], valueNode, keyNodes, valueNodes);
 		SWYM.AddKeyAndValue(keyNode.children[1], valueNode, keyNodes, valueNodes);
@@ -1746,7 +1746,7 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 		SWYM.CollectKeysAndValues(node.children[0], keyNodes, valueNodes);
 		SWYM.CollectKeysAndValues(node.children[1], keyNodes, valueNodes);
 	}
-	else if( node && node.op && node.op.text === "=>" )
+	else if( node && node.op && node.op.text === ":" )
 	{
 		SWYM.AddKeyAndValue(node.children[0], node.children[1], keyNodes, valueNodes);
 	}
@@ -2116,7 +2116,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		stepExecutable = [];
 		var bodyType = SWYM.CompileNode(parsetree.body, stepCScope, stepExecutable);			
 	}
-	else if( parsetree.body.op && parsetree.body.op.text === "=>" )
+	else if( parsetree.body.op && parsetree.body.op.text === ":" )
 	{
 		var keyType = SWYM.CompileNode(parsetree.body.children[0], cscope, etcExecutable);
 		var valueType = SWYM.CompileNode(parsetree.body.children[1], cscope, etcExecutable);
@@ -2306,7 +2306,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	switch(parsetree.op.text)
 	{
 		case ",": case ";": case "(blank_line)":
-			if( parsetree.body.op && parsetree.body.op.text === "=>" )
+			if( parsetree.body.op && parsetree.body.op.text === ":" )
 			{
 				// table constructor
 				initialValue = function(){ return {table:{}, keys:[]}; };
