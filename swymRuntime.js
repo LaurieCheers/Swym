@@ -967,26 +967,25 @@ SWYM.StringWrapper = function(str, isChar)
 	}
 }
 
-SWYM.TableWrapper = function(table, keys)
+SWYM.CreateTable = function(keys, values)
 {
-	if( keys === undefined )
+	var jsTable = {};
+	
+	for( var Idx = 0; Idx < keys.length; ++Idx )
 	{
-		keys = []
-		for(var k in table)
-		{
-			keys.push(k);
-		}
-		keys = jsArray(keys);
+		jsTable[ SWYM.ToDebugString(keys[Idx]) ] = values[Idx];
 	}
 	
 	return {
 		type:"table",
 		run: function(key)
 		{
-			return this.data[key];
+			// ToDebugString is expensive - would be good to have a cheap alternative
+			// e.g. if we knew that we were dealing with plain numbers or strings.
+			return this.jsTable[ SWYM.ToDebugString(key) ];
 		},
-		keys:keys,
-		data:table
+		keys:SWYM.jsArray(keys),
+		jsTable:jsTable
 	};
 }
 

@@ -1977,7 +1977,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 			return {type:"table",
 				run:function(key)
 				{
-					// not very happy with this. Use some kind of hash?
+					// not very happy with this. Use a hash.
 					for( var idx = 0; idx < this.keys.length; ++idx )
 					{
 						if( SWYM.IsEqual(this.keys.run(idx), key) )
@@ -2308,10 +2308,16 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		case ",": case ";": case "(blank_line)":
 			if( parsetree.body.op && parsetree.body.op.text === ":" )
 			{
-				// table constructor
-				initialValue = function(){ return {table:{}, keys:[]}; };
-				composer = function(fields, pair){ fields.table[pair[0]] = pair[1]; fields.keys.push(pair[0]); return fields; };
-				postProcessor = function(fields){ return SWYM.TableWrapper(fields.table, SWYM.jsArray(fields.keys)); };
+				// table constructor - FIXME: don't bother doing ToDebugString on string values
+				// also, it might be nice to make this work lazily?
+				initialValue = function(){ return {values:[], keys:[]}; };
+				composer = function(fields, pair)
+				{
+					fields.keys.push(pair[0]);
+					fields.values.push(pair[1]);
+					return fields;
+				};
+				postProcessor = function(fields){ return SWYM.CreateTable(fields.keys, fields.values); };
 				returnType = bodyType;
 			}
 			else if( limitTimesExecutable === undefined &&
