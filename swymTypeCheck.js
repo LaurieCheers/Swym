@@ -493,6 +493,11 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 				mayEq = false;
 			}
 		}
+		
+		if( typeA.isStringChar && typeB.isStringChar )
+		{
+			result.isStringChar = true;
+		}
 	}
 
 	if ( typeA.outType || typeB.outType )
@@ -598,7 +603,7 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 		SWYM.LogError(errorContext, "ArrayTypeContaining - Expected an element type, got: "+elementType);
 		return SWYM.ArrayType;
 	}
-
+	
 	var outType = SWYM.ToSinglevalueType(elementType);
 	var lengthType = elementType.length === undefined? SWYM.IntType: elementType.length;
 
@@ -611,6 +616,11 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 		outType:outType,
 		debugName:"Array("+SWYM.TypeToString(outType)+")"
 	};
+
+	if( elementType.tupleTypes !== undefined )
+	{
+		SWYM.AddTupleInfo(resultType, elementType.tupleTypes, errorContext);
+	}
 	
 	if( elementType.multivalueOf !== undefined )
 	{
@@ -654,7 +664,37 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 		result.length = arrayType.memberTypes.length;
 	}
 	
+	if( arrayType && arrayType.tupleTypes )
+	{
+		result.tupleTypes = arrayType.tupleTypes;
+	}
+	
 	return result;
+}
+
+SWYM.TupleTypeOf = function(tupleTypes, elementType, errorContext)
+{
+	if( elementType === undefined )
+	{
+		//TODO: unify the elements of tupleTypes
+	}
+	var result = SWYM.ArrayTypeContaining(elementType, false, errorContext);
+	SWYM.AddTupleInfo(result, tupleTypes, errorContext);
+	return result;
+}
+
+SWYM.AddTupleInfo = function(arrayType, tupleTypes, errorContext)
+{
+	arrayType.tupleTypes = tupleTypes;
+	arrayType.memberTypes.length = SWYM.BakedValue(tupleTypes.length, errorContext);
+	arrayType.memberTypes.keys = SWYM.BakedValue(SWYM.indexArray(tupleTypes.length), errorContext);
+	
+	var debugName = SWYM.TypeToString(tupleTypes[0]);
+	for(var Idx = 1; Idx < tupleTypes.length; ++Idx )
+	{
+		debugName += ","+SWYM.TypeToString(tupleTypes[Idx]);
+	}
+	arrayType.debugName = "Tuple["+debugName+"]";
 }
 
 SWYM.TableTypeFromTo = function(keyType, valueType, accessors)
@@ -683,9 +723,16 @@ SWYM.BakedValue = function(value, errorContext)
 	}
 	else if( value.type === "string" )
 	{
-		result = object(SWYM.StringType);
-		result.memberTypes = object(result.memberTypes);
-		result.memberTypes.length = SWYM.BakedValue(value.length);
+		if( value.isChar )
+		{
+			result = object(SWYM.StringCharType);
+		}
+		else
+		{
+			result = object(SWYM.StringType);
+			result.memberTypes = object(result.memberTypes);
+			result.memberTypes.length = SWYM.BakedValue(value.length);
+		}
 	}
 	else if( value.type === "jsArray" )
 	{
@@ -782,6 +829,20 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	if( callableType.argType )
 	{
 		SWYM.TypeCoerce(callableType.argType, argType, errorContext, "Argument to 'do'("+SWYM.TypeToString(callableType)+")");
+	}
+	
+	// TODO: make sure this callable is pure before running it at compile time!
+	// ...the world is not yet ready...
+/*	if( callableType.baked !== undefined && argType && argType.baked !== undefined &&
+		callableType.run !== undefined )
+	{
+		var value = SWYM.ClosureCall(callableType.baked, argType.baked);
+		return SWYM.BakedValue(value);
+	}*/
+	
+	if( callableType.tupleTypes && argType && argType.baked !== undefined )
+	{
+		return callableType.tupleTypes[argType.baked];
 	}
 
 	if( isMultivalue )

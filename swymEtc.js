@@ -21,8 +21,10 @@ SWYM.EtcMatchesExceptChildren = function(leftNode, rightNode)
 			
 		if( leftNode.name !== rightNode.name )
 		{
-			// kludge. For etc to work, function names have to match exactly... except that for numeric names, we ignore the second and third characters.
+			// FIXME - For etc to work, function names have to match exactly... except that for numeric names, we ignore the second and third characters.
 			// (to allow for the "th", "nd", "rd" and "st" suffixes.)
+			// Ideally, we should be checking whether two functions have identical bodies. Or maybe
+			// allow functions to be declared as aliases for each other and just check for aliases here.
 			if( leftNode.name[0] !== "#" || rightNode.name[0] !== "#" || leftNode.name.slice(3) !== rightNode.name.slice(3) )
 				return false;
 		}
@@ -401,8 +403,13 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	if( !etcOp )
 		return parsetree;
 	
-	var collected = {op:etcOp, examples:[], afterEtc:false, finalExample:[]};
+	var collected = {op:etcOp, exampleChildren:[], finalExample:[], afterEtc:false, recursiveIdx:0};
 	
+	if( parsetree.arbitraryRecursion )
+	{
+		collected.recursiveIdx = undefined;
+	}
+		
 	if( etcOp.children && etcOp.children[1] !== undefined )
 	{
 		collected.finalExample.push(etcOp.children[1]);
@@ -411,7 +418,16 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	if( etcOp === parsetree )
 	{
 		// left-associative op: the etc node is the root, and its left child is the examples
-		SWYM.CollectEtcRec(parsetree.children[0], collected);
+		var childNode = parsetree.children[0];
+		if( (childNode.type === "node" && childNode.op.text === collected.op.text) ||
+			(collected.op.type === "fnnode" && childNode.name === collected.op.name))
+		{
+			SWYM.CollectEtcRec(parsetree.children[0], collected);
+		}
+		else
+		{
+			SWYM.LogError(parsetree, "Fsckup: Etc body doesn't match!");
+		}
 	}
 	else
 	{
@@ -419,10 +435,9 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		SWYM.CollectEtcRec(parsetree, collected);
 	}
 	
-	if( collected.examples.length < 1 || collected.examples.length > 4 )
+	if (collected.finalExample.length > 1)
 	{
-		// we allow 1-4 terms before
-		SWYM.LogError(parsetree.pos, "Invalid number of terms before "+etcOp.etc+" (allowed 1-4 terms, got "+collected.examples.length+")");
+		SWYM.LogError(parsetree.pos, "Too many additional terms after "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
 	}
 	else if (etcOp.etc === 'etc' && collected.finalExample.length !== 0)
 	{
@@ -432,28 +447,93 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	{
 		SWYM.LogError(parsetree.pos, "Fsckup: Invalid number of final examples for "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
 	}
-	else if (collected.finalExample.length > 1)
+	
+	var children = [];
+	if( collected.recursiveIdx !== undefined )
 	{
-		SWYM.LogError(parsetree.pos, "Too many additional terms after "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
+		children[collected.recursiveIdx] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
+	}
+	
+	// if there's exactly one child, merge the base case with it (and if that fails, try treating them separately.)
+	//
+	// OMG, huge problem: 1+2+3+etc**5 vs x+2+3+etc**5. Former should do 1+2+3+4+5, latter does x+2+3+4+5+6.
+	// is that weird? What if someone realizes x is always 1 and writes it in, expecting the meaning to be the same?
+	//
+	// other problem - 1+2+8+etc ... what sequence is that? 1+2+8+14, where 1 is just excluded?
+	// ...no? if we fail at the number matching stage, we can't backtrack up to this "treat them separately" stage.
+	//
+	// ok, I guess that answers both questions. User just has to keep that in mind if they want to rewrite x -> 1.
+	// hopefully it should be fairly clear that it changes the meaning.
+	if( collected.exampleChildren.length == 2 )
+	{
+		var examples = collected.exampleChildren[1-collected.recursiveIdx];
+
+		var merged = collected.baseCase;
+		for( var Idx = 0; Idx < examples.length; Idx++ )
+		{
+			merged = SWYM.MergeEtc(merged, examples[Idx], Idx+1, etcId);
+		}
+		
+		if( merged !== false )
+		{
+			// success! keep that.
+			children[1-collected.recursiveIdx] = merged;
+			collected.exampleChildren[1-collected.recursiveIdx] = undefined;
+			collected.mergedBaseCase = true;
+		}
+	}
+
+	for( var childIdx = 0; childIdx < collected.exampleChildren.length; ++childIdx )
+	{
+		var examples = collected.exampleChildren[childIdx];
+
+		if( examples === undefined )
+		{
+			continue;
+		}
+		
+		if( examples.length < 1 || examples.length > 4 )
+		{
+			// we allow 1-4 terms before
+			SWYM.LogError(parsetree.pos, "Invalid number of terms before "+etcOp.etc+" (allowed 1-4 terms, got "+examples.length+")");
+		}
+		else
+		{
+			var merged = examples[0];
+			for( var Idx = 1; Idx < examples.length; Idx++ )
+			{
+				merged = SWYM.MergeEtc(merged, examples[Idx], Idx, etcId);
+			}
+
+			if ( !merged )
+			{
+				SWYM.LogError(parsetree.pos, "Failed to extrapolate etc sequence for "+parsetree);
+			}
+			
+			// check for nested etc expressions
+			//result = SWYM.FindAndProcessEtc(result, etcId+1);
+			children[childIdx] = merged;
+		}
+	}
+
+	if( etcOp.type === "fnnode" )
+	{
+		var body = {type:"fnnode", argNames:etcOp.children[0].argNames, children:children, name:etcOp.name};
 	}
 	else
 	{
-		var result = collected.examples[0];
-		for( var Idx = 1; Idx < collected.examples.length; Idx++ )
-		{
-			result = SWYM.MergeEtc(result, collected.examples[Idx], Idx, etcId);
-		}
-
-		if ( !result )
-		{
-			SWYM.LogError(parsetree.pos, "Failed to extrapolate etc sequence for "+parsetree);
-		}
-				
-		// check for nested etc expressions
-		//result = SWYM.FindAndProcessEtc(result, etcId+1);
-			
-		return {type:"etc", op:etcOp, body:result, rhs:collected.finalExample[0], etcId:etcId};
+		var body = {type:"node", op:etcOp, children:children};
 	}
+
+	return {
+		type:"etc",
+		etcType:etcOp.etc,
+		baseCase:collected.baseCase,
+		mergedBaseCase:collected.mergedBaseCase,
+		body:body,
+		rhs:collected.finalExample[0],
+		etcId:etcId
+	};
 }
 
 SWYM.CollectEtcRec = function(parsetree, resultSoFar)
@@ -461,48 +541,62 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	if( !parsetree )
 		return;
 		
-	if( (parsetree.type === "node" && parsetree.op.text === resultSoFar.op.text) ||
-		(resultSoFar.op.type === "fnnode" && parsetree.name === resultSoFar.op.name))
+	var idxLimit = parsetree.children.length;
+	if( idxLimit > 1 && parsetree.op !== undefined && parsetree.op.etc !== undefined )
 	{
-		var idxLimit = parsetree.children.length;
-		if( idxLimit > 1 && parsetree.op !== undefined && parsetree.op.etc !== undefined )
-		{
-			for( var Idx = 1; Idx < idxLimit; Idx++ )
-			{			
-				resultSoFar.finalExample.push( parsetree.children[Idx] );
-			}
-			idxLimit = 1;
-		}
-		
-		for( var Idx = 0; Idx < idxLimit; Idx++ )
+		for( var Idx = 1; Idx < idxLimit; Idx++ )
 		{			
-			SWYM.CollectEtcRec(parsetree.children[Idx], resultSoFar);
+			resultSoFar.finalExample.push( parsetree.children[Idx] );
 		}
-
-		if((parsetree.op && parsetree.op.etc) || (parsetree.type === "fnnode" && parsetree.etc))
+		idxLimit = 1;
+	}
+	
+	for( var Idx = 0; Idx < idxLimit; Idx++ )
+	{
+		var childNode = parsetree.children[Idx];
+		if( (childNode.type === "node" && childNode.op.text === resultSoFar.op.text) ||
+			(resultSoFar.op.type === "fnnode" && childNode.name === resultSoFar.op.name))
 		{
-			if( resultSoFar.afterEtc )
-				SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
-
-			if( parsetree.op && parsetree.op.etc === "etc" )
-				resultSoFar.stopCollecting = true;
-			else if( parsetree.type === "fnnode" && parsetree.etc === "etc" )
-				resultSoFar.stopCollecting = true;
-
-			resultSoFar.afterEtc = true;
+			if( Idx !== resultSoFar.recursiveIdx && resultSoFar.recursiveIdx !== undefined )
+			{
+				SWYM.LogError(childNode, "Inconsistent recursion in etc!");
+			}
+			
+			resultSoFar.recursiveIdx = Idx;
+			SWYM.CollectEtcRec(childNode, resultSoFar);
+		}
+		else if( Idx === resultSoFar.recursiveIdx && resultSoFar.recursiveIdx !== undefined )
+		{
+			if( resultSoFar.baseCase === undefined )
+			{
+				resultSoFar.baseCase = childNode;
+			}
+			else
+			{
+				SWYM.LogError(childNode.pos, "Fsckup: Too many base cases for etc sequence!?");
+			}
+		}
+		else
+		{
+			if( resultSoFar.exampleChildren[Idx] === undefined )
+			{
+				resultSoFar.exampleChildren[Idx] = [];
+			}
+			resultSoFar.exampleChildren[Idx].push(parsetree.children[Idx]);
 		}
 	}
-	else if ( parsetree.type === "etc" )
+
+	if((parsetree.op && parsetree.op.etc) || (parsetree.type === "fnnode" && parsetree.etc))
 	{
-		// ignore it
-	}
-	else if ( resultSoFar.stopCollecting )
-	{
-		SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
-	}
-	else
-	{
-		resultSoFar.examples.push(parsetree);
+		if( resultSoFar.afterEtc )
+			SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
+
+		if( parsetree.op && parsetree.op.etc === "etc" )
+			resultSoFar.stopCollecting = true;
+		else if( parsetree.type === "fnnode" && parsetree.etc === "etc" )
+			resultSoFar.stopCollecting = true;
+
+		resultSoFar.afterEtc = true;
 	}
 }
 
@@ -648,7 +742,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 	}
 	else
 	{
-		term4s.push( quadratic(3) );
+		term4s["quadratic"] = quadratic(3);
 	}
 
 	var factor = (third-second) / firstDiff;
@@ -690,7 +784,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 	}
 	else
 	{
-		term4s.push( cumgeometric(3) );
+		term4s["cumulative geometric"] = cumgeometric(3);
 	}
 
 	// try an arithmetic times geometric sequence, e.g. 1, 20, 300, 4000, etc
@@ -710,7 +804,11 @@ SWYM.EtcCreateGenerator = function(sequence)
 	}
 	else
 	{
-		term4s.push( arithxgeo(3) );
+		var soln = arithxgeo(3);
+		if( !isNaN(soln) )
+		{
+			term4s["arithmetic * geometric"] = soln;
+		}
 	}
 
 	// arithxgeo formula has two solutions - plus or minus sqrt.
@@ -729,12 +827,25 @@ SWYM.EtcCreateGenerator = function(sequence)
 	}
 	else
 	{
-		term4s.push( arithxgeoB(3) );
+		var soln = arithxgeoB(3);
+		if( !isNaN(soln) )
+		{
+			term4s["a*g, 2nd solution"] = soln;
+		}
 	}
    	
 	if( sequence.length == 3 )
 	{
-		SWYM.LogError(0, "etc - ambiguous sequence ["+sequence+"]. Please provide a 4th term. Known ways to continue this sequence: "+term4s+")");
+		var contList = "";
+		for( var title in term4s )
+		{
+			if(contList !== "")
+				contList += ", ";
+			
+			contList += term4s[title]+" ("+title+")";
+		}
+
+		SWYM.LogError(0, "etc - ambiguous sequence ["+sequence+"]. Please provide a 4th term. Known ways to continue this sequence: "+contList);
 	}
 	else
 	{

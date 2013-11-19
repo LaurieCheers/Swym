@@ -120,6 +120,8 @@
 	
 	function test()
 	{
+		cleanup();
+		
 		tickBlock = undefined;
 		var src = document.getElementById("swymsource");
 		var dest = document.getElementById("swymoutput");
@@ -148,9 +150,20 @@
 		else
 			document.getElementById("stopbutton").value = "Stop";
 	}
+	
+	function cleanup()
+	{
+		document.getElementById("elements");
+		while( elements.childNodes.length > 0 )
+		{
+			elements.removeChild( elements.firstChild );
+		}
+	}
 
 	function autorun()
 	{
+		cleanup();
+	
 		var oldTickBlock = tickBlock;
 		var src = document.getElementById("swymsource");
 		var dest = document.getElementById("swymoutput");
@@ -187,7 +200,9 @@
 			SWYM.EvalStdlyb();
 			SWYM.cachedImages = {};
 			SWYM.ImageType = {type:"type", nativeType:"image", debugName:"Image"};
+			SWYM.JFunctionType = {type:"type", nativeType:"function", debugName:"jfunction"};
 			SWYM.DefaultGlobalCScope["Image"] = SWYM.BakedValue(SWYM.ImageType);
+			SWYM.DefaultGlobalCScope["JFunction"] = SWYM.BakedValue(SWYM.JFunctionType);
 			SWYM.DefaultGlobalCScope["mouse_x"] = SWYM.NumberType;
 			SWYM.DefaultGlobalCScope["mouse_y"] = SWYM.NumberType;
 			SWYM.DefaultGlobalCScope["mouse_lmb_down"] = SWYM.BoolType;
@@ -298,6 +313,21 @@
 				}
 			}];
 
+			SWYM.DefaultGlobalCScope["fn#jfunction"] =
+			[{
+				expectedArgs:{ "body":{index:0} }, returnType:SWYM.JFunctionType,
+				customCompile:function(argTypes, cscope, executable)
+				{
+					SWYM.GetOutType( argTypes[0], SWYM.VoidType ); // force compile
+					executable.push("#Native");
+					executable.push(1);
+					executable.push(function(body)
+					{
+						return function(){ SWYM.ClosureCall(body); };
+					});
+				}
+			}];
+
 			SWYM.DefaultGlobalCScope["VK_LEFT"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(37)));
 			SWYM.DefaultGlobalCScope["VK_RIGHT"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(39)));
 			SWYM.DefaultGlobalCScope["VK_UP"] = SWYM.BakedValue(SWYM.StringWrapper(String.fromCharCode(38)));
@@ -379,6 +409,7 @@
 <textarea cols=70 rows=4 id=swymoutput></textarea><br><code>Some values and functions to try -<br>
 if(keyDown(" ")){...} ... mouse_x, mouse_y, keyDown(VK_LEFT), keyDown(VK_MOUSE)</code>
 <p>
+<table><tr><td>
 <input type=button value="Run" style="vertical-align: top;" onclick='test();'>
 <input id="stopbutton" type=button value="Stop" style="vertical-align: top;" onclick='togglePause();'>
 <input type=button value="Program URL" style="vertical-align: top;" onclick='saveURL();'>
@@ -392,6 +423,10 @@ tick
   logo.draw( x=50, y=mouse_y-25 )
 }
 </textarea>
+</td>
+<td>
+<div id="elements"></div>
 <canvas id="canvas" width="400" height="500"></canvas>
+</td></tr></table>
 </body>
 </html>

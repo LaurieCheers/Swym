@@ -236,10 +236,10 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 		// handle the special "etc" keyword
 		else if ( SWYM.curToken.type === "name" && SWYM.curToken.text === "etc" )
 		{
-			// valid options: etc follows an operator; or etc follows an open bracket.
-			if( !curOp && (curLhs || openBracketOp === undefined))
+			// etc always follows an operator.
+			if( !curOp )
 			{
-				if( SWYM.curToken.followsBreak )
+				if ( curLhs && SWYM.curToken.followsBreak )
 				{
 					// etc requires an operator; if it follows a line break, that operator is the implicit line break separator.
 					var result = HandleAddOp( SWYM.NewToken("op", SWYM.curToken.sourcePos, "(blank_line)"), true );
@@ -448,10 +448,18 @@ SWYM.OverloadableParseTreeNode = function(name)
 
 SWYM.IsTableNode = function(paramnode)
 {
-	// etc-based table
-	if( paramnode && paramnode.type === "etc" && (paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") && paramnode.body.op && paramnode.body.op.text === ":" )
+	// etc-based table?
+	if( paramnode && paramnode.type === "etc" && paramnode.body && paramnode.body.op )
 	{
-		return true;
+		var etcOpText = paramnode.body.op.text;
+		if( etcOpText === "," || etcOpText === ";" || etcOpText === "(blank_line)")
+		{
+			var child = paramnode.body.children[1];
+			if( child && child.op && child.op.text === ":" )
+			{
+				return true;
+			}
+		}
 	}
 
 	while( paramnode && paramnode.children && paramnode.op &&
@@ -512,6 +520,15 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 	{
 		SWYM.LogError(0, "Error: expected function name");
 		return undefined;
+	}
+	
+	if( lhs.etc !== undefined )
+	{
+		SWYM.LogError(lhs.pos, "Invalid etc expression");
+	}
+	else if( rhs.etc !== undefined )
+	{
+		SWYM.LogError(lhs.pos, "Invalid etc expression");
 	}
 	
 	if( rhs.type === "name" || rhs.type === "decl" )
@@ -622,6 +639,19 @@ SWYM.BuildDotNode = function(lhs, op, rhs, wrapper)
 	if( !lhs )
 		lhs = SWYM.NewToken("name", op.pos, "__default"); // ".foo" means "__default.foo".
 
+	if( op.etc !== undefined )
+	{
+		if( lhs.type !== "fnnode" || lhs.name === undefined )
+		{
+			SWYM.LogError(op.pos, "Expected a function call before .etc");
+			return op;
+		}
+		else
+		{
+			return {type:"fnnode", etc:op.etc, arbitraryRecursion:true, name:lhs.name, children:[lhs, rhs], argNames:["this"]};
+		}
+	}
+	
 	if( !rhs && wrapper !== undefined )
 	{
 		// foo.! is equivalent to !foo

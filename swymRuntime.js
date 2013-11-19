@@ -49,6 +49,16 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			PC += 3;
 			break;
 
+		case "#NativeThis":
+			var args = SWYM.CollectArgs(stack, executable[PC+1]);
+			var thisArg = stack.pop();
+			if( args.isNovalues )
+				stack.push( SWYM.value_novalues );
+			else
+				stack.push( executable[PC+2].apply(thisArg,args) );
+			PC += 3;
+			break;
+			
 		case "#MultiNative":
 			var multiArgs = SWYM.CollectArgs(stack, executable[PC+1]);
 			var operatorBody = executable[PC+2];
@@ -547,8 +557,6 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var limit = etcLimit? SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []): 1000; //FIXME
 			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
-			rscope["<etcIndex>"] = 0;
-
 			SWYM.g_etcState.depth++;
 			SWYM.g_etcState.halt = false;
 
@@ -556,13 +564,15 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			{
 				rscope["<etcIndex>"] = etcIndex;
 				
-				SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
+				var newValue = SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
 
 				if( SWYM.g_etcState.halt )
 					break;
 
-				if( etcHaltTest && etcHaltTest(rscope["<etcSoFar>"], haltValue) )
+				if( etcHaltTest && etcHaltTest(newValue, haltValue) )
 					break;
+					
+				rscope["<etcSoFar>"] = newValue;
 			}
 
 			if( SWYM.g_etcState.halt && SWYM.halt && !SWYM.errors )
@@ -579,7 +589,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var etcLimit = executable[PC+1];
 			var etcBodyExecutable = executable[PC+2];
 			var etcStepExecutable = executable[PC+3];
-			var etcInitializer = executable[PC+4];
+			var etcInitialExecutable = executable[PC+4];
 			var etcComposer = executable[PC+5];
 			var etcPostProcessor = executable[PC+6];
 			var etcHaltExecutable = executable[PC+7];
@@ -590,7 +600,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			var newRScope = object(rscope);
 			newRScope["<etcIndex>"] = 0;
-			var etcResult = etcInitializer();
+			var etcResult = SWYM.ExecWithScope("EtcInitial", etcInitialExecutable, rscope, []);
 			
 			SWYM.g_etcState.depth++;
 			SWYM.g_etcState.halt = false;
@@ -1445,7 +1455,7 @@ SWYM.ToTerseString = function(value)
 	var t = typeof value;
 	switch(typeof value)
 	{
-		case "undefined": case "null": case "boolean": case "number":
+		case "undefined": case "null": case "boolean": case "number": case "string":
 			return ""+value;
 	}
 	
@@ -1479,10 +1489,15 @@ SWYM.ToTerseString = function(value)
 			return result;
 		
 		case "swymClass": case "swymObject": case "closure":
+		{
 			return value.debugName;
+		}
 
 		default:
-			return "ToTerseString error: don't understand type "+value.type+" on <"+value+">";
+		{
+			SWYM.LogError(0, "ToTerseString error: don't understand type "+value.type+" on <"+value+">");
+			return "<ERROR>";
+		}
 	}
 }
 
@@ -1537,6 +1552,8 @@ SWYM.ToDebugString = function(value, loopBreaker)
 	{
 		case "undefined": case "boolean": case "number":
 			return ""+value;
+		case "string":
+			return "jsstring(\""+value+"\")";
 	}
 	
 	switch(value.type)
@@ -1714,7 +1731,7 @@ SWYM.Distinct = function(array)
 		var found = false;
 		for( var RIdx = 0; RIdx < result.length; ++RIdx )
 		{
-			if( SWYM.IsEqual(testValue, result.run(RIdx)) )
+			if( SWYM.IsEqual(testValue, result[RIdx]) )
 			{
 				found = true;
 				break;

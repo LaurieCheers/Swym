@@ -242,7 +242,7 @@ SWYM.CompileNode = function(node, cscope, executable)
 {
 	if( SWYM.errors )
 	{
-		return SWYM.DontCare;
+		return SWYM.DontCareType;
 	}
 	
 	var resultType = SWYM.CompileLValue(node, cscope, executable);
@@ -306,10 +306,9 @@ SWYM.CompileNode = function(node, cscope, executable)
 		testType = resultType.multivalueOf;
 	
 	// We want to condense an array of StringChars into a String.
-	// This slightly dodgy test checks for an array of StringChars.
-	// NB: Semantically, both String and StringChar behave as arrays of StringChars. So exclude them explicitly.
-	if( testType && testType !== SWYM.StringType && testType !== SWYM.StringCharType &&
-		testType.baked === undefined && testType.outType &&	testType.outType === SWYM.StringCharType &&
+	// This slightly dodgy test checks for an array of StringChars that's not already a String.
+	if( testType && testType.nativeType !== "String" &&
+		testType.outType &&	testType.outType.isStringChar &&
 		testType.memberTypes && testType.memberTypes.length && !testType.isLazy )
 	{
 		if( resultType.multivalueOf !== undefined )
@@ -322,7 +321,15 @@ SWYM.CompileNode = function(node, cscope, executable)
 		else
 		{
 			executable.push("#ToTerseString");
-			resultType = SWYM.StringType;
+			
+			if( testType.baked !== undefined )
+			{
+				resultType = SWYM.BakedValue(SWYM.StringWrapper(SWYM.ToTerseString(testType.baked)));
+			}
+			else
+			{
+				resultType = SWYM.StringType;
+			}
 		}
 	}
 
@@ -838,6 +845,15 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 				precompiled.executable = targetExecutable;
 			}
 			
+			if( theFunction.compiling !== undefined && theFunction.compiling.length > 3 &&
+				theFunction.compiling.indexOf(precompiled) === -1 )
+			{
+				// we appear to be compiling a recursive function whose argument types don't remain consistent
+				// as it recurses. Illegal!
+				SWYM.LogError(-1, "Inconsistent argument types during recursive function call to "+fnName+"!");
+				return SWYM.DontCareType;
+			}
+			
 			if( theFunction.returnType !== undefined && theFunction.returnType.type !== "incomplete" )
 				precompiled.returnType = theFunction.returnType;
 			else
@@ -849,10 +865,19 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 				bodyCScope[argNamesPassed[Idx]] = argTypesPassed[Idx];
 			}
 			bodyCScope["__default"] = {redirect:"this"};
+
+			var oldIsCompiling = precompiled.isCompiling;
 			
+			if( theFunction.compiling === undefined )
+			{
+				theFunction.compiling = [];
+			}
+			
+			theFunction.compiling.push(precompiled);
 			precompiled.isCompiling = true;
-			precompiled.returnType = SWYM.CompileFunctionBody(theFunction, bodyCScope, targetExecutable);
-			precompiled.isCompiling = false;
+			precompiled.returnType = SWYM.CompileFunctionBody(fnName, theFunction, bodyCScope, targetExecutable);
+			precompiled.isCompiling = oldIsCompiling;
+			theFunction.compiling.pop();
 			
 			/*if( precompiled.isRecursive )
 			{
@@ -937,7 +962,7 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 	for( var AIdx = 0; AIdx < argTypes.length; ++AIdx )
 	{
 		aType = argTypes[AIdx];
-		while( aType && aType != SWYM.StringCharType )
+		while( aType && !aType.isStringChar )
 		{
 			if( aType.needsCompiling )
 			{
@@ -1207,7 +1232,7 @@ SWYM.GetTypeFromExpression = function(node, cscope)
 	return outType.baked;
 }
 
-SWYM.CompileFunctionBody = function(theFunction, cscope, executable)
+SWYM.CompileFunctionBody = function(fnName, theFunction, cscope, executable)
 {
 	var theCurrentFunction = object(theFunction);
 
@@ -1409,6 +1434,13 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	{
 		var innerCScope = object(cscope);
 		var argName;
+
+		// argument is parenthesized
+		if( argNode !== undefined && argNode.op !== undefined && argNode.op.text === "(" && argNode.children[0] === undefined &&
+			argNode.children[1] !== undefined )
+		{
+			argNode = argNode.children[1];
+		}
 
 		if( !argNode )
 		{
@@ -1650,7 +1682,7 @@ SWYM.CompileArrayDeconstructor = function(templateNode, index, cscope, executabl
 		executable.push("#Literal");
 		executable.push(index);
 		executable.push("#At");
-		SWYM.CompileDeconstructor(templateNode, cscope, executable, SWYM.GetOutType(argType));
+		SWYM.CompileDeconstructor(templateNode, cscope, executable, SWYM.GetOutType(argType, SWYM.BakedValue(index)));
 		executable.push("#Pop");
 		return index+1;
 	}
@@ -1760,9 +1792,8 @@ SWYM.CollectKeysAndValues = function(node, keyNodes, valueNodes)
 	}
 }
 
-SWYM.AddClassMember = function(typeNode, bodyNode,  typeNodes, nameNodes, defaultValueNodes)
+SWYM.AddClassMember = function(bodyNode, nameNodes, defaultValueNodes)
 {
-	typeNodes.push(typeNode);
 	if( bodyNode && bodyNode.op && bodyNode.op.text === "=" )
 	{
 		nameNodes.push(bodyNode.children[0]);
@@ -1775,20 +1806,16 @@ SWYM.AddClassMember = function(typeNode, bodyNode,  typeNodes, nameNodes, defaul
 	}
 }
 
-SWYM.CollectClassMembers = function(node, typeNodes, nameNodes, defaultValueNodes)
+SWYM.CollectClassMembers = function(node, nameNodes, defaultValueNodes)
 {
 	if( node && node.op && (node.op.text === "," || node.op.text === ";" || node.op.text === "(blank_line)") )
 	{
-		SWYM.CollectClassMembers(node.children[0], typeNodes, nameNodes, defaultValueNodes);
-		SWYM.CollectClassMembers(node.children[1], typeNodes, nameNodes, defaultValueNodes);
+		SWYM.CollectClassMembers(node.children[0], nameNodes, defaultValueNodes);
+		SWYM.CollectClassMembers(node.children[1], nameNodes, defaultValueNodes);
 	}
 	else if( node && (node.type === "decl" || (node.op && node.op.text === "=")) )
 	{
-		SWYM.AddClassMember(undefined, node,  typeNodes, nameNodes, defaultValueNodes);
-	}
-	else if( node && node.op && node.op.text === ":" )
-	{
-		SWYM.AddClassMember(node.children[0], node.children[1],  typeNodes, nameNodes, defaultValueNodes);
+		SWYM.AddClassMember(node, nameNodes, defaultValueNodes);
 	}
 	else if( node )
 	{
@@ -2044,15 +2071,14 @@ SWYM.CompileTable = function(node, cscope, executable)
 
 SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 {
-	var typeNodes = [];
 	var nameNodes = [];
 	var defaultValueNodes = [];
 	
-	SWYM.CollectClassMembers(node, typeNodes, nameNodes, defaultValueNodes);
+	SWYM.CollectClassMembers(node, nameNodes, defaultValueNodes);
 
-	if( typeNodes.length !== nameNodes.length || nameNodes.length !== defaultValueNodes.length )
+	if( nameNodes.length !== defaultValueNodes.length )
 	{
-		SWYM.LogError(node, "Fsckup: inconsistent numbers of types, names and values in struct!?");
+		SWYM.LogError(node, "Fsckup: inconsistent number of names and values in struct!?");
 	}
 	
 	var memberTypes = {};
@@ -2074,13 +2100,14 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 
 			defaultValueTable[memberName] = defaultValueNodes[idx];
 			
-			if( typeNodes[idx] === undefined )
+			var typeNode = nameNodes[idx].children === undefined? undefined: nameNodes[idx].children[0];
+			if( typeNode === undefined )
 			{
 				memberTypes[memberName] = SWYM.AnyType;
 			}
 			else
 			{
-				var typeType = SWYM.CompileNode(typeNodes[idx], cscope, unusedExecutable);
+				var typeType = SWYM.CompileNode(typeNode, cscope, unusedExecutable);
 
 				if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
 				{
@@ -2099,9 +2126,8 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 
 SWYM.CompileEtc = function(parsetree, cscope, executable)
 {
-	var etcExecutable = [];
 	var stepExecutable = undefined;
-	if( parsetree.body.etcExpandAround !== undefined )
+/*	if( parsetree.body.etcExpandAround !== undefined )
 	{
 		//To do an ExpandAround, the body must be parsed into a function that
 		//we can apply multiple times.
@@ -2124,16 +2150,15 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		etcExecutable.push("#CreateArray");
 		etcExecutable.push(2);
 	}
-	else
-	{
-		var bodyType = SWYM.CompileNode(parsetree.body, cscope, etcExecutable);
-	}
+	else*/
+//	{
+//	}
 
 	var haltExecutable = [];
 	var haltCondition = undefined;
 	var limitTimesExecutable = undefined;
 	
-	if( parsetree.op.etc === "etc**" )
+	if( parsetree.etcType === "etc**" )
 	{
 		limitTimesExecutable = [];
 		var limitType = SWYM.CompileNode(parsetree.rhs, cscope, limitTimesExecutable);
@@ -2143,15 +2168,15 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	{
 		SWYM.CompileNode(parsetree.rhs, cscope, haltExecutable);
 
-		if( parsetree.op.etc === "etc..<" )
+		if( parsetree.etcType === "etc..<" )
 		{
 			haltCondition = function(value, haltValue){ return value >= haltValue; }
 		}
-		else if( parsetree.op.etc === "etc..<=" )
+		else if( parsetree.etcType === "etc..<=" )
 		{
 			haltCondition = function(value, haltValue){ return value > haltValue; }
 		}
-		else if( parsetree.op.etc === "etc.." )
+		else if( parsetree.etcType === "etc.." )
 		{
 			haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
 		}
@@ -2161,156 +2186,108 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		}
 	}
 
-	if( parsetree.op.type === "fnnode" )
+	var baseCaseExecutable = [];
+	var baseCaseType = SWYM.CompileNode(parsetree.baseCase, cscope, baseCaseExecutable);
+
+	var etcScope = object(cscope);
+	etcScope["<etcSoFar>"] = baseCaseType;
+
+	if( parsetree.body.type === "fnnode" )
 	{
-		// kinda fugly - if we're dealing with a function call, then parsetree.op is actually a fnnode.
-		// or maybe we're dealing with an overloadable operator, like "+".
-		// might be nice if we could unify operators and fnnodes so we don't need to worry about three different cases...
-
-		var etcArgIndex = -1;
-		if( parsetree.op.etc !== undefined )
-		{
-			etcArgIndex = 1;
-		}
-		else
-		{
-			for( var Idx = 0; Idx < parsetree.op.children.length; ++Idx )
-			{
-				if( parsetree.op.children[Idx] === undefined )
-				{
-					etcArgIndex = Idx;
-					break;
-				}
-			}
-		}
-		
-		var etcScope = object(cscope);
-		if( parsetree.op.argNames[etcArgIndex] === "this" )
-		{
-			// if we're recursing on the 'this' argument, we need to set the argument "this"
-			// to <etcSoFar>, representing the output from the etc expression we've processed so far,
-			// and set the anonymous argument to be the body node.
-			etcScope["<etcSoFar>"] = bodyType;
-
-			parsetree.op.children[0] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
-			parsetree.op.children[1] = parsetree.body;
-		}
-		else
-		{
-			// yikes... not enough information here to tell the difference between
-			// a.fn(b.fn(etc)) and x.fn(a).fn(b).fn(etc).
-
-			// Ideally, we should also accept:
-			// a.fn("arg1", b.fn("arg2", etc))
-			// a.fn("arg1", b.fn("arg2", c.etc)) ???
-			// a.fn("arg1", b.fn("arg2", c.fn(etc)))
-			// a.fn(b.fn(etc, "arg2"), "arg1") ???
-			// a.fn(argname = b.fn(argname = etc)) ???
-			// x.fn(a, "arg1").fn(b, "arg2").fn(etc)
-			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)
-			// x.fn(a, "arg1").fn(b, "arg2").fn(etc, "arg3")
-			// x.fn(a).fn(b).etc
-			
-			// ok, so x.fn(etc) and x.etc give no information about args
-			// (the latter gives no information about function name either).
-			// x.fn(foo, etc) or x.fn(argname=etc) mean we're recursing on one specific arg
-
-			// each arg needs its own sequence:
-			// x.fn(a, "arg1").fn(b, "arg2").fn(c, etc)  ...maybe that should be illegal,
-			// the position of etc there doesn't really mean anything.
-			// this = x/<etcSoFar>, __0 = a/b/c, __1 = "arg1"/"arg2"
-			
-			// OTOH, that positioning does seem natural in this case -
-            // x.fn("arg1").fn("arg2").fn(etc)
-            // and probably even here -
-            // x.fn(0, "arg1").fn(0, "arg2").fn(0, etc)
-            // NB: equivalent to fn( fn( fn(x, 0, "arg1"), 0, "arg2"), 0, etc) (?)
-
-            // still, I think I prefer:
-            // x.fn(0, "arg1").fn(0, "arg2").etc
-			// equivalent:
-            // etc( fn( fn(x, 0, "arg1"), 0, "arg2")
-            // ok, that seems doable. The argument to the etc function must be a fnnode,
-            // and exactly one of the arguments to that fnnode must be another call to the same function.
-            // __0 = x/<etcSoFar>, __1 = 0, __2 = "arg1"/"arg2"
-			
-			// this still leaves us with a question about 1+etc. 
-			// oh, I guess it's not exactly a recursive function call, but we could just treat it as one.
-			etcScope["<etcSoFar>"] = bodyType;
-
-			parsetree.op.children[0] = parsetree.body;
-			parsetree.op.children[etcArgIndex] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
-//			var test = 0;
-		}
-
+		// Handle recursive function calls. This includes function-operators, such as + - * /
 		var etcExecutable = [];
-		var chosenFunction = {};
-		var returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable, chosenFunction);
-		if( returnType !== bodyType )
+		var bodyType = SWYM.CompileNode(parsetree.body, etcScope, etcExecutable);
+
+		if( parsetree.mergedBaseCase )
 		{
-			etcScope["<etcSoFar>"] = returnType;
-			etcExecutable = [];
-			returnType = SWYM.CompileFunctionCall(parsetree.op, etcScope, etcExecutable, chosenFunction);
-		}
-		
-		var identityValue = undefined;
-		if( chosenFunction.theFunction !== undefined )
-		{
-			var identityArg = chosenFunction.theFunction.expectedArgs["__identity"];
-			if( identityArg !== undefined && identityArg.defaultValueNode !== undefined )
+			var unusedExecutable = [];
+			var chosenFunction = {};
+			SWYM.CompileFunctionCall(parsetree.body, etcScope, unusedExecutable, chosenFunction);
+			
+			if( chosenFunction.theFunction === undefined )
 			{
-				var identityType = SWYM.CompileNode(identityArg.defaultValueNode, etcScope, []);
-				if( !identityType || identityType.baked === undefined )
+				SWYM.LogError(parsetree, "Function "+parsetree.body.name+" is unknown!?");
+			}
+			else
+			{
+				var identityArg = chosenFunction.theFunction.expectedArgs["__identity"];
+				if( identityArg === undefined || identityArg.defaultValueNode === undefined )
 				{
-					SWYM.LogError(identityArg.defaultValueNode, "Invalid identity value");
+					SWYM.LogError(parsetree, "Function "+parsetree.body.name+" has no __identity argument");
 				}
 				else
 				{
-					identityValue = identityType.baked;
+					var identityType = SWYM.CompileNode(identityArg.defaultValueNode, etcScope, []);
+					if( !identityType || identityType.baked === undefined )
+					{
+						SWYM.LogError(identityArg.defaultValueNode, "Function "+parsetree.body.name+" __identity argument has no default value");
+					}
+					else
+					{
+						baseCaseExecutable = ["#Literal", identityType.baked];
+					}
 				}
 			}
 		}
-		
-		etcExecutable.push("#Overwrite");
-		etcExecutable.push("<etcSoFar>");
-
-		executable.push("#Literal");
-		executable.push(identityValue);
+	
+		// main executable needs to initialize etcSoFar.
+		SWYM.pushEach(baseCaseExecutable, executable);		
 		executable.push("#Store");
-		executable.push("<etcSoFar>");
-		executable.push("#Pop");
-		executable.push("#EtcSimple");
-		executable.push(limitTimesExecutable);
-		executable.push(etcExecutable);
-		executable.push(haltExecutable);
-		executable.push(haltCondition);
-		executable.push("#Load");
-		executable.push("<etcSoFar>");
+			executable.push("<etcSoFar>");
 		
-		return returnType;
+		executable.push("#Pop");
+		
+		executable.push("#EtcSimple");
+			executable.push(limitTimesExecutable);
+			executable.push(etcExecutable);
+			executable.push(haltExecutable);
+			executable.push(haltCondition);
+
+		executable.push("#Load");
+			executable.push("<etcSoFar>");
+
+		// etcExecutable needs to write its result to <etcSoFar>.
+//		etcExecutable.push("#Overwrite");
+//			etcExecutable.push("<etcSoFar>");
+
+		return bodyType;
+	}
+
+	// it's not a function, so body must be an operator node
+	var initialExecutable;
+	var initialType;
+	if( parsetree.mergedBaseCase )
+	{
+		initialExecutable = ["#Native", 0, parsetree.body.op.behaviour.identity];
 	}
 	else
 	{
-		var initialValue = parsetree.op.behaviour.identity;
-		var composer = parsetree.op.behaviour.infix;	
+		initialExecutable = baseCaseExecutable;
+		initialType = baseCaseType;
 	}
-	var postProcessor = function(v){return v;}; // null postprocessor
-	var returnType = parsetree.op.behaviour.returnType;
 	
-	if( returnType === undefined && parsetree.op.behaviour.getReturnType )
+	var composer = parsetree.body.op.behaviour.infix;
+
+	var postProcessor = function(v){return v;}; // null postprocessor
+	var returnType = parsetree.body.op.behaviour.returnType;
+
+	var etcExecutable = [];
+	var elementType = SWYM.CompileNode(parsetree.body.children[1], etcScope, etcExecutable);
+	
+	if( returnType === undefined && parsetree.body.op.behaviour.getReturnType )
 	{
-		returnType = parsetree.op.behaviour.getReturnType(bodyType, bodyType);
+		returnType = parsetree.body.op.behaviour.getReturnType(bodyType, bodyType);
 	}
 
-	// problem operators we'll need to worry about: , && || + and of course .
-	switch(parsetree.op.text)
+	// there are only a few operators we need to worry about. Namely: , && ||
+	switch(parsetree.body.op.text)
 	{
 		case ",": case ";": case "(blank_line)":
 			if( parsetree.body.op && parsetree.body.op.text === ":" )
 			{
-				// table constructor - FIXME: don't bother doing ToDebugString on string values
+				// table constructor - FIXME: don't bother doing ToDebugString on string values?
 				// also, it might be nice to make this work lazily?
-				initialValue = function(){ return {values:[], keys:[]}; };
+				initialExecutable = function(){ return {values:[], keys:[]}; };
 				composer = function(fields, pair)
 				{
 					fields.keys.push(pair[0]);
@@ -2318,56 +2295,64 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 					return fields;
 				};
 				postProcessor = function(fields){ return SWYM.CreateTable(fields.keys, fields.values); };
-				returnType = bodyType;
-			}
-			else if( limitTimesExecutable === undefined &&
-					haltCondition === undefined &&
-					parsetree.op.etc === "etc.." )
-			{
-				// lazy array constructor
-				// FIXME: need a way to detect out-of-bounds termination
-				executable.push("#Closure");
-				executable.push({
-					type:"closure",
-					debugName:"lazy etc",
-					debugText:"<etc expression>", //FIXME
-					argName:"<etcIndex>",
-					body:etcExecutable
-				});
-				executable.push("#Native");
-				executable.push(1)
-				executable.push(function(lookup)
-				{
-					return{
-						type:"lazyArray",
-						length:Infinity,
-						run:function(key){ return SWYM.ClosureCall(lookup,key); }
-					};
-				});
-				
-				return SWYM.ToMultivalueType(bodyType, undefined, undefined, SWYM.BakedValue(Infinity));
+				returnType = elementType;
 			}
 			else
 			{
-				// eager array constructor
-				postProcessor = function(list){ return SWYM.jsArray(list); };
-				
-				if( bodyType && bodyType.multivalueOf !== undefined )
+				if( initialType !== undefined )
 				{
-					composer = function(list, v){ SWYM.ConcatInPlace( list, v ); return list; };
-					returnType = SWYM.ToMultivalueType(bodyType.multivalueOf);
+					initialExecutable.push( ( initialType.multivalueOf !== undefined )? "#CopyArray": "#SingletonArray");
+				}
+				
+				if( limitTimesExecutable === undefined &&
+						haltCondition === undefined &&
+						parsetree.etcType === "etc.." )
+				{
+					// lazy array constructor
+					// FIXME: need a way to detect out-of-bounds termination
+					executable.push("#Closure");
+					executable.push({
+						type:"closure",
+						debugName:"lazy etc",
+						debugText:"<etc expression>", //FIXME
+						argName:"<etcIndex>",
+						body:etcExecutable
+					});
+					executable.push("#Native");
+					executable.push(1)
+					executable.push(function(lookup)
+					{
+						return{
+							type:"lazyArray",
+							length:Infinity,
+							run:function(key){ return SWYM.ClosureCall(lookup,key); }
+						};
+					});
+					
+					return SWYM.ToMultivalueType(elementType, undefined, undefined, SWYM.BakedValue(Infinity));
 				}
 				else
 				{
-					composer = function(list, v){list.push(v); return list;};
-					returnType = SWYM.ToMultivalueType(bodyType);
+					// eager array constructor
+					postProcessor = function(list){ return SWYM.jsArray(list); };
+					
+					if( elementType && elementType.multivalueOf !== undefined )
+					{
+						composer = function(list, v){ SWYM.ConcatInPlace( list, v ); return list; };
+						returnType = SWYM.ToMultivalueType(elementType.multivalueOf);
+					}
+					else
+					{
+						composer = function(list, v){list.push(v); return list;};
+						returnType = SWYM.ToMultivalueType(elementType);
+					}
 				}
 			}
 			break;
 
 		case "&&":
-			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "&&etc arguments");
-			if( bodyType && bodyType.multivalueOf !== undefined )
+			SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "&&etc arguments");
+			if( elementType && elementType.multivalueOf !== undefined )
 				composer = function(tru, v)
 				{
 					var result = SWYM.ResolveBool_Every(v);
@@ -2383,8 +2368,8 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			break;
 
 		case "||":
-			SWYM.TypeCoerce(SWYM.BoolType, bodyType, parsetree, "||etc arguments");
-			if( bodyType && bodyType.multivalueOf !== undefined )
+			SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "||etc arguments");
+			if( elementType && elementType.multivalueOf !== undefined )
 				composer = function(fals, v)
 				{
 					var result = SWYM.ResolveBool_Some(v);
@@ -2399,25 +2384,12 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 				};
 			break;
 	}
-	
-/*	if( haltCondition )
-	{
-		var baseComposer = composer;
-		if( haltAfter )
-		{
-			composer = function(base, next){ if( shouldHalt(next) ){ SWYM.g_etcState.halt = true }; return baseComposer(base, next); };
-		}
-		else
-		{
-			composer = function(base, next){ if( shouldHalt(next) ){ SWYM.g_etcState.halt = true; return base; } else { return baseComposer(base, next); } };
-		}
-	}*/
-	
+		
 	executable.push("#Etc");
 	executable.push(limitTimesExecutable);
 	executable.push(etcExecutable);
 	executable.push(stepExecutable);
-	executable.push(initialValue);
+	executable.push(initialExecutable);
 	executable.push(composer);
 	executable.push(postProcessor);
 	executable.push(haltExecutable);

@@ -47,6 +47,8 @@ function runAllTests()
   runTest("1+(1,2)", "2\n3");
   runTest("-1+2", "1");
   runTest("(1,2)+(10,20)", "11\n21\n12\n22");
+  runTest("'x' = 0; 20+x", "20");
+  runTest("'x' = 0; x+20", "20");
   runTest("// this will print \"true\".\nprint( 4+5 == (32-5)/3 );", "true");
   runTest("floor((15.2345*15.2345 - 14.2345*14.2345)+2+(15.2345*15.2345))", "263");
   endReportTable();
@@ -303,6 +305,7 @@ function runAllTests()
   runTest("\"god\".reverse == \"dog\", \"dog\" == \"god\".reverse", "true\ntrue");
   runTest("[2,1,3].sort", "[1,2,3]");
   runTest("\"Hello World\".sort", "\" HWdellloor\"");
+  runTest("\"Hello World\".sortBy{.lowercase}", "\" deHllloorW\"");
   runTest("[12..9,2,1,3,1..10].sort", "[1,1,2,2,3,3,4,5,6,7,8,9,9,10,10,11,12]");
   runTest("Array.'isPalindrome' returns .reverse == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
   runTest("Array.'isPalindrome' returns .reverse == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
@@ -310,6 +313,7 @@ function runAllTests()
   runTest("if(this=4, test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Not string\"");
   runTest("if(this=\"\", test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Yes, string\"");
   runTest("[[8,5],[2,5],[6,2],[1,4]].whereMax{.2nd - .1st}", "[[2,5],[1,4]]");
+  runTest("\"Hello\".distinct", "\"Helo\"");
   runTest("\"Hello\".stem(3)", "\"Hel\"");
   runTest("\"Hello\".tail(3)", "\"llo\"");
   runTest("\"Hello\".trimStart(3)", "\"lo\"");
@@ -334,6 +338,7 @@ function runAllTests()
   runTest("toInt(\"n\")", "~error~");
   runTest("\"Hello Small World!\".words", "[\"Hello\",\"Small\",\"World!\"]");
   runTest("\"\"\"Hello Small<\n>World!\"\"\".lines", "[\"Hello Small<\",\">World!\"]");
+  runTest("-2.abs", "2");
   endReportTable();
 
   addReportTable("Destructuring:");
@@ -384,6 +389,7 @@ function runAllTests()
   runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[\"hello\",\"there\",\"world\"]", "[\"htw\",\"eho\",\"ler\",\"lrl\",\"oed\"]");
   runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[[1..5],[10..15],[20..25]]", "[[1,10,20],[2,11,21],[3,12,22],[4,13,23],[5,14,24]]");
   runTest("[[1], [(2,1), etc**3]]", "[[1],[2,1,2,1,2,1]]");
+  runTest("'cons'(Anything 'v', Array 'tail') returns [v, tail]; Array.'lispify' returns cons(.at(0), cons(.at(1), [])).etc; [1..10].lispify", "[10,[9,[8,[7,[6,[5,[4,[3,[2,[1,[]]]]]]]]]]]");
   endReportTable();
 
   addReportTable("Quantifiers:");
@@ -455,6 +461,14 @@ function runAllTests()
   runTest("'XY' = Struct{Int 'x', Int 'y'}; [ XY.new(0..1)(2..3) ]", "[XY(x=0, y=2),XY(x=0, y=3),XY(x=1, y=2),XY(x=1, y=3)]");
   endReportTable();
 
+  addReportTable("Tuples:");
+  runTest("[1, \"2\"].Type", "Tuple[Literal(1),Literal(\"2\")]");
+  runTest("[1, \"2\"].at(0).Type", "Literal(1)");
+  runTest("[1, \"2\"].['x','y']->{x.Type}", "Literal(1)");
+  runTest("[1, \"2\"].1st.Type", "Literal(1)");
+  runTest("[1].is( Tuple[Int] )", "true");
+  runTest("[\"2\"].is( Tuple[Int] )", "false");
+  endReportTable();
 }
 
 // debug functions

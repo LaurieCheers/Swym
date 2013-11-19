@@ -11,13 +11,16 @@ SWYM.NextClassID = 8001;
 //             DontCare
 //    +-----------+----------+
 //  Void                  Anything
-//          +-----------+-------+-------+-------+------+----------+----------+
-//        Type        Array   Block   Table   Number  Bool  <structinst> <enuminst>
-//     +----+---+       |                       |
-// Struct      Enum   String                   Int
+//          +----------------+---------+------+-------+-------+-------------+
+//        Type            Container  Block  Number  Bool  <structinst> <enuminst>
+//     +----+---+        +---+----+           |
+// Struct      Enum    Array    Table        Int
+//                       |
+//                     String
 //
 // Interesting issue - do we need two root objects, one for callables and one for noncallables?
 // Is Array a subtype of Table? They're basically compatible, except arrays renumber their keys; tables never do. :-/
+// No, both are subtypes of Container.
 // Is an array a struct? Are there any predefined struct types? Can structs be callable?
 // How do we let arrays define their own "contains" or "random" methods?
 // Is Bool an enum? Should the type Struct match struct types, or struct instances?
@@ -60,18 +63,21 @@ SWYM.TypeType = {type:"type", nativeType:"Type", argType:SWYM.AnyType, outType:S
 SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Array(Int)"};
 SWYM.IntArrayType.memberTypes["keys"] = SWYM.IntArrayType;
 
-SWYM.StringCharType = {type:"type", nativeType:"String", argType:SWYM.IntType, memberTypes:{"length":SWYM.BakedValue(1), "keys":SWYM.IntArrayType, "isChar":SWYM.BakedValue(true)}, debugName:"StringChar"};
+SWYM.StringCharType = {type:"type", nativeType:"String", isStringChar:true, argType:SWYM.IntType, memberTypes:{"length":SWYM.BakedValue(1), "keys":SWYM.IntArrayType, "isChar":SWYM.BakedValue(true)}, debugName:"StringChar"};
 SWYM.StringCharType.outType = SWYM.StringCharType;
 
 SWYM.VariableType = {type:"type", nativeType:"Variable", contentsType:SWYM.DontCareType, debugName:"Var"};
 
 SWYM.NativeArrayType = {type:"type", nativeType:"JSArray", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"NativeArray"};
 SWYM.NativeTableType = {type:"type", nativeType:"JSObject", argType:SWYM.StringType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"NativeTable"};
-SWYM.NativeStringType = {type:"type", nativeType:"JSString", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"NativeString"};
+SWYM.NativeStringType = {type:"type", nativeType:"NativeString", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"NativeString"};
+SWYM.JSStringType = {type:"type", nativeType:"JSString", debugName:"JSString"};
+SWYM.JSFunctionType = {type:"type", nativeType:"function", debugName:"jsfunction"};
 
 SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"Array"};
-SWYM.TableType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Table"}; // fixme: needs "keys" member type.
-SWYM.StringType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"String"};
+SWYM.ContainerType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Container"};
+SWYM.TableType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Table"};
+SWYM.StringType = {type:"type", nativeType:"String", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"String"};
 SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Callable"};
 SWYM.BlockType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
 SWYM.PredicateType = {type:"type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Predicate"};
@@ -85,7 +91,7 @@ SWYM.MultivalueRangeType = SWYM.ToMultivalueType(SWYM.IntType);
 SWYM.MultivalueRangeType.nativeType = "RangeArray";
 
 SWYM.operators = {
-	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true, noImplicitSemicolon:true,
+	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true, standalone:true, noImplicitSemicolon:true,
 		customCompile:function(node, cscope, executable)
 		{
 			if( node.children[1] )
@@ -258,6 +264,8 @@ SWYM.operators = {
 			var executables = [];
 			var resultType = undefined;
 			var bakedArray = [];
+			var tupleTypes = [];
+			
 			for( var Idx = 0; Idx < args.length; ++Idx )
 			{
 				var executableN = [];
@@ -290,6 +298,8 @@ SWYM.operators = {
 							bakedArray = undefined;
 						}
 					}
+					
+					tupleTypes = undefined; // TODO: support composing tuples out of tuple multivalues
 				}
 				else
 				{
@@ -303,6 +313,11 @@ SWYM.operators = {
 						{
 							bakedArray = undefined;
 						}
+					}
+					
+					if( tupleTypes !== undefined )
+					{
+						tupleTypes.push(typeN);
 					}
 
 					if ( isMulti )
@@ -324,8 +339,14 @@ SWYM.operators = {
 				executables.push(executableN);
 			}
 			
-			if( !isMulti )
+			if( tupleTypes !== undefined )
+			{
+				resultType = SWYM.ArrayToMultivalueType(SWYM.TupleTypeOf(tupleTypes, resultType));
+			}
+			else if( !isMulti )
+			{
 				resultType = SWYM.ToMultivalueType(resultType);
+			}
 
 			if( bakedArray !== undefined )
 			{
@@ -393,8 +414,17 @@ SWYM.operators = {
 			var typeType = SWYM.CompileNode(node.children[0], cscope, unusedExecutable);				
 			var rhsType = SWYM.CompileNode(node.children[1], cscope, executable);
 			
-			SWYM.TypeCoerce(typeType.baked, rhsType, node);
-			return typeType.baked;
+			// TODO: insert a run-time check.
+			// SWYM.TypeCoerce(typeType.baked, rhsType, node);
+			if( rhsType.baked !== undefined )
+			{
+				SWYM.TypeCoerce(typeType.baked, rhsType, node);
+				return rhsType;
+			}
+			else
+			{
+				return typeType.baked;
+			}
 		}
 	},
 
@@ -823,16 +853,13 @@ SWYM.operators = {
 		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
 
+	// for completeness, although it's probably not useful, we should have "==every".
+
 	">": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode(">"), prefix:true },
 	">=": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode(">="), prefix:true },
 	"<": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode("<"), prefix:true },
 	"<=": {precedence:81, infix:true, customParseTreeNode:SWYM.AutoLhsOverloadableParseTreeNode("<="), prefix:true },
 	
-/*	">":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>b} },
-	">=": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a>=b} },
-	"<":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a<b} },
-	"<=": {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.BoolType, infix:function(a,b){return a<=b} },
-*/
 	">every":  {precedence:81, argTypes:[SWYM.NumberType,SWYM.NumberArrayType], returnType:SWYM.BoolType,
 		infix:function(a,b)
 		{
@@ -913,8 +940,6 @@ SWYM.operators = {
 		},
 		customParseTreeNode:SWYM.AutoLhsParseTreeNode, prefix:true
 	},
-
-	// nice to have, though probably not as useful: "==every", ">every", "<every", ">=every", "<=every", ">some", "<some", ">=some", "<=some"
 	
 	"--": {precedence:91,
 			prefix:function(a,b,op){return SWYM.assignmentOp(b,{value:b.value-1},op);},
@@ -926,41 +951,23 @@ SWYM.operators = {
 	"^bitwise": {precedence:96, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.NumberType, infix:function(a,b){return a^b} },
 	"~bitwise": {precedence:96, argTypes:[SWYM.NumberType], returnType:SWYM.NumberType, prefix:function(v){return ~v} },
 
-/*	"-": {precedence:102, returnType:{type:"Number"}, prefix:true, infix:true,
-		customParseTreeNode:function(lhs, op, rhs)
-		{
-			if( lhs !== undefined )
-			{
-				return {type:"fnnode", body:undefined, isDecl:false,
-					name:"-",
-					etc:op.etc,
-					children:[rhs, lhs],
-					argNames:["__", "this"]
-				};
-			}
-			else
-			{
-				return {type:"fnnode", body:undefined, isDecl:false,
-					name:"-",
-					etc:op.etc,
-					children:[rhs],
-					argNames:["__"]
-				};
-			}
-		}},*/
-/*	"-": {precedence:101, argTypes:[SWYM.NumberType,SWYM.NumberType],
-		getReturnType:function(a,b)
-		{
-			if( (a === undefined || SWYM.TypeMatches(SWYM.IntType, a)) && SWYM.TypeMatches(SWYM.IntType, b) )
-				return SWYM.IntType;
-			else
-				return SWYM.NumberType;
-		},
-		infix:function(a,b){return a-b}, prefix:function(v){return -v}
-	},
-*/
 	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("+") },
-	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("-") },
+	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:(function(baseCPTN)
+		{
+			return function(lhs, op, rhs)
+			{
+				// For the benefit of etc expressions, we turn expressions like -1 into simple negative number literals.
+				if( lhs === undefined && rhs !== undefined && rhs.type === "literal" )
+				{
+					return SWYM.NewToken("literal", op.pos, "-"+rhs.text, -rhs.value);
+				}
+				else
+				{
+					return baseCPTN(lhs, op, rhs);
+				}
+			}
+		}(SWYM.OverloadableParseTreeNode("-")))
+	},
 	"*": {precedence:103, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("*") },
 	"/": {precedence:104, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("/") },
 	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("%") },
@@ -1011,6 +1018,7 @@ SWYM.operators = {
 	},
 
 	// function-esque operators, e.g. length./2
+	// not sure I like having these.
 	".+": { precedence:300, returnType:SWYM.NumberType, prefix:true, infix:true, customParseTreeNode:SWYM.FunctionesqueParseTreeNode("+") },
 	// NB: no function-esque unary negation operator. (Maybe there should be, but it just reads weirdly to me.)
 	".-": { precedence:300, returnType:SWYM.NumberType, prefix:true, infix:true, customParseTreeNode:SWYM.FunctionesqueParseTreeNode("-") },
@@ -1196,7 +1204,6 @@ SWYM.operators = {
 				else if( type.isMutable )
 				{
 					// if the multivalue is a mutable array, make an immutable copy of it
-					// if the multivalue is a mutable array, make an immutable copy of it
 					executable.push("#CopyArray");
 					return SWYM.ArrayTypeContaining( type );
 				}
@@ -1263,6 +1270,7 @@ SWYM.DefaultGlobalCScope =
 	
 	"Callable": SWYM.BakedValue(SWYM.CallableType),
 	"Type": SWYM.BakedValue(SWYM.TypeType),
+	"Container": SWYM.BakedValue(SWYM.ContainerType),
 	"Table": SWYM.BakedValue(SWYM.TableType),
 	"Array": SWYM.BakedValue(SWYM.ArrayType),
 	"String": SWYM.BakedValue(SWYM.StringType),
@@ -1273,12 +1281,12 @@ SWYM.DefaultGlobalCScope =
 	"Anything": SWYM.BakedValue(SWYM.AnyType),
 	"DontCare": SWYM.BakedValue(SWYM.DontCareType),
 	"Void": SWYM.BakedValue(SWYM.VoidType),
+	"JSString": SWYM.BakedValue(SWYM.JSStringType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
 	
-	// an implementation detail - here for testing, but should not be exposed to users.
 	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
 	
 	"fn#Struct":
@@ -1562,7 +1570,7 @@ SWYM.DefaultGlobalCScope =
 			
 			var selfType = SWYM.ToSinglevalueType(argTypes[0]);
 			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType);
-			
+						
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
@@ -1630,7 +1638,7 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#javascript":
 	[{
-		expectedArgs:{ "argList":{index:0, typeCheck:SWYM.BlockType}, "body":{index:1, typeCheck:SWYM.BlockType} },
+		expectedArgs:{ "argList":{index:0, typeCheck:SWYM.BlockType}, "body":{index:1, typeCheck:SWYM.BlockType}, "pure":{index:2, typeCheck:SWYM.BoolType, defaultValueNode:SWYM.NewToken("literal", -1, "true", true)} },
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
@@ -1641,53 +1649,172 @@ SWYM.DefaultGlobalCScope =
 			}
 			
 			var argsNode = argTypes[0].baked? argTypes[0].baked.bodyNode: argTypes[0].needsCompiling[0].bodyNode;
-			var typeNodes = [];
 			var nameNodes = [];
 			var defaultValueNodes = [];
-			SWYM.CollectClassMembers(argsNode, typeNodes, nameNodes, defaultValueNodes);
+			SWYM.CollectClassMembers(argsNode, nameNodes, defaultValueNodes);
 			
+			var thisArgIdx = undefined;
 			var argNameList = []
+			var argNamesText = "";
 			for( var Idx = 0; Idx < nameNodes.length; ++Idx )
 			{
-				argNameList.push( nameNodes[Idx].value );
+				var argName = nameNodes[Idx].value;
+				argNameList.push( argName );
+				if( argName === "this" )
+				{
+					thisArgIdx = Idx;
+				}
+				else
+				{
+					if( argNamesText !== "" )
+					{
+						argNamesText += ",";
+					}
+					argNamesText += argName;
+				}
 			}
-						
+			
+			var bakedArgs;
+			
+			// if it's pure and we know all the args, consider precomputing it.
+			// ...the world is not yet ready...
+			/*if( argTypes[2] && argTypes[2].baked === true )
+			{
+				bakedArgs = [];
+			}*/
+			
+			var argsExecutables = [];
 			for( var Idx = 0; Idx < defaultValueNodes.length; ++Idx )
 			{
+				var argExecutable = [];
+				argsExecutables[Idx] = argExecutable;
+				
 				var argType;
 				if( defaultValueNodes[Idx] !== undefined )
 				{
-					argType = SWYM.CompileNode(defaultValueNodes[Idx], cscope, executable);
+					argType = SWYM.CompileNode(defaultValueNodes[Idx], cscope, argExecutable);
 				}
 				else if( cscope[argNameList[Idx]] !== undefined )
 				{
 					argType = cscope[argNameList[Idx]];
-					executable.push("#Load");
-					executable.push(argNameList[Idx]);
+					argExecutable.push("#Load");
+					argExecutable.push(argNameList[Idx]);
 				}
 				else
 				{
 					SWYM.LogError(nameNodes[Idx], "Undefined argument '"+argNameList[Idx]+"'");
 				}
 				
+				if( argType && argType.baked !== undefined && bakedArgs !== undefined )
+				{
+					if( Idx === thisArgIdx )
+						bakedThisArg = argType.baked;
+					else
+						bakedArgs.push(argType.baked);
+				}
+				else
+				{
+					bakedArgs = undefined;
+				}
+				
 				if( SWYM.TypeMatches(SWYM.StringType, argType) && argType !== SWYM.DontCareType )
 				{
-					executable.push("#Native")
-					executable.push(1)
-					executable.push(function(str){ return str.data; })
+					// if it's definitely a string, convert to js string
+					argExecutable.push("#Native")
+					argExecutable.push(1)
+					argExecutable.push(function(str){ return str.data; })
+				}
+				else
+				{
+					// if it might be a string, conditionally convert to js string
+					argExecutable.push("#Native")
+					argExecutable.push(1)
+					argExecutable.push(function(str)
+					{
+						if(str !== undefined && str.type === "string")
+						{
+							return str.data;
+						}
+						else
+						{
+							return str;
+						}
+					})
 				}
 			}
-
+			
 			//FIXME: this is pretty half-assed. javascript parsing uses quite different rules from swym.
 			// To do this right, we need to switch into javascript mode way back in the tokenizer.
-			var functionText = "var jsFunction = function("+argNameList+")"+argTypes[1].needsCompiling[0].executableBlock.debugText;
+			var functionText = "var jsFunction = function("+argNamesText+")"+argTypes[1].needsCompiling[0].executableBlock.debugText;
 			eval(functionText);
-
-			executable.push("#Native");
-			executable.push(defaultValueNodes.length);
-			executable.push(jsFunction);
 			
-			return SWYM.DontCareType;
+			if( bakedArgs !== undefined && ( thisArgIdx === undefined || bakedThisArg !== undefined ) )
+			{
+				var bakedResult = jsFunction.apply(bakedThisArg, bakedArgs);
+				executable.push("#Literal");
+				executable.push(bakedResult);
+				return SWYM.BakedValue(bakedResult);
+			}
+			else
+			{
+				if( thisArgIdx !== undefined )
+				{
+					SWYM.pushEach(argsExecutables[thisArgIdx], executable);
+				}
+				
+				for(var Idx = 0; Idx < argsExecutables.length; ++Idx )
+				{
+					if( Idx !== thisArgIdx )
+					{
+						SWYM.pushEach(argsExecutables[Idx], executable);
+					}
+				}
+
+				if( thisArgIdx !== undefined )
+				{
+					executable.push( "#NativeThis" );
+					executable.push(argsExecutables.length-1);
+					executable.push(jsFunction);
+				}
+				else
+				{
+					executable.push( "#Native");
+					executable.push(argsExecutables.length);
+					executable.push(jsFunction);
+				}
+				return SWYM.DontCareType;
+			}
+		}
+	}],
+
+	"fn#jsstring":
+	[{
+		expectedArgs:{ "this":{index:0} },
+		customCompile:function(argTypes, cscope, executable, errorNode)
+		{
+			executable.push("#Native");
+			executable.push(1);
+			executable.push(function(value){ return SWYM.ToTerseString(value) });
+			return SWYM.JSStringType;
+		}
+	}],
+
+	"fn#jscallback":
+	[{
+		expectedArgs:{ "body":{index:0} }, returnType:SWYM.JSFunctionType,
+		customCompile:function(argTypes, cscope, executable)
+		{
+			var returnType = SWYM.GetOutType( argTypes[0], SWYM.AnyType ); // force compile
+			executable.push("#Native");
+			executable.push(1);
+			executable.push(function(body)
+			{
+				return function(x)
+				{
+					result = SWYM.ClosureCall(body, x);
+					return result;
+				};
+			});
 		}
 	}],
 	
@@ -1733,6 +1860,11 @@ SWYM.DefaultGlobalCScope =
 			nativeCode:function(value){  return value.length;  } 
 		}],
 		
+	"fn#toInt":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.NumberType} },
+			returnType:SWYM.IntType,
+			nativeCode:function(value){  return value|0;  } 
+		}],
+	
 	"fn#Var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType} },
 			customCompileWithoutArgs:true,
 			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
@@ -1871,11 +2003,11 @@ SWYM.DefaultGlobalCScope =
 			
 			// FIXME: subtle bug - if both arguments are quantifiers, and they were supplied in the opposite order,
 			// we ought to be processing them in the opposite order.
-			if( argTypes[0].multivalueOf )
+			if( argTypes[0] && argTypes[0].multivalueOf )
 			{
 				resultType = SWYM.ToMultivalueType( resultType, argTypes[0].quantifier );
 			}
-			if( argTypes[1].multivalueOf )
+			if( argTypes[1] && argTypes[1].multivalueOf )
 			{
 				resultType = SWYM.ToMultivalueType( resultType, argTypes[1].quantifier );
 			}
@@ -2114,7 +2246,7 @@ SWYM.DefaultGlobalCScope =
 	"fn#distinct":[{
 		expectedArgs:{"this":{index:0, typeCheck:SWYM.ArrayType} },
 		nativeCode:SWYM.Distinct,
-		getReturnType:function(argTypes, cscope) { return argTypes[0]; }
+		getReturnType:function(argTypes, cscope) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }
 	}],
 
 	"fn#table":[{
@@ -2135,7 +2267,7 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 	
-	"fn#keys":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.TableType} },
+	"fn#keys":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ContainerType} },
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			executable.push("#Native");
@@ -2159,7 +2291,7 @@ SWYM.DefaultGlobalCScope =
 			}
 			else
 			{
-				SWYM.LogError(0, "Fsckup: no keys defined for ostensible Table type");
+				SWYM.LogError(0, "Fsckup: no keys defined for ostensible Container type");
 				return SWYM.ArrayType;
 			}
 		}
@@ -2210,25 +2342,26 @@ SWYM.stdlyb =
 //constants that cannot be bootstrapped ('true', 'false' and 'novalues'),\n\
 //are not defined here.\n\
 \n\
+Anything.'javascript'('body','pure'=false) returns javascript(pure=pure){'this'}(body)\n\
 //Default operator overloads\n\
-'-'(Int 'rhs') returns Int<< javascript{'rhs'}{ return -rhs }\n\
-Int.'-'(Int 'rhs') returns Int<< javascript{'lhs'=this, 'rhs'}{ return lhs-rhs }\n\
-Int.'+'(Int 'rhs', '__identity'=0) returns Int<< javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
-Int.'*'(Int 'rhs', '__identity'=1) returns Int<< javascript{'lhs'=this, 'rhs'}{ return lhs*rhs }\n\
-Int.'%'(Int 'rhs') returns Int<< javascript{'lhs'=this, 'rhs'}{ return lhs%rhs }\n\
-Int.'^'(Int 'rhs') returns Int<< javascript{'lhs'=this, 'rhs'}{ return Math.pow(lhs,rhs) }\n\
-'-'(Number 'rhs') returns Number<< javascript{'rhs'}{ return -rhs }\n\
-Number.'-'(Number 'rhs') returns Number<< javascript{'lhs'=this, 'rhs'}{ return lhs-rhs }\n\
-Number.'+'(Number 'rhs', '__identity'=0) returns Number<< javascript{'lhs'=this, 'rhs'}{ return lhs+rhs }\n\
-Number.'*'(Number 'rhs', '__identity'=1) returns Number<< javascript{'lhs'=this, 'rhs'}{ return lhs*rhs }\n\
-Number.'/'(Number 'rhs') returns Number<< javascript{'lhs'=this, 'rhs'}{ return lhs/rhs }\n\
-Number.'%'(Number 'rhs') returns Number<< javascript{'lhs'=this, 'rhs'}{ return lhs%rhs }\n\
-Number.'^'(Number 'rhs') returns Number<< javascript{'lhs'=this, 'rhs'}{ return Math.pow(lhs,rhs) }\n\
+'-'(Int 'rhs') returns Int<< javascript(pure=true){'rhs'}{ return -rhs }\n\
+Int.'-'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
+Int.'+'(Int 'rhs', '__identity'=0) returns Int<< javascript(pure=true){'this', 'rhs'}{ return this+rhs }\n\
+Int.'*'(Int 'rhs', '__identity'=1) returns Int<< javascript(pure=true){'this', 'rhs'}{ return this*rhs }\n\
+Int.'%'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this%rhs }\n\
+Int.'^'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
+'-'(Number 'rhs') returns Number<< javascript(pure=true){'rhs'}{ return -rhs }\n\
+Number.'-'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
+Number.'+'(Number 'rhs', '__identity'=0) returns Number<< javascript(pure=true){'this', 'rhs'}{ return this+rhs }\n\
+Number.'*'(Number 'rhs', '__identity'=1) returns Number<< javascript(pure=true){'this', 'rhs'}{ return this*rhs }\n\
+Number.'/'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this/rhs }\n\
+Number.'%'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this%rhs }\n\
+Number.'^'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
 Array.'+'(Array 'arr', '__identity'=[]) returns [.each, arr.each]\n\
 Array.'*'(Int 'times')  returns  array(length=.length*times) 'index'->{ this.at( index%this.length ) }\n\
 String.'+'(String 'str', '__identity'=\"\") returns [.each, str.each]\n\
-Number.'<'(Number 'rhs') returns Bool<< javascript{'lhs'=this, 'rhs'}{ return lhs<rhs }\n\
-String.'<'(String 'rhs') returns Bool<< javascript{'lhs'=this, 'rhs'}{ return lhs<rhs }\n\
+Number.'<'(Number 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
+String.'<'(String 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
 \n\
 Array.'atEnd'('idx') returns .at(.length-1-idx)\n\
 Array.'#st' returns .at(#-1)\n\
@@ -2261,17 +2394,19 @@ Array.'no'('body') returns [.no.(body)]\n\
 'Cell' = Struct\n\
 {\n\
   Int 'key'\n\
-  Array 'array'\n\
+  Container 'container'\n\
 }\n\
 \n\
-Cell.'value' returns .array.at(.key)\n\
-Cell.'value'('equals') returns .array.at(.key)=equals\n\
-Cell.'nextCell' returns Cell.new(.key+1, .array)\n\
-Cell.'previousCell' returns Cell.new(.key-1, .array)\n\
+Cell.'value' returns .container.at(.key)\n\
+Cell.'value'('equals') returns .container.at(.key)=equals\n\
+Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
+Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
 Array.'cells' returns array(.length) 'idx'->{ Cell.new(idx, this) }\n\
-Cell.Array.'table' returns table[.each.key](.1st.array)\n\
+Table.'cells' returns array(.keys.length) 'idx'->{ Cell.new(this.keys.at(idx), this) }\n\
+Cell.Array.'table' returns table[.each.key](.1st.container)\n\
 Cell.Array.'cellKeys' returns [.each.key]\n\
 Cell.Array.'cellValues' returns [.each.value]\n\
+Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
 Array.'where'('test') returns forEach(this){ .if(test) }\n\
@@ -2314,20 +2449,20 @@ Array.'splitAt'(Int.Array 'keys') returns if(keys == []){ [this] } else\n\
   .slice[keys.last..]\n\
 ]}\n\
 \n\
-Cell.Array.'split' returns .1st.array.splitAt(.cellKeys)\n\
+Cell.Array.'split' returns .1st.container.splitAt(.cellKeys)\n\
 Array.'splitWhere'(Callable 'test') returns .cells.where{.value.(test)}.split\n\
 Array.'splitOut'(Int.Array 'keys') returns [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]}\n\
-Cell.Array.'splitOut' returns .1st.array.splitOut(.cellKeys)\n\
+Cell.Array.'splitOut' returns .1st.container.splitOut(.cellKeys)\n\
 Array.'splitOutWhere'(Callable 'test') returns .cells.where{.value.(test)}.splitOut\n\
 Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
 Array.'splitOnAny'(Array 'values') returns .splitOutWhere{==any values}\n\
 String.'lines' returns .splitOn(\"\\n\")\n\
 String.'words' returns .splitOnAny(\" \\t\\n\")\n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
-Array.'tail'(Int 'length') returns .atEach[ (.length-length).clamp(min=0) ..< .length]\n\
+Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
-Array.'stem'(Int 'length') returns .atEach[0..<length]\n\
-Array.'stemWhere'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.!(test)}.key)\n\
+Array.'stem'(Int 'length') returns .slice(length=length)\n\
+Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
 Array.'emptyOr'(Callable 'body') returns .if{==[]}{[]} else (body)\n\
@@ -2456,6 +2591,7 @@ Number.'neg' returns -this\n\
 Number.'degToRad' returns this*PI/180\n\
 Number.'radToDeg' returns this*180/PI\n\
 Number.'abs' returns if(this>=0){ this } else { -this }\n\
+Number.'mod'(Number 'other') returns ((this%other)+other)%other\n\
 Number.'differenceFrom'('n') returns abs(this-n)\n\
 Number.'divisibleBy'('n') returns this%n == 0\n\
 Number.'clamp'(Number 'min') returns if(this < min){ min } else { this }\n\
@@ -2485,14 +2621,14 @@ Int.Array.'gcd' returns .reduce\n\
   a\n\
 }\n\
 \n\
-'Maybe' = Struct{ Array 'container' }\n\
+'Maybe' = Struct{ Array 'internal' }\n\
 \n\
-Maybe.Literal.'new'('equals') returns Maybe.new( container=[equals] )\n\
-Maybe.Literal.'none' returns Maybe.new( container=[] )\n\
-Maybe.'hasValue' returns .container.length > 0\n\
-Maybe.'value' returns .container.each\n\
-Maybe.'value'('else') returns if(.hasValue){.container.1st} else (else)\n\
-Maybe.'value'('body')('else') returns if(.hasValue){.container.1st.(body)} else (else)\n\
+Maybe.Literal.'new'('equals') returns Maybe.new( internal=[equals] )\n\
+Maybe.Literal.'none' returns Maybe.new( internal=[] )\n\
+Maybe.'hasValue' returns .internal.length > 0\n\
+Maybe.'value' returns .internal.each\n\
+Maybe.'value'('else') returns if(.hasValue){.internal.1st} else (else)\n\
+Maybe.'value'('body')('else') returns if(.hasValue){.internal.1st.(body)} else (else)\n\
 \n\
 String.'toInt' returns forEach(this)\n\
 {\n\
@@ -2551,19 +2687,18 @@ Anything.'if'(Bool 'cond') returns .if{cond}{it} else {novalues}\n\
 Anything.'if'(Callable 'test') returns .if(test){it} else {novalues}\n\
 Anything.'if'(Bool 'cond', 'else') returns .if{cond}{it} else (else)\n\
 Anything.'if'(Callable 'test', 'else') returns .if(test){it} else (else)\n\
-Anything.'or_if'('cond')('body') returns .if{cond}(body) else {it}\n\
-Anything.'or_if'('test')('body') returns .if(test)(body) else {it}\n\
+Anything.'or_if'('cond')('body') returns .if(cond)(body) else {it}\n\
 \n\
-String.'alert' { javascript{'value'=this}{ alert(value) }; void }\n\
-String.'log' returns Void<< javascript{'value'=this}{ console.log(value) }\n\
-Number.'sqrt' returns Number<< javascript{'value'=this}{ return Math.sqrt(value) }\n\
-Number.'sin' returns Number<< javascript{'value'=this}{ return Math.sin(value) }\n\
-Number.'cos' returns Number<< javascript{'value'=this}{ return Math.cos(value) }\n\
-/*Number.'toInt' returns Int<< javascript{'value'=this}{ return value|0 }*/\n\
-Number.'floor' returns Int<< javascript{'value'=this}{ return Math.floor(value) }\n\
-Number.'ceiling' returns Int<< javascript{'value'=this}{ return Math.ceiling(value) }\n\
-String.'lowercase' returns String<< javascript{'value'=this}{ return SWYM.StringWrapper(value.toLowerCase()) }\n\
-String.'uppercase' returns String<< javascript{'value'=this}{ return SWYM.StringWrapper(value.toUpperCase()) }\n\
+String.'alert' { .javascript{ alert(this) }; void }\n\
+String.'log' returns Void<< .javascript{ console.log(this) }\n\
+Number.'sqrt' returns Number<< .javascript{ return Math.sqrt(this) }\n\
+Number.'sin' returns Number<< .javascript{ return Math.sin(this) }\n\
+Number.'cos' returns Number<< .javascript{ return Math.cos(this) }\n\
+/*Number.'toInt' returns Int<< .javascript{ return this|0 }*/\n\
+Number.'floor' returns Int<< .javascript{ return Math.floor(this) }\n\
+Number.'ceiling' returns Int<< .javascript{ return Math.ceiling(this) }\n\
+String.'lowercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toLowerCase()) }\n\
+String.'uppercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
 ";/**/
 
 //Number: Number.'cos' = javascript{'x'=this}{ return cos(x); };\
