@@ -2126,7 +2126,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 
 SWYM.CompileEtc = function(parsetree, cscope, executable)
 {
-	var stepExecutable = undefined;
+	var isTable = ( parsetree.baseCase.op && parsetree.baseCase.op.text === ":" );
 /*	if( parsetree.body.etcExpandAround !== undefined )
 	{
 		//To do an ExpandAround, the body must be parsed into a function that
@@ -2187,7 +2187,19 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	}
 
 	var baseCaseExecutable = [];
-	var baseCaseType = SWYM.CompileNode(parsetree.baseCase, cscope, baseCaseExecutable);
+	var baseCaseType;
+	if( isTable )
+	{
+		var baseKeyType = SWYM.CompileNode(parsetree.baseCase.children[0], cscope, baseCaseExecutable);
+		var baseValueType = SWYM.CompileNode(parsetree.baseCase.children[1], cscope, baseCaseExecutable);
+		baseCaseExecutable.push("#CreateArray");
+		baseCaseExecutable.push(2);
+		baseCaseType = SWYM.TableTypeFromTo(baseKeyType, baseValueType);
+	}
+	else
+	{
+		baseCaseType = SWYM.CompileNode(parsetree.baseCase, cscope, baseCaseExecutable);
+	}
 
 	var etcScope = object(cscope);
 	etcScope["<etcSoFar>"] = baseCaseType;
@@ -2272,33 +2284,39 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	var returnType = parsetree.body.op.behaviour.returnType;
 
 	var etcExecutable = [];
-	var elementType = SWYM.CompileNode(parsetree.body.children[1], etcScope, etcExecutable);
-	
-	if( returnType === undefined && parsetree.body.op.behaviour.getReturnType )
+	if( isTable )
 	{
-		returnType = parsetree.body.op.behaviour.getReturnType(bodyType, bodyType);
-	}
+		// table constructor
+		var keyType = SWYM.CompileNode(parsetree.body.children[1].children[0], etcScope, etcExecutable);
+		var valueType = SWYM.CompileNode(parsetree.body.children[1].children[1], etcScope, etcExecutable);
+		etcExecutable.push("#CreateArray");
+		etcExecutable.push(2);
 
-	// there are only a few operators we need to worry about. Namely: , && ||
-	switch(parsetree.body.op.text)
+		//FIXME: don't bother doing ToDebugString on string values?
+		// also, it might be nice to make this work lazily?
+		initialExecutable = ["#Native", 0, function(){ return {values:[], keys:[]}; }];
+		composer = function(fields, pair)
+		{
+			fields.keys.push(pair[0]);
+			fields.values.push(pair[1]);
+			return fields;
+		};
+		postProcessor = function(fields){ return SWYM.CreateTable(fields.keys, fields.values); };
+		returnType = SWYM.TableTypeFromTo(SWYM.TypeUnify(baseKeyType, keyType), SWYM.TypeUnify(baseValueType, valueType));
+	}
+	else
 	{
-		case ",": case ";": case "(blank_line)":
-			if( parsetree.body.op && parsetree.body.op.text === ":" )
-			{
-				// table constructor - FIXME: don't bother doing ToDebugString on string values?
-				// also, it might be nice to make this work lazily?
-				initialExecutable = function(){ return {values:[], keys:[]}; };
-				composer = function(fields, pair)
-				{
-					fields.keys.push(pair[0]);
-					fields.values.push(pair[1]);
-					return fields;
-				};
-				postProcessor = function(fields){ return SWYM.CreateTable(fields.keys, fields.values); };
-				returnType = elementType;
-			}
-			else
-			{
+		var elementType = SWYM.CompileNode(parsetree.body.children[1], etcScope, etcExecutable);
+		
+		if( returnType === undefined && parsetree.body.op.behaviour.getReturnType )
+		{
+			returnType = parsetree.body.op.behaviour.getReturnType(bodyType, bodyType);
+		}
+		// most interesting operators are overloadable (i.e. treated as fnnodes), so there are
+		// only a few things we need to handle here. Namely: , && ||
+		switch(parsetree.body.op.text)
+		{
+			case ",": case ";": case "(blank_line)":
 				if( initialType !== undefined )
 				{
 					initialExecutable.push( ( initialType.multivalueOf !== undefined )? "#CopyArray": "#SingletonArray");
@@ -2347,48 +2365,51 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 						returnType = SWYM.ToMultivalueType(elementType);
 					}
 				}
-			}
-			break;
+				break;
 
-		case "&&":
-			SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "&&etc arguments");
-			if( elementType && elementType.multivalueOf !== undefined )
-				composer = function(tru, v)
-				{
-					var result = SWYM.ResolveBool_Every(v);
-					if(!result){ SWYM.g_etcState.halt = true; };
-					return result;
-				};
-			else
-				composer = function(tru, v)
-				{
-					if(!v){ SWYM.g_etcState.halt = true; };
-					return v;
-				};
-			break;
+			case "&&":
+				SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "&&etc arguments");
+				if( elementType && elementType.multivalueOf !== undefined )
+					composer = function(tru, v)
+					{
+						var result = SWYM.ResolveBool_Every(v);
+						if(!result){ SWYM.g_etcState.halt = true; };
+						return result;
+					};
+				else
+					composer = function(tru, v)
+					{
+						if(!v){ SWYM.g_etcState.halt = true; };
+						return v;
+					};
+				break;
 
-		case "||":
-			SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "||etc arguments");
-			if( elementType && elementType.multivalueOf !== undefined )
-				composer = function(fals, v)
-				{
-					var result = SWYM.ResolveBool_Some(v);
-					if(result){ SWYM.g_etcState.halt = true; };
-					return result;
-				};
-			else
-				composer = function(fals, result)
-				{
-					if(result){ SWYM.g_etcState.halt = true; };
-					return result;
-				};
-			break;
+			case "||":
+				SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "||etc arguments");
+				if( elementType && elementType.multivalueOf !== undefined )
+					composer = function(fals, v)
+					{
+						var result = SWYM.ResolveBool_Some(v);
+						if(result){ SWYM.g_etcState.halt = true; };
+						return result;
+					};
+				else
+					composer = function(fals, result)
+					{
+						if(result){ SWYM.g_etcState.halt = true; };
+						return result;
+					};
+				break;
+				
+			default:
+				SWYM.LogError(parsetree, "Operator "+parsetree.body.op.text+" cannot be used in etc expressions!");
+				return SWYM.DontCareType;
+		}
 	}
 		
 	executable.push("#Etc");
 	executable.push(limitTimesExecutable);
 	executable.push(etcExecutable);
-	executable.push(stepExecutable);
 	executable.push(initialExecutable);
 	executable.push(composer);
 	executable.push(postProcessor);

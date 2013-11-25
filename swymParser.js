@@ -582,6 +582,12 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 	}
 	else if ( lhs.type === "fnnode" )
 	{
+		if( rhs.type !== "fnnode" && rhs.type !== "name" )
+		{
+			SWYM.LogError(lhs.pos, "Error: expected a function name, got "+rhs.text);
+			return lhs;
+		}
+		
 		var baseNode = lhs;
 		if( baseNode.addArgsTo !== undefined )
 			baseNode = baseNode.addArgsTo;

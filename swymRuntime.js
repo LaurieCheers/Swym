@@ -588,12 +588,11 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 		case "#Etc":
 			var etcLimit = executable[PC+1];
 			var etcBodyExecutable = executable[PC+2];
-			var etcStepExecutable = executable[PC+3];
-			var etcInitialExecutable = executable[PC+4];
-			var etcComposer = executable[PC+5];
-			var etcPostProcessor = executable[PC+6];
-			var etcHaltExecutable = executable[PC+7];
-			var etcHaltTest = executable[PC+8];
+			var etcInitialExecutable = executable[PC+3];
+			var etcComposer = executable[PC+4];
+			var etcPostProcessor = executable[PC+5];
+			var etcHaltExecutable = executable[PC+6];
+			var etcHaltTest = executable[PC+7];
 
 			var limitTimes = etcLimit? SWYM.ExecWithScope("EtcLimit", etcLimit, rscope, []): 1000; // FIXME
 			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
@@ -636,7 +635,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			SWYM.g_etcState.halt = false;
 			SWYM.g_etcState.depth--;
 			stack.push( etcPostProcessor(etcResult) );
-			PC += 9;
+			PC += 8;
 			break;
 			
 		case "#EtcSequence":

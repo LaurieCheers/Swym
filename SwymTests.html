@@ -140,7 +140,8 @@ function runAllTests()
   runTest("'defaultValueFn'('x'=0){x}; defaultValueFn(5)", "5");
   runTest("'defaultValueFn'('x'=0){x}; defaultValueFn()", "0");
   runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn(5)", "~error~");
-  runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn(\"x\")", "~error~");
+  // on reflection, I think it's ok that this is not an error. Default args get resolved only in the context of other args.
+  runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn(\"x\")", "\"x\"");
   runTest("'defaultValueFn'(String 'x'=0){x}; defaultValueFn()", "~error~");
   runTest("'defaultValueFn'(Int 'x'=0){x}; defaultValueFn(5)", "5");
   runTest("'defaultValueFn'(Int 'x'=0){x}; defaultValueFn()", "0");
@@ -271,6 +272,9 @@ function runAllTests()
  //TODO runTest("$5.if(Int)+$5", "~error~");
   runTest("$5.if(Int)+5", "<no values>");
   runTest("\"Hello, World\".at(total[2,2,3])", "\"W\"");
+  runTest("'evil'('x') returns if(random[0,1] == 0){x} else {[evil(x)]}; evil(3).Type", "RecursiveArray(Literal(3))?");
+  runTest("'evil'('x') returns if(random[0,1] == 0){x} else {evil([x])}; evil(3).Type", "~error~");
+  runTest("if(true){ if(true){ if(true){ if(true){ if(true){ if(true){\"Hi!\"} } } } } }", "\"Hi!\"");
   endReportTable();
   
   addReportTable("Builtins");

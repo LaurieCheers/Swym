@@ -2296,19 +2296,22 @@ SWYM.DefaultGlobalCScope =
 			}
 		}
 	}],
-	
-  "fn#values":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.EnumType} },
+
+/*	
+	"fn#values":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.EnumType} },
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-      if( !argTypes[0] || !argTypes[0].baked || !argTypes[0].baked.enumValues )
-      {
-        SWYM.LogError(0, "Fsckup: Enum values must be known at compile time!?");
-      }
+			if( !argTypes[0] || !argTypes[0].baked || !argTypes[0].baked.enumValues )
+			{
+				SWYM.LogError(0, "Fsckup: Enum values must be known at compile time!?");
+				return SWYM.DontCareType;
+			}
 			executable.push("#Literal");
 			executable.push(argTypes[0].baked.enumValues);
 			return SWYM.ArrayTypeContaining(argTypes[0].baked);
 		}
 	}],
+*/
 
 	"fn#while":[{ expectedArgs:{ "test":{index:0, typeCheck:SWYM.CallableType}, "body":{index:1, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
@@ -2584,6 +2587,8 @@ Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then
 Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}.key\n\
 Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
 \n\
+Table.'values' returns [.at(.keys.each)]\n\
+\n\
 'Empty' = {.length == 0}\n\
 'PI' = 3.1415926535897926\n\
 Block.'Non' returns {!.(this)}\n\
@@ -2630,11 +2635,10 @@ Maybe.'value' returns .internal.each\n\
 Maybe.'value'('else') returns if(.hasValue){.internal.1st} else (else)\n\
 Maybe.'value'('body')('else') returns if(.hasValue){.internal.1st.(body)} else (else)\n\
 \n\
-String.'toInt' returns forEach(this)\n\
+String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
 {\n\
-  \"0\":0, \"1\":1, \"2\":2, \"3\":3, \"4\":4,\n\
-  \"5\":5, \"6\":6, \"7\":7, \"8\":8, \"9\":9\n\
-}.{ .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc }\n\
+  .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc\n\
+}\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
