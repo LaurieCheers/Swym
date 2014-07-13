@@ -172,8 +172,9 @@ SWYM.operators = {
 			parentFunction.yields = true;
 
 			//FIXME: these are actually incorrect, but I'm not sure how to fix it yet. Recursive function calls are tricky.
-			parentFunction.returnType = SWYM.ArrayTypeContaining(SWYM.DontCareType);
-			parentFunction.bodyCScope["Yielded"] = SWYM.ArrayTypeContaining(SWYM.DontCareType);
+			var baseReturnType = SWYM.ToMultivalueType(SWYM.DontCareType);
+			parentFunction.returnType = baseReturnType;
+			parentFunction.bodyCScope["Yielded"] = baseReturnType;
 
 			SWYM.pushEach(["#Load", "Yielded"], executable);
 						
@@ -185,10 +186,10 @@ SWYM.operators = {
 
 			SWYM.pushEach(["#ConcatArrays", 2, "#Overwrite", "Yielded", "#Pop"], executable);
 			
-			if( parentFunction.returnType === undefined )
-				parentFunction.returnType = SWYM.ArrayTypeContaining(yieldType);
+			if( parentFunction.returnType === baseReturnType )
+				parentFunction.returnType = yieldType;
 			else
-				parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, SWYM.ArrayTypeContaining(yieldType));
+				parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, yieldType);
 			parentFunction.bodyCScope["Yielded"] = parentFunction.returnType;
 			
 			return SWYM.VoidType;
@@ -291,7 +292,10 @@ SWYM.operators = {
 					{
 						if( typeN && typeN.baked !== undefined )
 						{
-							SWYM.pushEach(typeN.baked, bakedArray);
+							for( var bakedIdx = 0; bakedIdx < typeN.baked.length; ++bakedIdx )
+							{
+								bakedArray.push(typeN.baked.run(bakedIdx));
+							}
 						}
 						else
 						{
@@ -749,62 +753,74 @@ SWYM.operators = {
 	"..":  {precedence:75, infix:true, postfix:true, prefix:true, standalone:true,
 		customCompile:function(node, cscope, executable)
 		{
-			if( node.children[0] === undefined && node.children[1] === undefined )
-			{
-				// standalone ".." expression = minus infinity to plus infinity
-				var rangeArray = SWYM.rangeArray(-Infinity, Infinity);
-				executable.push("#Literal");
-				executable.push(rangeArray);
-				return SWYM.MultivalueRangeType;
-			}
-			if( node.children[1] === undefined )
-			{
-				// a.. expression = a to plus infinity
-				var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
-				SWYM.TypeCoerce(SWYM.IntType, type0, node.children[0]);
-				executable.push("#Native");
-				executable.push(1);
-				executable.push( function(a){ return SWYM.rangeArray(a, Infinity) });
-				return SWYM.MultivalueRangeType;
-			}
+			var argExecutable = [];
+			var startType;
 			if( node.children[0] === undefined )
 			{
-				// ..b expression = minus infinity to b
-				var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
-				SWYM.TypeCoerce(SWYM.IntType, type1, node.children[1]);
-				executable.push("#Native");
-				executable.push(1);
-				executable.push( function(b){ return SWYM.rangeArray(-Infinity, b) });
-				return SWYM.MultivalueRangeType;
+				startType = SWYM.BakedValue(-Infinity);
+				argExecutable.push("#Literal");
+				argExecutable.push(startType);
+			}
+			else
+			{
+				startType = SWYM.CompileNode( node.children[0], cscope, argExecutable );
 			}
 
-			
-			var type0 = SWYM.CompileNode( node.children[0], cscope, executable );
-			if( SWYM.TypeMatches(SWYM.IntType, type0 ) )
+			var endType;
+			if( node.children[1] === undefined )
 			{
-				var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
-				if( SWYM.TypeMatches(SWYM.IntType, type1 ) )
+				endType = SWYM.BakedValue(Infinity);
+				argExecutable.push("#Literal");
+				argExecutable.push(endType);
+			}
+			else
+			{
+				endType = SWYM.CompileNode( node.children[1], cscope, argExecutable );
+			}
+
+			if( node.children[0] === undefined ||
+				node.children[1] === undefined ||
+				SWYM.TypeMatches(SWYM.IntType, startType) )
+			{
+				SWYM.TypeCoerce(SWYM.IntType, startType, node.children[0]);
+				SWYM.TypeCoerce(SWYM.IntType, endType, node.children[1]);
+			
+				if( startType.baked !== undefined && endType.baked !== undefined )
 				{
-					executable.push("#Native");
-					executable.push(2);
-					executable.push( function(a,b){ return SWYM.RangeOp(a,b, true, true, undefined) });
-					return SWYM.MultivalueRangeType;
+					var literalValue = SWYM.RangeOp(startType.baked, endType.baked, true, true, undefined);
+					executable.push("#Literal");
+					executable.push( literalValue );
+					return SWYM.ArrayToMultivalueType( SWYM.BakedValue(literalValue) );
 				}
 				else
 				{
-					SWYM.LogError(node, "Inconsistent arguments for '..' operator: "+SWYM.TypeToString(type0)+" and "+SWYM.TypeToString(type1));
-					return;
+					executable.push("#Native");
+					executable.push(2);
+					executable.push( function(a, b){ return SWYM.RangeOp(a,b, true, true, undefined) });
+					return SWYM.MultivalueRangeType;
 				}
 			}
-			
-			type0 = SWYM.TypeCoerce(SWYM.StringType, type0, node.children[0]);
-			var type1 = SWYM.CompileNode( node.children[1], cscope, executable );
-			type1 = SWYM.TypeCoerce(SWYM.StringType, type1, node.children[1]);
-
-			executable.push("#Native");
-			executable.push(2);
-			executable.push( function(a,b){ return SWYM.CharRange(a,b) });
-			return SWYM.ToMultivalueType(SWYM.StringCharType);
+			else if( SWYM.TypeMatches(SWYM.StringType, startType) && SWYM.TypeMatches(SWYM.StringType, endType) )
+			{
+				if( startType.baked !== undefined && endType.baked !== undefined )
+				{
+					var literalString = SWYM.CharRange(startType.baked,endType.baked);
+					executable.push("#Literal");
+					executable.push(literalString);
+					return SWYM.ArrayToMultivalueType( SWYM.BakedValue(literalString) );
+				}
+				else
+				{
+					executable.push("#Native");
+					executable.push(2);
+					executable.push( function(a,b){ return SWYM.CharRange(a,b) });
+					return SWYM.ToMultivalueType(SWYM.StringCharType);
+				}
+			}
+			else
+			{
+				SWYM.LogError(node, "Invalid arguments to .. operator. (Expected Int..Int or String..String; got "+SWYM.TypeToString(startType)+".."+SWYM.TypeToString(endType)+")");
+			}
 		}},
 	// ascending sequence that includes left, right, neither or both endpoints
 	"..<": {precedence:75, argTypes:[SWYM.IntType,SWYM.NumberType], returnType:SWYM.MultivalueRangeType, infix:function(a,b){ return SWYM.RangeOp(a,b, true, false, 1); }, prefix:function(b){ return SWYM.rangeArray(-Infinity,b-1);} },
@@ -1284,7 +1300,7 @@ SWYM.DefaultGlobalCScope =
 	"JSString": SWYM.BakedValue(SWYM.JSStringType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
-	"novalues": {type:"type", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
+	"novalues": {type:"type", debugName:"DontCare", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
 	
 	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
@@ -2332,6 +2348,58 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.VoidType;
 		}
 	}],
+
+	"fn#Element":
+	[{
+		expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+		customCompile:function(argTypes, cscope, executable, errorNode)
+		{
+			var argType = argTypes[0];
+			if( argType === undefined )
+			{
+				SWYM.LogError(errorNode, "Array.Element requires an array argument.");
+				return SWYM.DontCareType;
+			}
+			if( argType.baked === undefined || !SWYM.IsOfType(argType.baked, SWYM.ArrayType) )
+			{
+				SWYM.LogError(errorNode, "Array.Element requires an argument known at compile time.");
+				return SWYM.DontCareType;
+			}
+			
+			var newEnum = object(SWYM.GetOutType(argType, SWYM.IntType));
+			newEnum.enumValues = argType.baked;
+			newEnum.debugName = undefined;
+			return SWYM.BakedValue(newEnum);
+		}
+	}],
+	
+	"fn#forEach":
+	[{
+		expectedArgs:{ "block":{index:0, typeCheck:SWYM.CallableType} },
+		customCompile:function(argTypes, cscope, executable, errorNode)
+		{
+			var argType = SWYM.GetArgType(argTypes[0], errorNode);
+			if( argType === undefined )
+			{
+				SWYM.LogError(errorNode, "forEach requires a block with an argument type.");
+				return SWYM.DontCareType;
+			}
+			if( argType.enumValues === undefined )
+			{
+				SWYM.LogError(errorNode, "forEach(->) - block argument type is not enumerable.");
+				return SWYM.DontCareType;
+			}
+			
+			executable.push("#SingletonArray");
+			executable.push("#Literal");
+			executable.push(argType.enumValues);
+			executable.push("#Swap");			
+			executable.push("#MultiClosureCall");
+			
+			return SWYM.ArrayTypeContaining( SWYM.GetOutType( argTypes[0], argType) );
+		}
+	}],
+
 }
 
 //SWYM.stdlyb = "";
@@ -2465,6 +2533,7 @@ Array.'tail' returns .atEach[1 ..< .length]\n\
 Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
 Array.'stem'(Int 'length') returns .slice(length=length)\n\
+Array.'stemWhere'('test') returns .slice(end=.firstKeyWhere{.!(test)})\n\
 Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
@@ -2586,6 +2655,7 @@ Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then
 \n\
 Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}.key\n\
 Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
+Array.'tailWhere'('test') returns .slice(start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Table.'values' returns [.at(.keys.each)]\n\
 \n\

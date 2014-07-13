@@ -371,8 +371,22 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	{
 		return typeA;
 	}
+	
+	if( typeA === undefined )
+	{
+		return typeB;
+	}
+	else if( typeB === undefined )
+	{
+		return typeA;
+	}
 
-	if( (typeA !== undefined && typeA.multivalueOf !== undefined) !== (typeB !== undefined && typeB.multivalueOf !== undefined) )
+	if( typeA.multivalueOf !== undefined && typeB.multivalueOf !== undefined )
+	{
+		return SWYM.ToMultivalueType(typeA.multivalueOf, typeB.multivalueOf);
+	}
+	
+	if( typeA.multivalueOf !== undefined || typeB.multivalueOf !== undefined )
 	{
 		SWYM.LogError(errorContext, "Fsckup: cannot unify types with inconsistent multivaluedness");
 		return undefined;
@@ -383,13 +397,27 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		return SWYM.VoidType;
 	}
 
-	if( !typeA || typeA.nativeType === "NoValues" )
+	if( typeA.nativeType === "NoValues" )
 	{
 		return typeB;
 	}
-	else if( !typeB || typeB.nativeType === "NoValues" )
+	else if( typeB.nativeType === "NoValues" )
 	{
 		return typeA;
+	}
+
+	if( typeA.baked !== undefined || typeB.baked !== undefined )
+	{
+		if( SWYM.IsEqual(typeA.baked, typeB.baked) )
+		{
+			return typeA;
+		}
+		
+		// throw away the baked information, find a common type between the two
+		var strippedTypeA = SWYM.StripBakedInformation( typeA, errorContext );
+		var strippedTypeB = SWYM.StripBakedInformation( typeB, errorContext );
+		
+		return SWYM.TypeUnify(strippedTypeA, strippedTypeB, errorContext);
 	}
 
 	if( SWYM.TypeMatches(typeA, typeB) )
@@ -588,6 +616,33 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	return result;
 }
 
+SWYM.StripBakedInformation = function(baseType, errorContext)
+{
+	if( baseType.baked === undefined )
+	{
+		return baseType;
+	}
+	else if( baseType.isStringChar )
+	{
+		return SWYM.StringCharType;
+	}
+	else if( baseType.multivalueOf !== undefined )
+	{
+		if( baseType.multivalueOf.isStringChar )
+		{
+			return SWYM.ToMultivalueType(SWYM.StringCharType);
+		}
+		else
+		{
+			return SWYM.ToMultivalueType( SWYM.TypeOfValue(baseType.baked, errorContext) );
+		}
+	}
+	else
+	{
+		return SWYM.TypeOfValue(baseType.baked, errorContext);
+	}
+}
+
 SWYM.LazyArrayTypeContaining = function(elementType)
 {
 	var result = SWYM.ArrayTypeContaining(elementType);
@@ -669,6 +724,11 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 		result.tupleTypes = arrayType.tupleTypes;
 	}
 	
+	if( arrayType && arrayType.baked !== undefined )
+	{
+		result.baked = arrayType.baked;
+	}
+	
 	return result;
 }
 
@@ -702,7 +762,7 @@ SWYM.TableTypeFromTo = function(keyType, valueType, accessors)
 	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:SWYM.ValueType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
 }
 
-SWYM.BakedValue = function(value, errorContext)
+SWYM.TypeOfValue = function(value, errorContext)
 {
 	var t = typeof value;
 	var result;
@@ -710,33 +770,67 @@ SWYM.BakedValue = function(value, errorContext)
 	{
 		return SWYM.VoidType;
 	}
+	else if( value === SWYM.value_novalues )
+	{
+		return SWYM.DontCareType;
+	}
 	else if( t === "number" )
 	{
 		if( value % 1 == 0 )
-			result = object(SWYM.IntType);
+			return SWYM.IntType;
 		else
-			result = object(SWYM.NumberType);
+			return SWYM.NumberType;
 	}
 	else if( t === "boolean" )
 	{
-		result = object(SWYM.BoolType);
+		return SWYM.BoolType;
 	}
 	else if( value.type === "string" )
 	{
 		if( value.isChar )
 		{
-			result = object(SWYM.StringCharType);
+			return SWYM.StringCharType;
 		}
 		else
 		{
-			result = object(SWYM.StringType);
-			result.memberTypes = object(result.memberTypes);
-			result.memberTypes.length = SWYM.BakedValue(value.length);
+			return SWYM.StringType;
 		}
 	}
 	else if( value.type === "jsArray" )
 	{
-		result = object(SWYM.ArrayType);
+		// TODO: element type
+		return SWYM.ArrayType;
+	}
+	else if( value.type === "rangeArray" )
+	{
+		return SWYM.RangeArrayType;
+	}
+	else if( value.type === "type" )
+	{
+		return SWYM.TypeType;
+	}
+	else if( value.type === "novalues" )
+	{
+		return SWYM.NoValues;
+	}
+	else
+	{
+		SWYM.LogError(errorContext, "Fsckup: Unrecognized value '"+SWYM.ToDebugString(value)+"' passed to TypeOfValue");
+		return {type:"type"};
+	}
+}
+
+SWYM.BakedValue = function(value, errorContext)
+{
+	var baseType = SWYM.TypeOfValue(value, errorContext);
+	var result = object(baseType);
+	if( baseType === SWYM.StringType )
+	{
+		result.memberTypes = object(baseType.memberTypes);
+		result.memberTypes.length = SWYM.BakedValue(value.length);
+	}
+	else if( baseType === SWYM.ArrayType )
+	{
 		result.memberTypes = object(result.memberTypes);
 		result.memberTypes.length = SWYM.BakedValue(value.length);
 		if( value.length === 0 )
@@ -744,27 +838,68 @@ SWYM.BakedValue = function(value, errorContext)
 			result.outType = SWYM.DontCareType;
 		}
 	}
-	else if( value.type === "rangeArray" )
-	{
-		result = object(SWYM.RangeArrayType);
-	}
-	else if( value.type === "type" )
-	{
-		result = object(SWYM.TypeType);
-	}
-	else if( value.type === "novalues" )
-	{
-		result = object(SWYM.NoValues);
-	}
-	else
-	{
-		SWYM.LogError(errorContext, "Fsckup: Unrecognized value '"+SWYM.ToDebugString(value)+"' passed to BakedValue");
-		result = {type:"type"};
-	}
 
 	result.baked = value;
 	result.debugName = "Literal("+SWYM.ToDebugString(value)+")";
 	return result;
+}
+
+SWYM.GetArgType = function(callableType, errorContext)
+{
+	if( callableType.argType !== undefined )
+	{
+		return callableType.argType;
+	}
+	
+	if( callableType.needsCompiling )
+	{
+		var compileBlock = callableType.needsCompiling[0];
+		var argNode = compileBlock.argNode;
+		
+		if( argNode !== undefined &&
+			argNode.op !== undefined &&
+			argNode.op.text === "(" &&
+			argNode.children[0] === undefined &&
+			argNode.children[1] !== undefined )
+		{
+			argNode = argNode.children[1];
+		}
+
+		if( argNode === undefined )
+		{
+			return SWYM.VoidType;
+		}
+		else if( argNode.type === "decl" )
+		{
+			if( argNode.children[0] !== undefined )
+			{
+				var cscope = compileBlock.cscope;
+				var unusedExecutable = [];
+				var resultType = SWYM.CompileNode(argNode.children[0], cscope, unusedExecutable);
+				
+				if( resultType === undefined || resultType.baked === undefined || resultType.baked.type !== "type" )
+				{
+					SWYM.LogError(argNode.children[0], "Expected a type here");
+					return SWYM.DontCareType;
+				}
+				else
+				{
+					return resultType.baked;
+				}
+			}
+		}
+		else if ( argNode.op !== undefined )
+		{
+			if( argNode.op.text === "[" )
+			{
+				return SWYM.ArrayType;
+			}
+			else if( argNode.op.text === "{")
+			{
+				return SWYM.TableType;
+			}
+		}
+	}
 }
 
 SWYM.GetOutType = function(callableType, argType, errorContext)

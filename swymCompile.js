@@ -20,7 +20,14 @@ SWYM.Compile = function(parsetree)
 		{
 			if( SWYM.doFinalOutput )
 			{
-				SWYM.DisplayOutput(value.data);
+				if( value !== undefined )
+				{
+					SWYM.DisplayOutput(value.data);
+				}
+				else
+				{
+					SWYM.LogError(0, "Fsckup: Program result was undefined.");
+				}
 			}
 		});
 	}
@@ -569,7 +576,12 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 			}
 			else if( theFunction.expectedArgs[expectedArgName].defaultValueNode === undefined )
 			{
-				overloadResult.error = "Expected argument '"+expectedArgName+"' not found when calling function '"+fnName+"'";
+				var typeSig = "";
+				if( theFunction.expectedArgs[expectedArgName].typeCheck !== undefined )
+				{
+					typeSig = "("+SWYM.TypeToString( theFunction.expectedArgs[expectedArgName].typeCheck ) + ") ";
+				}
+				overloadResult.error = "Function '"+fnName+"' requires an additional argument "+typeSig+"'"+expectedArgName+"'";
 				overloadResult.quality = 10; // very bad match
 				return overloadResult;
 			}

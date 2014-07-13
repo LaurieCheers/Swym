@@ -176,9 +176,10 @@ function runAllTests()
   runTest("'h'=1st(\"H\"); [[h,h,h,h],1]", "[\"HHHH\",1]");
   runTest("[\"Hello\".each]", "\"Hello\"");
   runTest("[\"B\"..\"Y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXY\"");
-  runTest("[\"B\"..\"y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxy\"");
-  runTest("[\"y\"..\"B\"]", "\"yzAB\"");
-  runTest("[\"B\"..\"5\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYZ012345\"");
+  runTest("[\"B\"..\"y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYbcdefghijklmnopqrstuvwxy\"");
+  runTest("[\"y\"..\"B\"]", "\"yxwvutsrqponmlkjihgfedcbYXWVUTSRQPONMLKJIHGFEDCB\"");
+  runTest("[\"1\"..\"5\"]", "\"12345\"");
+  runTest("[\"B\"..\"5\"]", "~error~");
   runTest("[\"9\"..\"0\"]", "\"9876543210\"");
   runTest("[1+1] == [4/2]", "true");
   runTest("Number.'divides'('n') {n%this == 0};  Number.'isPrime' returns length( [1..this].where{.divides(this)} ) == 2;  [0..20].where{.isPrime}", "[2,3,5,7,11,13,17,19]");
@@ -237,6 +238,8 @@ function runAllTests()
   endReportTable();
 
   addReportTable("Type system torture");
+  runTest("novalues.Type", "DontCare");
+  runTest("value_novalues.Type", "DontCare");
   runTest("true+1", "~error~");
   runTest("Bool 'b' = [false, true].1st", "false");
   runTest("4.{it+1}+1", "6");

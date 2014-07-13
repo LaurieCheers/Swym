@@ -1324,95 +1324,45 @@ SWYM.CharRange = function(startStr,endStr)
 	var ninecode = "9".charCodeAt(0);
 	var startCode = startStr.data.charCodeAt(0);
 	var endCode = endStr.data.charCodeAt(0);
+	var startCodeAZ = startCode >= Acode && startCode <= Zcode;
+	var startCodeaz = startCode >= acode && startCode <= zcode;
+	var endCodeAZ = endCode >= Acode && endCode <= Zcode;
+	var endCodeaz = endCode >= acode && endCode <= zcode;
 
 	var result = "";
 
-	if( startCode >= Acode && startCode <= Zcode )
+	if( startCode >= zerocode && startCode <= ninecode && endCode >= zerocode && endCode <= ninecode )
 	{
-		if( endCode >= Acode && endCode <= Zcode )
-		{
-			// simple uppercase range
-			return SWYM.StringWrapper( SWYM.SimpleCharRange(startCode,endCode, result) );
-		}
-		else if( startCode === Zcode )
-		{
-			// start with reversed uppercase...
-			result = SWYM.SimpleCharRange(startCode,Acode, result);
-		}
-		else
-		{
-			// start with uppercase...
-			result = SWYM.SimpleCharRange(startCode,Zcode, result);
-		}
+		// simple number range
+		return SWYM.StringWrapper( SWYM.SimpleCharRange(startCode,endCode, result) );
 	}
-	else if( startCode >= acode && startCode <= zcode )
+	else if( startCodeAZ && endCodeAZ )
 	{
-		if( endCode >= acode && endCode <= zcode )
-		{
-			// simple lowercase range
-			return SWYM.StringWrapper( SWYM.SimpleCharRange(startCode,endCode, result) );
-		}
-		else if( startCode === zcode )
-		{
-			// start with reversed lowercase...
-			result = SWYM.SimpleCharRange(startCode,acode, result);
-		}
-		else
-		{
-			// start with lowercase...
-			result = SWYM.SimpleCharRange(startCode,zcode, result);
-		}
+		// simple uppercase range
+		result = SWYM.SimpleCharRange(startCode,endCode, result);
 	}
-	else if( startCode >= zerocode && startCode <= ninecode )
+	else if( startCodeAZ && endCodeaz )
 	{
-		if( endCode >= zerocode && endCode <= ninecode )
-		{
-			// simple number range
-			return SWYM.StringWrapper( SWYM.SimpleCharRange(startCode,endCode, result) );
-		}
-		else if( startCode === ninecode )
-		{
-			// start with reversed digits...
-			result = SWYM.SimpleCharRange(startCode,zerocode, result);
-		}
-		else
-		{
-			// start with digits...
-			result = SWYM.SimpleCharRange(startCode,ninecode, result);
-		}
+		// uppercase then lowercase
+		result = SWYM.SimpleCharRange(startCode,endCode+(Acode-acode), result);
+		result = SWYM.SimpleCharRange(startCode+(acode-Acode),endCode, result);
+	}
+	else if( startCodeaz && endCodeaz )
+	{
+		// simple lowercase range
+		result = SWYM.SimpleCharRange(startCode,endCode, result);
+	}
+	else if( startCodeaz && endCodeAZ )
+	{
+		// lowercase then uppercase
+		result = SWYM.SimpleCharRange(startCode,endCode+(acode-Acode), result);
+		result = SWYM.SimpleCharRange(startCode+(Acode-acode),endCode, result);
+	}
+	else
+	{
+		SWYM.LogError(-1, "Invalid character range: \""+(startStr.data)+"\" to \""+(endStr.data)+"\"");
 	}
 	
-	if( endCode == Acode )
-	{
-		// ...then reversed uppercase
-		result = SWYM.SimpleCharRange(Zcode,endCode, result);
-	}
-	else if( endCode == acode )
-	{
-		// ...then reversed lowercase
-		result = SWYM.SimpleCharRange(zcode,endCode, result);
-	}
-	else if( endCode == zerocode )
-	{
-		// ...then reversed digitscase
-		result = SWYM.SimpleCharRange(ninecode,endCode, result);
-	}
-	else if( endCode >= Acode && endCode <= Zcode )
-	{
-		// ...then uppercase
-		result = SWYM.SimpleCharRange(Acode,endCode, result);
-	}
-	else if( endCode >= acode && endCode <= zcode )
-	{
-		// ...then lowercase
-		result = SWYM.SimpleCharRange(acode,endCode, result);
-	}
-	else if( endCode >= zerocode && endCode <= ninecode )
-	{
-		// ...then digits
-		result = SWYM.SimpleCharRange(zerocode,endCode, result);
-	}
-
 	return SWYM.StringWrapper(result);
 }
 
