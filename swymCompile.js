@@ -69,10 +69,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		{
 			executable.push("#EtcSequence");
 			executable.push(SWYM.EtcCreateGenerator(parsetree.etcSequence));
-			if( parsetree.etcSequence.integer )
-				return SWYM.IntType;
-			else
-				return SWYM.NumberType;
+			return parsetree.etcSequence.type;
 		}
 		else
 		{
@@ -416,7 +413,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 	if( !overloads )
 	{
 		SWYM.LogError(fnNode, "Unknown function "+fnName);
-		return;
+		return SWYM.DontCareType;
 	}
 	
 	var validOverloads = [];
@@ -453,7 +450,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 	if( validOverloads.length === 0 )
 	{
 		SWYM.LogError(fnNode, bestError);
-		return;
+		return SWYM.DontCareType;
 	}
 
 	var chosenOverload = undefined;
@@ -1033,6 +1030,13 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		var finalName = argNames[argIdx];
 		var argNode = argTypes[argIdx];
 		var defaultValueNode = undefined;
+		
+		if( finalName === "__" )
+		{
+			// turn anonymous arguments (e.g: deconstructors with named parts,
+			// but the argument as a whole is anonymous) into positional arguments
+			finalName += argIdx;
+		}
 
 		var argData = {finalName:finalName, index:argIdx};
 
@@ -1066,18 +1070,16 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 				// deconstructing arg
 				argData.deconstructNode = argNode;
 			}
-			else
+				
+			// a type check
+			var typeCheckType = SWYM.GetTypeFromPatternNode(argNode, cscope);
+
+			if( typeCheckType === undefined && argNode !== undefined )
 			{
-				// a type check
-				var typeCheckType = SWYM.GetTypeFromExpression(argNode, cscope);
-
-				if( typeCheckType === undefined && argNode !== undefined )
-				{
-					SWYM.LogError(argNode, "Invalid type expression");
-				}
-
-				argData.typeCheck = typeCheckType;
+				SWYM.LogError(argNode, "Invalid type expression");
 			}
+
+			argData.typeCheck = typeCheckType;
 		}
 		
 		expectedArgs[finalName] = argData;
@@ -1208,40 +1210,103 @@ SWYM.AddSwappedFunctionDeclaration = function(fnName, baseName, cscope, baseFunc
 	SWYM.AddFunctionDeclaration(fnName, cscope, swappedFunction);
 }
 
-SWYM.GetTypeFromExpression = function(node, cscope)
+SWYM.GetTypeFromPatternNode = function(node, cscope)
 {
-	var outType;
-	var debugName;
-	
-	if( node.type === "name" )
-	{		
-		debugName = node.text;
-		outType = cscope[node.text];
-	}
-	else if( node.type === "fnnode" )
+	if( node === undefined )
 	{
-		var executable = [];
-		outType = SWYM.CompileFunctionCall(node, cscope, executable);
-		debugName = node.name + "()";
+		return SWYM.AnythingType;
+	}
+	else if ( node.type === "node" && node.op.text === "[" )
+	{
+		// array/tuple pattern such as [Int, Int]
+		var elements = [];
+		if( node.children[1] === undefined )
+		{
+			return SWYM.BakedValue(SWYM.jsArray([]));
+		}
+		else if( node.children[1].op !== undefined )
+		{
+			var opText = node.children[1].op.text;
+			if( opText === ".." || opText === "..<" || opText === "<.." || opText === "<..<" )
+			{
+				return SWYM.RangeArrayType;
+			}
+			else if( opText === "," )
+			{
+				var result = SWYM.GetTypeFromTupleContentNode( node.children[1], cscope, elements );
+				return SWYM.TupleTypeOf(elements, undefined, node);
+			}
+		}
+		else
+		{
+			return SWYM.TupleTypeOf( [SWYM.GetTypeFromPatternNode(node.children[1], cscope)], undefined, node );
+		}
 	}
 	else
 	{
-		SWYM.LogError(node, "Invalid type expression: "+node);
-		return;
-	}
+		var outType;
+		var debugName;
+		
+		if( node.type === "decl" )
+		{
+			// a declaration such as Int 'x'
+			if( node.children !== undefined )
+			{
+				return SWYM.GetTypeFromPatternNode(node.children[0], cscope);
+			}
+			else
+			{
+				return SWYM.AnythingType;
+			}
+		}
+		else if( node.type === "name" )
+		{
+			// a type literal such as Int
+			debugName = node.text;
+			outType = cscope[node.text];
+		}
+		else if( node.type === "fnnode" )
+		{
+			// a type constructor expression such as Array(Int)
+			var executable = [];
+			outType = SWYM.CompileFunctionCall(node, cscope, executable);
+			debugName = node.name + "()";
+		}
+		else
+		{
+			SWYM.LogError(node, "Invalid type expression: "+node);
+			return;
+		}
 
-	if( outType === undefined )
-	{
-		SWYM.LogError(node, "Unknown type name "+debugName);
-		return;
+		if( outType === undefined )
+		{
+			SWYM.LogError(node, "Unknown type name "+debugName);
+			return;
+		}
+		else if ( outType.baked === undefined || outType.baked.type !== "type" )
+		{
+			SWYM.LogError(node, "Name "+debugName+" does not describe a type.");
+			return;
+		}
+		
+		return outType.baked;
 	}
-	else if ( outType.baked === undefined || outType.baked.type !== "type" )
+}
+
+SWYM.GetTypeFromTupleContentNode = function( node, cscope, elements )
+{
+	if( node !== undefined )
 	{
-		SWYM.LogError(node, "Name "+debugName+" does not describe a type.");
-		return;
+		if( node.op && node.op.text === "," )
+		{
+			SWYM.GetTypeFromTupleContentNode( node.children[0], cscope, elements );
+			SWYM.GetTypeFromTupleContentNode( node.children[1], cscope, elements );
+		}
+		else
+		{
+			elements.push( SWYM.GetTypeFromPatternNode(node, cscope) );
+		}
 	}
-	
-	return outType.baked;
 }
 
 SWYM.CompileFunctionBody = function(fnName, theFunction, cscope, executable)
@@ -1437,7 +1502,7 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 	{
 		if( argNode )
 		{
-			SWYM.LogError(argNode, "A block with an argument name cannot be called with a void argument.");
+			SWYM.LogError(argNode, "This block requires a non-Void argument.");
 		}
 		
 		innerCScope = cscope;
@@ -1453,19 +1518,17 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 		{
 			argNode = argNode.children[1];
 		}
+		
+		var requiredArgType = SWYM.GetTypeFromPatternNode( argNode, cscope );
+		SWYM.TypeCoerce(requiredArgType, argType, argNode, "Block parameter type");
 
-		if( !argNode )
-		{
-			argName = "it";
-			innerCScope["__default"] = {redirect:"it"};
-		}
-		else if( argNode.type === "decl" )
+		if( argNode !== undefined && argNode.type === "decl" )
 		{
 			argName = argNode.value;
 			innerCScope["__default"] = undefined;
 			innerCScope["it"] = undefined;
 		}
-		else if ( argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
+		else if ( argNode !== undefined && argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
 		{
 			// destructuring an array/table arg
 			argName = "~arglist~";
@@ -1480,8 +1543,14 @@ SWYM.CompileLambdaInternal = function(compileBlock, argType)
 		}
 		else
 		{
-			SWYM.LogError(argNode, "Don't understand argument name "+argNode);
-			return {type:"novalues"};
+			argName = "it";
+			innerCScope["__default"] = {redirect:"it"};
+
+			if( requiredArgType === undefined )
+			{
+				SWYM.LogError(argNode, "Don't understand argument name "+argNode);
+				return {type:"novalues"};
+			}
 		}
 		
 		innerCScope[argName] = argType;
@@ -1626,13 +1695,13 @@ SWYM.CompileDeconstructor = function(templateNode, cscope, executable, argType)
 	}
 	else
 	{
-		SWYM.LogError(templateNode, "Unexpected structure in argument declaration")
+		//SWYM.LogError(templateNode, "Unexpected structure in argument declaration")
 	}
 }
 
 SWYM.CompileRangeDeconstructor = function(rangeNode, overlapStart, overlapEnd, cscope, executable, argType)
 {
-	SWYM.TypeCoerce(argType, SWYM.RangeArrayType, rangeNode);
+	SWYM.TypeCoerce(SWYM.RangeArrayType, argType, rangeNode);
 	
 	if( rangeNode.children[0] !== undefined && rangeNode.children[1] !== undefined )
 	{
@@ -2190,7 +2259,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		}
 		else if( parsetree.etcType === "etc.." )
 		{
-			haltCondition = function(value, haltValue){ if( value == haltValue ){ SWYM.g_etcState.halt = true; } return false; }
+			haltCondition = function(value, haltValue){ if( SWYM.IsEqual(value, haltValue) ){ SWYM.g_etcState.halt = true; } return false; }
 		}
 		else
 		{

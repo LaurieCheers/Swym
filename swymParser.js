@@ -571,7 +571,7 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 		rhs.isDecl = true;
 		rhs.pos = lhs.pos;
 
-		// declare the implicit # parameter
+		// declare the implicit # parameter (for numeric functions like .1st)
 		if( lhs.value[0] === "#" )
 		{
 			rhs.children.push(SWYM.NewToken("name", lhs.pos, "Number"));

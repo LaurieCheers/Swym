@@ -52,7 +52,8 @@ SWYM.EtcMatchesExceptChildren = function(leftNode, rightNode)
 			return true;
 		}
 		else if ( leftNode.etcSequence ||
-			(typeof leftNode.value === "number" && typeof rightNode.value === "number")
+			(typeof leftNode.value === "number" && typeof rightNode.value === "number") ||
+			(typeof leftNode.value === "string" && typeof rightNode.value === "string")
 			)
 		{
 			// NB not true - this value signifies a partial match. see "baseMatch !== true" in SWYM.MergeEtc
@@ -666,11 +667,69 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 
 SWYM.EtcCreateGenerator = function(sequence)
 {
+	if( typeof(sequence[0]) === "string" )
+	{
+		// string sequences
+		return SWYM.EtcCreateStringGenerator(sequence)
+	}
+	else if( typeof(sequence[0]) === "number" )
+	{
+		// number sequences
+		return SWYM.EtcCreateNumberGenerator(sequence)
+	}
+}
+
+SWYM.EtcCreateStringGenerator = function(sequence)
+{
 	var base = sequence[0];
+	sequence.type = SWYM.StringType;
 
 	if( sequence.length === 1 )
 	{
-		sequence.integer = base%1==0;
+		return function(index){ return base; };
+	}
+	
+	// Valid rules for string generators:
+	//
+	// letters progress through the alphabet in sequence (automatically end after Z?)
+	var second = sequence[1];
+	
+	if( base.length === second.length )
+	{
+		var offsets = [];
+		for(var Idx = 0; Idx < base.length; Idx++ )
+		{
+			offsets[Idx] = (second.charCodeAt(Idx) - base.charCodeAt(Idx));
+		}
+		
+		var sequenceFn = function(index)
+		{
+			var result = "";
+			for(var Idx = 0; Idx < base.length; ++Idx )
+			{
+				result += String.fromCharCode( base.charCodeAt(Idx) + offsets[Idx]*index );
+			}
+			return result;
+		};
+		
+		// this will match all 2-element sequences.
+		if ( SWYM.EtcTryGenerator(sequence, sequenceFn) )
+		{
+			return function(index){ return SWYM.StringWrapper( sequenceFn(index) ); };
+		}
+	}
+	
+	SWYM.LogError(0, "etc - can't find a rule for sequence ["+sequence+"].");
+   	return undefined;
+}
+
+SWYM.EtcCreateNumberGenerator = function(sequence)
+{
+	var base = sequence[0];
+	
+	if( sequence.length === 1 )
+	{
+		sequence.type = (base%1==0)? SWYM.IntType: SWYM.NumberType;
 		
 		if( sequence.finalExample !== undefined && sequence.finalExample < base )
 		{
@@ -695,7 +754,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 		else if ( second < base )
 			sequence.direction = "descending";
 			
-		sequence.integer = base%1==0 && second%1==0;
+		sequence.type = (base%1==0 && second%1==0)? SWYM.IntType: SWYM.NumberType;
 
 		return arithmetic;
 	}
@@ -711,7 +770,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 			else if ( second < base )
 				sequence.direction = "descending";
 				
-			sequence.integer = base%1==0 && (second/base)%1==0;
+			sequence.type = (base%1==0 && (second/base)%1==0)? SWYM.IntType: SWYM.NumberType;
 			
 			return geometric;
 		}
@@ -736,7 +795,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 		else if ( firstDiff <= 0 && pDiff <= 0 )
 			sequence.direction = "descending";
 			
-		sequence.integer = base%1==0 && firstDiff%1==0 && pDiff%1==0;
+		sequence.type = (base%1==0 && firstDiff%1==0 && pDiff%1==0)? SWYM.IntType: SWYM.NumberType;
 
 		return quadratic;
 	}
@@ -778,7 +837,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 				sequence.direction = "descending";
 		}
 			
-		sequence.integer = base%1==0 && firstDiff%1==0 && factor%1==0;
+		sequence.type = (base%1==0 && firstDiff%1==0 && factor%1==0)? SWYM.IntType: SWYM.NumberType;
 
 		return cumgeometric;
 	}
@@ -798,7 +857,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 
 	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeo))
 	{
-		sequence.integer = base%1==0 && arithStep%1==0 && geoFactor%1==0;
+		sequence.type = (base%1==0 && arithStep%1==0 && geoFactor%1==0)? SWYM.IntType: SWYM.NumberType;
 
 		return arithxgeo;
 	}
@@ -821,7 +880,7 @@ SWYM.EtcCreateGenerator = function(sequence)
 
 	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeoB))
 	{
-		sequence.integer = base%1==0 && arithStepB%1==0 && geoFactorB%1==0;
+		sequence.type = (base%1==0 && arithStepB%1==0 && geoFactorB%1==0)? SWYM.IntType: SWYM.NumberType;
 
 		return arithxgeoB;
 	}

@@ -88,11 +88,6 @@ SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 		
 		if( typeCheck.nativeType === "Number" )
 		{
-			if( typeCheck.multipleOf !== undefined && (value % typeCheck.multipleOf) !== 0 )
-			{
-				return false;
-			}
-
 			if( typeCheck.greaterThan !== undefined && value <= typeCheck.greaterThan )
 			{
 				return false;
@@ -109,6 +104,18 @@ SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 			}
 
 			if( typeCheck.lessThanEq !== undefined && value > typeCheck.lessThanEq )
+			{
+				return false;
+			}
+			
+			if( value === Infinity || value === -Infinity )
+			{
+				if( typeCheck.forbidInfinity )
+				{
+					return false;
+				}
+			}
+			else if( typeCheck.multipleOf !== undefined && (value % typeCheck.multipleOf) !== 0 )
 			{
 				return false;
 			}
@@ -383,7 +390,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 
 	if( typeA.multivalueOf !== undefined && typeB.multivalueOf !== undefined )
 	{
-		return SWYM.ToMultivalueType(typeA.multivalueOf, typeB.multivalueOf);
+		return SWYM.ToMultivalueType(SWYM.TypeUnify(typeA.multivalueOf, typeB.multivalueOf));
 	}
 	
 	if( typeA.multivalueOf !== undefined || typeB.multivalueOf !== undefined )
@@ -736,7 +743,11 @@ SWYM.TupleTypeOf = function(tupleTypes, elementType, errorContext)
 {
 	if( elementType === undefined )
 	{
-		//TODO: unify the elements of tupleTypes
+		elementType = SWYM.DontCareType;
+		for( var Idx = 0; Idx < tupleTypes.length; ++Idx )
+		{
+			elementType = SWYM.TypeUnify(tupleTypes[Idx], elementType);
+		}
 	}
 	var result = SWYM.ArrayTypeContaining(elementType, false, errorContext);
 	SWYM.AddTupleInfo(result, tupleTypes, errorContext);
@@ -865,40 +876,7 @@ SWYM.GetArgType = function(callableType, errorContext)
 			argNode = argNode.children[1];
 		}
 
-		if( argNode === undefined )
-		{
-			return SWYM.VoidType;
-		}
-		else if( argNode.type === "decl" )
-		{
-			if( argNode.children[0] !== undefined )
-			{
-				var cscope = compileBlock.cscope;
-				var unusedExecutable = [];
-				var resultType = SWYM.CompileNode(argNode.children[0], cscope, unusedExecutable);
-				
-				if( resultType === undefined || resultType.baked === undefined || resultType.baked.type !== "type" )
-				{
-					SWYM.LogError(argNode.children[0], "Expected a type here");
-					return SWYM.DontCareType;
-				}
-				else
-				{
-					return resultType.baked;
-				}
-			}
-		}
-		else if ( argNode.op !== undefined )
-		{
-			if( argNode.op.text === "[" )
-			{
-				return SWYM.ArrayType;
-			}
-			else if( argNode.op.text === "{")
-			{
-				return SWYM.TableType;
-			}
-		}
+		return SWYM.GetTypeFromPatternNode( argNode, compileBlock.cscope );
 	}
 }
 

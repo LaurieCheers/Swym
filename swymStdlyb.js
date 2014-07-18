@@ -57,7 +57,8 @@ SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
 SWYM.IntType = {type:"type", nativeType:"Number", multipleOf:1, debugName:"Int"};
-SWYM.VoidType = {type:"type", nativeType:"Void", debugName:"Void", baked:null};
+SWYM.BakedVoidType = {type:"type", nativeType:"Void", debugName:"Void", baked:null};
+SWYM.VoidType = {type:"type", nativeType:"Void", debugName:"Void"};
 SWYM.TypeType = {type:"type", nativeType:"Type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Type"};
 
 SWYM.IntArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType}, debugName:"Array(Int)"};
@@ -790,7 +791,11 @@ SWYM.operators = {
 					var literalValue = SWYM.RangeOp(startType.baked, endType.baked, true, true, undefined);
 					executable.push("#Literal");
 					executable.push( literalValue );
-					return SWYM.ArrayToMultivalueType( SWYM.BakedValue(literalValue) );
+					
+					var resultType = SWYM.ArrayTypeContaining(SWYM.IntType, false);
+					resultType.baked = literalValue;
+					resultType = SWYM.ArrayToMultivalueType( resultType );
+					return resultType;
 				}
 				else
 				{
@@ -1300,7 +1305,7 @@ SWYM.DefaultGlobalCScope =
 	"JSString": SWYM.BakedValue(SWYM.JSStringType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
-	"novalues": {type:"type", debugName:"DontCare", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
+	"novalues": {type:"type", debugName:"Literal(<no_values>)", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
 	
 	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
@@ -1585,17 +1590,17 @@ SWYM.DefaultGlobalCScope =
 						(argTypes[3] && argTypes[3].multivalueOf !== undefined);
 			
 			var selfType = SWYM.ToSinglevalueType(argTypes[0]);
-			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType);
+			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType, errorNode);
 						
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
 				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked, errorNode);
 			}
-			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType);
+			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType, errorNode);
 			
 			// TODO: do some kind of type-subtract so we can pass selfType minus bodyType in here.
-			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType);
+			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType, errorNode);
 			SWYM.TypeCoerce(SWYM.BoolType, condType, errorNode);
 			
 			// optimizations needed -
@@ -2384,22 +2389,80 @@ SWYM.DefaultGlobalCScope =
 				SWYM.LogError(errorNode, "forEach requires a block with an argument type.");
 				return SWYM.DontCareType;
 			}
-			if( argType.enumValues === undefined )
+			if( argType.baked !== undefined )
+			{
+				executable.push("#Literal");
+				executable.push(argType.baked);
+				executable.push("#Swap");			
+				executable.push("#ClosureCall");
+			}
+			else if( argType.enumValues !== undefined )
+			{
+				executable.push("#SingletonArray");
+				executable.push("#Literal");
+				executable.push(argType.enumValues);
+				executable.push("#Swap");			
+				executable.push("#MultiClosureCall");
+			}
+			else if( argType.tupleTypes !== undefined )
+			{
+				executable.push("#SingletonArray");
+				for( var Idx = 0; Idx < argType.tupleTypes.length; ++Idx )
+				{
+					var tupleElementType = argType.tupleTypes[Idx];
+					if( tupleElementType.baked !== undefined )
+					{
+						executable.push("#Literal");
+						executable.push(tupleElementType.baked);
+						executable.push("#SingletonArray");
+					}
+					else if( tupleElementType.enumValues !== undefined )
+					{
+						executable.push("#Literal");
+						executable.push(tupleElementType.enumValues);
+					}
+					else
+					{
+						SWYM.LogError(errorNode, "forEach - tuple element "+SWYM.TypeToString(tupleElementType)+" is not enumerable.");
+					}
+				}
+				executable.push("#MultiNative");
+				executable.push(argType.tupleTypes.length+1);
+				executable.push(function()
+				{
+					var args = Array.prototype.slice.call(arguments);
+					var closure = args.shift();
+					return SWYM.ClosureCall(closure, SWYM.jsArray(args));
+				});
+			}
+			else
 			{
 				SWYM.LogError(errorNode, "forEach(->) - block argument type is not enumerable.");
 				return SWYM.DontCareType;
 			}
-			
-			executable.push("#SingletonArray");
-			executable.push("#Literal");
-			executable.push(argType.enumValues);
-			executable.push("#Swap");			
-			executable.push("#MultiClosureCall");
-			
+				
 			return SWYM.ArrayTypeContaining( SWYM.GetOutType( argTypes[0], argType) );
 		}
 	}],
-
+	
+	"fn#Tuple":
+	[{
+		expectedArgs:{ "pattern":{index:0, typeCheck:SWYM.ArrayTypeContaining(SWYM.TypeType)} },
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode)
+		{
+			if( !argTypes[0] || !argTypes[0].baked )
+			{
+				SWYM.LogError(0, "Argument to the Tuple function is not known at compile time!");
+				return SWYM.DontCareType;
+			}
+			
+			var result = SWYM.TupleTypeOf(argTypes[0].baked, undefined, errorNode);
+			executable.push("#Literal");
+			executable.push(result);
+			return SWYM.BakedValue(result);
+		}
+	}],
 }
 
 //SWYM.stdlyb = "";
@@ -2474,6 +2537,7 @@ Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
 Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
 Array.'cells' returns array(.length) 'idx'->{ Cell.new(idx, this) }\n\
 Table.'cells' returns array(.keys.length) 'idx'->{ Cell.new(this.keys.at(idx), this) }\n\
+Table.'cellTable' returns table(.keys) 'key'->{ Cell.new(key, this) }\n\
 Cell.Array.'table' returns table[.each.key](.1st.container)\n\
 Cell.Array.'cellKeys' returns [.each.key]\n\
 Cell.Array.'cellValues' returns [.each.value]\n\
@@ -2558,7 +2622,7 @@ Array.'whereDistinct'('property') returns .singletonOr\n\
   [.1st] + .tail.where{.(property) != p}.whereDistinct(property)\n\
 }\n\
 \n\
-Array.'withBounds'('bound') returns array(length=.length) 'key'->{ this.at(key) else (key.(bound)) }\n\
+Array.'withBounds'('bound') returns array(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
 Array.'safeBounds' returns .withBounds{novalues}\n\
 Array.'cyclic' returns .withBounds{ this.at( it%this.length ) }\n\
 Array.'total' returns .1st + .2nd + etc;\n\
@@ -2654,10 +2718,13 @@ Array.'lastWhere'('test', 'else') returns .reverse.firstWhere(test) else (else)\
 Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then) else (else)\n\
 \n\
 Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}.key\n\
+Array.'firstKeyWhere'('test')('then')('else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
+Array.'firstKeyWhere'('test')('else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
 Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
 Array.'tailWhere'('test') returns .slice(start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Table.'values' returns [.at(.keys.each)]\n\
+Table.'map'('body') returns Table.new(.keys) {.(this).(body)}\n\
 \n\
 'Empty' = {.length == 0}\n\
 'PI' = 3.1415926535897926\n\
