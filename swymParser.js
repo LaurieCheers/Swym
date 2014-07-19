@@ -260,10 +260,15 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 			// etc usually consumes the text of the following operator, if there is one - to make the etc..< and etc** keywords, for example.
 			SWYM.NextToken();
 			if( SWYM.curToken && !SWYM.curToken.followsBreak && SWYM.curToken.type === "op" &&
-				!SWYM.curToken.behaviour.isCloseBracket && SWYM.curToken.behaviour.precedence >= 50 )
+				!SWYM.curToken.behaviour.isCloseBracket &&
+				(SWYM.curToken.behaviour.precedence >= 50 || SWYM.curToken.text === curOp.text) )
 			{
 				etcText += SWYM.curToken.text;
 				SWYM.NextToken();
+			}
+			else if( SWYM.curToken && SWYM.curToken.followsBreak && curOp && curOp.text === "(blank_line)" )
+			{
+				etcText += ";";
 			}
 			
 			if( curOp )
@@ -670,7 +675,7 @@ SWYM.BuildDotNode = function(lhs, op, rhs, wrapper)
 	// foo.{<block>} is interpreted as running the 'do' function.
 	if( rhs && rhs.op && (rhs.op.text === "{" || rhs.op.text === "[" || rhs.op.text === "(" || rhs.op.text === "~") )
 	{
-		rhs = {type:"fnnode", body:undefined, isDecl:false, name:"do", children:[rhs], argNames:["__"]};
+		rhs = {type:"fnnode", body:undefined, pos:op.pos, isDecl:false, name:"do", children:[rhs], argNames:["__"]};
 	}
 
 	// order matters! Put the rhs arguments into the list first, they're the ones that can be matched positionally.

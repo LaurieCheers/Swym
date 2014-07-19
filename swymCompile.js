@@ -2257,7 +2257,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		{
 			haltCondition = function(value, haltValue){ return value > haltValue; }
 		}
-		else if( parsetree.etcType === "etc.." )
+		else if( parsetree.etcType !== "etc" )
 		{
 			haltCondition = function(value, haltValue){ if( SWYM.IsEqual(value, haltValue) ){ SWYM.g_etcState.halt = true; } return false; }
 		}
@@ -2405,7 +2405,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 				
 				if( limitTimesExecutable === undefined &&
 						haltCondition === undefined &&
-						parsetree.etcType === "etc.." )
+						(parsetree.etcType === "etc.." || parsetree.etcType === "etc," || parsetree.etcType === "etc;") )
 				{
 					// lazy array constructor
 					// FIXME: need a way to detect out-of-bounds termination

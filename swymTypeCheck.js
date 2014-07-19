@@ -175,6 +175,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 		return true;
 	}
 	
+	if( typeCheck.requiresFalse && !SWYM.IsOfType(false, valueInfo) )
+	{
+		return false;
+	}
+	
 	if( valueInfo.multivalueOf !== undefined )
 	{
 		if( typeCheck.multivalueOf !== undefined )
@@ -413,6 +418,42 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		return typeA;
 	}
 
+	if( SWYM.TypeMatches(typeA, typeB) )
+	{
+		return typeA;
+	}
+	else if( SWYM.TypeMatches(typeB, typeA) )
+	{
+		return typeB;
+	}
+
+	if( typeA.tupleTypes !== undefined || typeB.tupleTypes !== undefined )
+	{
+		var elementType = SWYM.TypeUnify(
+			SWYM.GetOutType(typeA, SWYM.IntType, errorContext),
+			SWYM.GetOutType(typeB, SWYM.IntType, errorContext),
+			errorContext
+		);
+		
+		if( typeA.tupleTypes !== undefined &&
+			typeB.tupleTypes !== undefined &&
+			typeA.tupleTypes.length === typeB.tupleTypes.length )
+		{
+			var newTupleTypes = new Array(typeA.tupleTypes.length);
+			for( var Idx = 0; Idx < typeA.tupleTypes.length; ++Idx )
+			{
+				newTupleTypes[Idx] = SWYM.TypeUnify( typeA.tupleTypes[Idx], typeB.tupleTypes[Idx], errorContext );
+			}
+			
+			return SWYM.TupleTypeOf(newTupleTypes, elementType, errorContext);
+		}
+		else
+		{
+			// only one is a tuple, or they are different lengths
+			return SWYM.ArrayTypeContaining(elementType);
+		}
+	}
+	
 	if( typeA.baked !== undefined || typeB.baked !== undefined )
 	{
 		if( SWYM.IsEqual(typeA.baked, typeB.baked) )
@@ -425,15 +466,6 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		var strippedTypeB = SWYM.StripBakedInformation( typeB, errorContext );
 		
 		return SWYM.TypeUnify(strippedTypeA, strippedTypeB, errorContext);
-	}
-
-	if( SWYM.TypeMatches(typeA, typeB) )
-	{
-		return typeA;
-	}
-	else if( SWYM.TypeMatches(typeB, typeA) )
-	{
-		return typeB;
 	}
 	
 	if( typeA.multivalueOf )

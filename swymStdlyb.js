@@ -54,6 +54,7 @@ SWYM.AnyType = {type:"type", debugName:"Anything"};
 SWYM.AnythingType = SWYM.AnyType;
 SWYM.DontCareType = {type:"type", nativeType:"NoValues", debugName:"DontCare"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
+SWYM.MaybeFalseType = {type:"type", requireFalse:true, debugName:"MaybeFalse"};
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
 SWYM.IntType = {type:"type", nativeType:"Number", multipleOf:1, debugName:"Int"};
@@ -93,6 +94,7 @@ SWYM.MultivalueRangeType.nativeType = "RangeArray";
 
 SWYM.operators = {
 	"(blank_line)":  {precedence:1, infix:true, postfix:true, prefix:true, standalone:true, noImplicitSemicolon:true,
+		identity:function(){ return [] },
 		customCompile:function(node, cscope, executable)
 		{
 			if( node.children[1] )
@@ -112,6 +114,7 @@ SWYM.operators = {
 	},
 
 	";":  {precedence:1, infix:true, postfix:true, noImplicitSemicolon:true,
+		identity:function(){ return [] },
 		customCompile:function(node, cscope, executable)
 		{
 			// optimized to reduce stack size, making stdlyb easier to debug
@@ -760,7 +763,7 @@ SWYM.operators = {
 			{
 				startType = SWYM.BakedValue(-Infinity);
 				argExecutable.push("#Literal");
-				argExecutable.push(startType);
+				argExecutable.push(startType.baked);
 			}
 			else
 			{
@@ -772,7 +775,7 @@ SWYM.operators = {
 			{
 				endType = SWYM.BakedValue(Infinity);
 				argExecutable.push("#Literal");
-				argExecutable.push(endType);
+				argExecutable.push(endType.baked);
 			}
 			else
 			{
@@ -799,6 +802,7 @@ SWYM.operators = {
 				}
 				else
 				{
+					SWYM.pushEach(argExecutable, executable);
 					executable.push("#Native");
 					executable.push(2);
 					executable.push( function(a, b){ return SWYM.RangeOp(a,b, true, true, undefined) });
@@ -1303,6 +1307,7 @@ SWYM.DefaultGlobalCScope =
 	"DontCare": SWYM.BakedValue(SWYM.DontCareType),
 	"Void": SWYM.BakedValue(SWYM.VoidType),
 	"JSString": SWYM.BakedValue(SWYM.JSStringType),
+	"MaybeFalse": SWYM.BakedValue(SWYM.MaybeFalseType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"novalues": {type:"type", debugName:"Literal(<no_values>)", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
@@ -1601,7 +1606,11 @@ SWYM.DefaultGlobalCScope =
 			
 			// TODO: do some kind of type-subtract so we can pass selfType minus bodyType in here.
 			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType, errorNode);
-			SWYM.TypeCoerce(SWYM.BoolType, condType, errorNode);
+			
+			if( !SWYM.IsOfType(false, condType) )
+			{
+				SWYM.LogError(errorNode, "if: condition is of type "+SWYM.TypeToString(condType)+", which is never false");
+			}
 			
 			// optimizations needed -
 			// 1) don't bother to use self at all, if the blocks don't use it
@@ -2000,7 +2009,7 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
-			var returnType = SWYM.GetOutType( argTypes[1], argTypes[0] );
+			var returnType = SWYM.GetOutType( argTypes[1], argTypes[0], errorNode );
 			SWYM.CompileClosureCall(argTypes[0], argExecutables[0], argTypes[1], argExecutables[1], cscope, executable);
 			return returnType;
 		},
@@ -2145,14 +2154,35 @@ SWYM.DefaultGlobalCScope =
 		},
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			var outType = SWYM.GetOutType(argTypes[1], argTypes[0]);
+			var elementType = SWYM.GetOutType(argTypes[0], SWYM.IntType, errorNode);
+			var outType = SWYM.GetOutType(argTypes[1], SWYM.TupleTypeOf([elementType,elementType], elementType), errorNode);
 			
 			executable.push("#Native");
 			executable.push(2);
 			
 			if( outType && outType.multivalueOf !== undefined )
 			{
-				SWYM.LogError(0, "reduce's 'body' argument must return single values.");
+				executable.push(function(array, body)
+				{
+					var workingSet = [];
+					for( var Idx = 0; Idx < array.length; Idx++ )
+					{
+						workingSet.push( array.run(Idx) );
+					}
+
+					while( workingSet.length > 1 )
+					{
+						var newValues = SWYM.ClosureCall(body, SWYM.jsArray([workingSet.shift(), workingSet.shift()]));
+						for( var Idx = 0; Idx < newValues.length; Idx++ )
+						{
+							workingSet.push( newValues.run(Idx) );
+						}
+					}
+					
+					return workingSet[0];
+				});
+				
+				return outType.multivalueOf;
 			}
 			else
 			{
@@ -2165,9 +2195,9 @@ SWYM.DefaultGlobalCScope =
 					}
 					return current;
 				});
+				
+				return outType;
 			}
-			
-			return outType;
 		}
 	}],
 	
@@ -2466,7 +2496,6 @@ SWYM.DefaultGlobalCScope =
 }
 
 //SWYM.stdlyb = "";
-
 SWYM.stdlyb =
 "\
 //Swym loads this library by default, to implement various useful Swym constants\n\
@@ -2477,6 +2506,7 @@ SWYM.stdlyb =
 //are not defined here.\n\
 \n\
 Anything.'javascript'('body','pure'=false) returns javascript(pure=pure){'this'}(body)\n\
+'unchanged' = {it}\n\
 //Default operator overloads\n\
 '-'(Int 'rhs') returns Int<< javascript(pure=true){'rhs'}{ return -rhs }\n\
 Int.'-'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
@@ -2503,6 +2533,7 @@ Array.'#nd' returns .at(#-1)\n\
 Array.'#rd' returns .at(#-1)\n\
 Array.'#th' returns .at(#-1)\n\
 Table.'at'('key') returns key.(this)\n\
+Table.'at'('key','then','else') returns .if{ key.in(.keys) }{ .at(key).(then) } else (else)\n\
 Table.'at'('key','else') returns .if{ key.in(.keys) }{ .at(key) } else (else)\n\
 Array.'atEach'(Int.Array 'keys') returns [ this.at(keys.where{ .in(this.keys) }.each) ]\n\
 Array.'keys' returns [0..<.length]\n\
@@ -2533,6 +2564,7 @@ Array.'no'('body') returns [.no.(body)]\n\
 \n\
 Cell.'value' returns .container.at(.key)\n\
 Cell.'value'('equals') returns .container.at(.key)=equals\n\
+Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
 Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
 Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
 Array.'cells' returns array(.length) 'idx'->{ Cell.new(idx, this) }\n\
@@ -2544,6 +2576,7 @@ Cell.Array.'cellValues' returns [.each.value]\n\
 Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
+Array.'containsValue'('target') returns (.1st == target) || (.2nd == target) || etc;\n\
 Array.'where'('test') returns forEach(this){ .if(test) }\n\
 Array.'where'('test')('body') returns forEach(this){ .if(test)(body) else {novalues}  }\n\
 Array.'where'('test', 'body', 'else') returns forEach(this){ .if(test)(body) else (else) }\n\
@@ -2593,12 +2626,16 @@ Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
 Array.'splitOnAny'(Array 'values') returns .splitOutWhere{==any values}\n\
 String.'lines' returns .splitOn(\"\\n\")\n\
 String.'words' returns .splitOnAny(\" \\t\\n\")\n\
+\n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
 Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
+Array.'tailWhere'('test') returns .slice(start=1+.lastKeyWhere{.!(test)})\n\
+\n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
 Array.'stem'(Int 'length') returns .slice(length=length)\n\
 Array.'stemWhere'('test') returns .slice(end=.firstKeyWhere{.!(test)})\n\
 Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
+\n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
 Array.'emptyOr'(Callable 'body') returns .if{==[]}{[]} else (body)\n\
@@ -2699,6 +2736,13 @@ Array.'firstWhere'('test')\n\
   return novalues\n\
 }\n\
 \n\
+Array.'firstWhere'('test', 'then')\n\
+{\n\
+  forEach(this){ if(.(test)){ return it.(then) } }\n\
+  \n\
+  return novalues\n\
+}\n\
+\n\
 Array.'firstWhere'('test', 'else')\n\
 {\n\
   forEach(this){ if(.(test)){ return it } }\n\
@@ -2717,12 +2761,21 @@ Array.'lastWhere'('test') returns .reverse.firstWhere(test)\n\
 Array.'lastWhere'('test', 'else') returns .reverse.firstWhere(test) else (else)\n\
 Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then) else (else)\n\
 \n\
-Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}.key\n\
-Array.'firstKeyWhere'('test')('then')('else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
-Array.'firstKeyWhere'('test')('else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
+Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}{.key}\n\
+Array.'firstKeyWhere'('test', 'else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
+Array.'firstKeyWhere'('test', 'then', 'else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
 Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
-Array.'tailWhere'('test') returns .slice(start=1+.lastKeyWhere{.!(test)})\n\
 \n\
+'table'(Array 'keys', Array 'values') returns { keys.1st:values.1st, keys.2nd:values.2nd, etc }\n\
+'table'(Callable 'default', Array 'keys', Array 'values')\n\
+{\n\
+  'indexer' = table(keys)(keys.keys)\n\
+  \n\
+  table(keys) 'key'->\n\
+  {\n\
+    indexer.at(key){.(values)} else {key.(default)}\n\
+  }\n\
+}\n\
 Table.'values' returns [.at(.keys.each)]\n\
 Table.'map'('body') returns Table.new(.keys) {.(this).(body)}\n\
 \n\
@@ -2740,6 +2793,10 @@ Number.'clamp'(Number 'min') returns if(this < min){ min } else { this }\n\
 Number.'clamp'(Number 'max') returns if(this > max){ max } else { this }\n\
 Number.'clamp'(Number 'min', Number 'max') returns .clamp(min=min).clamp(max=max)\n\
 Int.'factorial' returns product[1<=..this]\n\
+Int.'toHex'\n\
+{\n\
+  ( if(this<16) {\"\"} else {(this/16).floor.toHex} ) + [\"0\"..\"9\",\"a\"..\"f\"].at(this%16)\n\
+}\n\
 \n\
 // Pascal's triangle\n\
 Int.'choose'(Int 'n')\n\
@@ -2770,7 +2827,7 @@ Maybe.Literal.'none' returns Maybe.new( internal=[] )\n\
 Maybe.'hasValue' returns .internal.length > 0\n\
 Maybe.'value' returns .internal.each\n\
 Maybe.'value'('else') returns if(.hasValue){.internal.1st} else (else)\n\
-Maybe.'value'('body')('else') returns if(.hasValue){.internal.1st.(body)} else (else)\n\
+Maybe.'value'('then')('else') returns if(.hasValue){.internal.1st.(then)} else (else)\n\
 \n\
 String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
 {\n\
@@ -2821,12 +2878,12 @@ Anything.'print' { output($this) }\n\
 Anything.'println' { output(\"$this\\n\") }\n\
 Anything.'trace' { output(\"$$this\\n\") }\n\
 \n\
-'if'(Bool 'cond', 'then', 'else') returns void.if{ cond }(then) else (else)\n\
-'if'(Bool 'cond', 'then') returns void.if{ cond }(then) else { novalues }\n\
+'if'(MaybeFalse 'cond', 'then', 'else') returns void.if{ cond }(then) else (else)\n\
+'if'(MaybeFalse 'cond', 'then') returns void.if{ cond }(then) else { novalues }\n\
 Anything.'if'(Callable 'test', 'then') returns .if(test)(then) else { void }\n\
-Anything.'if'(Bool 'cond') returns .if{cond}{it} else {novalues}\n\
+Anything.'if'(MaybeFalse 'cond') returns .if{cond}{it} else {novalues}\n\
 Anything.'if'(Callable 'test') returns .if(test){it} else {novalues}\n\
-Anything.'if'(Bool 'cond', 'else') returns .if{cond}{it} else (else)\n\
+Anything.'if'(MaybeFalse 'cond', 'else') returns .if{cond}{it} else (else)\n\
 Anything.'if'(Callable 'test', 'else') returns .if(test){it} else (else)\n\
 Anything.'or_if'('cond')('body') returns .if(cond)(body) else {it}\n\
 \n\
@@ -2842,14 +2899,11 @@ String.'lowercase' returns String<< .javascript{ return SWYM.StringWrapper(this.
 String.'uppercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
 ";/**/
 
-//Number: Number.'cos' = javascript{'x'=this}{ return cos(x); };\
-
-
 /*
-Array.'random'(Int:'length') = [.random, etc**length]
-Array.'randomDraw'(Int:'length') = .randomSubset(length).shuffle
-Array.'randomSubset'(Int:'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(start:k+1).randomSubset(length-1) }
-Array.'randomRange'(Int:'length') = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
+Array.'random'(Int 'length') = [.random, etc**length]
+Array.'randomDraw'(Int 'length') = .randomSubset(length).shuffle
+Array.'randomSubset'(Int 'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(start=k+1).randomSubset(length-1) }
+Array.'randomSlice'(Int 'length') = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
 */
 /*
 if( .contains(Non~Digit) )

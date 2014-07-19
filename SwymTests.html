@@ -349,7 +349,7 @@ function runAllTests()
   runTest("toInt(\"n\")", "~error~");
   runTest("\"Hello Small World!\".words", "[\"Hello\",\"Small\",\"World!\"]");
   runTest("\"\"\"Hello Small<\n>World!\"\"\".lines", "[\"Hello Small<\",\">World!\"]");
-  runTest("-2.abs", "2");
+  runTest("-2.abs", "2"); // precedence problem!
   endReportTable();
 
   addReportTable("Destructuring:");
@@ -401,6 +401,8 @@ function runAllTests()
   runTest("Array.'transpose' { [[.each.1st], [.each.2nd], etc] }; transpose[[1..5],[10..15],[20..25]]", "[[1,10,20],[2,11,21],[3,12,22],[4,13,23],[5,14,24]]");
   runTest("[[1], [(2,1), etc**3]]", "[[1],[2,1,2,1,2,1]]");
   runTest("'cons'(Anything 'v', Array 'tail') returns [v, tail]; Array.'lispify' returns cons(.at(0), cons(.at(1), [])).etc; [1..10].lispify", "[10,[9,[8,[7,[6,[5,[4,[3,[2,[1,[]]]]]]]]]]]");
+  runTest("print(1);print(2);etc**10", "12345678910");
+  runTest("print(1)\nprint(2)\netc**10", "12345678910");
   endReportTable();
 
   addReportTable("Quantifiers:");
