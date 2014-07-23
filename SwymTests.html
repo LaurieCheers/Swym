@@ -350,6 +350,9 @@ function runAllTests()
   runTest("\"Hello Small World!\".words", "[\"Hello\",\"Small\",\"World!\"]");
   runTest("\"\"\"Hello Small<\n>World!\"\"\".lines", "[\"Hello Small<\",\">World!\"]");
   runTest("-2.abs", "2"); // precedence problem!
+  runTest("\"\"\"This is a haiku\nCounting all the syllables\nIs so tedious\"\"\".lines", "[\"This is a haiku\",\"Counting all the syllables\",\"Is so tedious\"]");
+  runTest("\"\"\"This is a haiku\nCounting all the syllables\nIs so tedious\"\"\".words", "[\"This\",\"is\",\"a\",\"haiku\",\"Counting\",\"all\",\"the\",\"syllables\",\"Is\",\"so\",\"tedious\"]");
+  runTest("\"ebg13\".rot13.print", "rot13");
   endReportTable();
 
   addReportTable("Destructuring:");

@@ -189,43 +189,31 @@ SWYM.GenerateNextToken = function(tokenlist, ignoreDecl)
 
 		// truncate the text until it matches an operator we know of
 		var allsymbols = SWYM.GetSource(opStartPos, SWYM.sourcePos+peekoffs);
+		var namedValue = undefined;
 		do
 		{
 			var possibleOpText = SWYM.GetSource(opStartPos, SWYM.sourcePos+peekoffs);
             var op = SWYM.operators[possibleOpText];
+			if( op !== undefined )
+			{
+				break;
+			}
+			else if( SWYM.DefaultGlobalCScope !== undefined )
+			{
+				namedValue = SWYM.DefaultGlobalCScope[possibleOpText];
+				if( namedValue !== undefined )
+				{
+					break;
+				}
+			}
 		}
-		while(!op && --peekoffs > 0);
+		while(--peekoffs > 0);
 
 		if ( op )
 		{
 			// matched an operator
 			var newToken = SWYM.NewToken("op", opStartPos, possibleOpText);
 			
-			/*if( newToken.text === "->" )
-			{
-				var prevToken = tokenlist.pop();
-				if( prevToken.type === "decl" )
-				{
-					newToken.value = prevToken.value;
-				}
-				else if ( prevToken.text === "]" )
-				{
-					// list deconstruction arg
-					tokenlist.push(prevToken);
-				}
-				else
-					SWYM.LogError(newToken.sourcePos, "-> operator must appear after a declaration");
-			}
-			else if ( newToken.text === "{" )
-			{
-				var prevToken = tokenlist[tokenlist.length-1];
-				if( prevToken && prevToken.text === "->" )
-				{
-					tokenlist.pop();
-					newToken.argName = prevToken.value;
-				}
-			}*/
-
 			if( SWYM.followsBreak )
 				newToken.followsBreak = true;
 
@@ -233,6 +221,13 @@ SWYM.GenerateNextToken = function(tokenlist, ignoreDecl)
 
 			SWYM.NextChar(peekoffs); // chomp the appropriate number of characters
 			
+			return;
+		}
+		else if( namedValue )
+		{
+			// matched a strangely-named value in global scope
+			tokenlist.push(SWYM.NewToken("name", opStartPos, possibleOpText));
+			SWYM.NextChar(peekoffs);
 			return;
 		}
 		else

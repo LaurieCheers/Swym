@@ -46,6 +46,17 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 	{
 		return SWYM.CompileEtc(parsetree, cscope, executable);
 	}
+	else if( parsetree.etcExpansionId !== undefined )
+	{
+		var childExecutable = [];
+		var childType = SWYM.CompileNode(parsetree.children[0], cscope, childExecutable);
+
+		var composeFunction = function(a){ return SWYM.jsArray(a); }; //TEMP
+
+		SWYM.pushEach(["#Native", 0, parsetree.op.behaviour.identity, "#Load", "<etcIndex>", "#EtcExpansion", childExecutable, composeFunction], executable);
+		
+		return SWYM.ToMultivalueType(childType);
+	}
 	else if( parsetree.op && parsetree.op.behaviour.customCompile )
 	{
 		return parsetree.op.behaviour.customCompile(parsetree, cscope, executable);
@@ -70,6 +81,17 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 			executable.push("#EtcSequence");
 			executable.push(SWYM.EtcCreateGenerator(parsetree.etcSequence));
 			return parsetree.etcSequence.type;
+		}
+		else if ( parsetree.etcExpandingSequence )
+		{
+			executable.push("#Load");
+			executable.push("<etcIndex>");
+			executable.push("#Load");
+			executable.push("<etcExpansion>");
+			executable.push("#Native");
+			executable.push(2);
+			executable.push(SWYM.EtcCreateExpandingGenerator(parsetree.etcExpandingSequence));
+			return parsetree.etcExpandingSequence.type;
 		}
 		else
 		{
@@ -966,48 +988,29 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 		theFunction.precompiled = [];
 	}
 
-	var mustCompile = false;
-	// if any of the arguments need compiling, it's not precompiled!
-	for( var AIdx = 0; AIdx < argTypes.length; ++AIdx )
+	for( var Idx = 0; Idx < theFunction.precompiled.length; ++Idx )
 	{
-		aType = argTypes[AIdx];
-		while( aType && !aType.isStringChar )
+		var cur = theFunction.precompiled[Idx];
+		var matched = !!cur.types && cur.types.length === argTypes.length;
+		if( matched )
 		{
-			if( aType.needsCompiling )
+			for( var AIdx = 0; AIdx < cur.types.length; ++AIdx )
 			{
-				mustCompile = true;
-				break;
-			}
-			aType = aType.outType;
-		}
-	}
-
-	if( !mustCompile )
-	{
-		for( var Idx = 0; Idx < theFunction.precompiled.length; ++Idx )
-		{
-			var cur = theFunction.precompiled[Idx];
-			var matched = !!cur.types && cur.types.length === argTypes.length;
-			if( matched )
-			{
-				for( var AIdx = 0; AIdx < cur.types.length; ++AIdx )
+				if( argTypes[AIdx] )
 				{
-					if( argTypes[AIdx] )
+					if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
+						!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) )
 					{
-						if( !SWYM.TypeMatches(cur.types[AIdx], argTypes[AIdx], true) ||
-							!SWYM.TypeMatches(argTypes[AIdx], cur.types[AIdx], true) )
-						{
-							matched = false;
-							break;
-						}
+						matched = false;
+						break;
 					}
 				}
 			}
-			
-			if( matched )
-			{
-				return cur;
-			}
+		}
+		
+		if( matched )
+		{
+			return cur;
 		}
 	}
 	
@@ -1448,128 +1451,169 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 {
 	var bodyText = braceNode.op.source.substring( braceNode.op.pos, braceNode.op.endSourcePos+1 );
 	var debugName = bodyText;
-	if( argNode !== undefined )
+	var argText = undefined;
+
+	if( argNode !== undefined && argNode.op !== undefined && argNode.op.endSourcePos !== undefined )
 	{
-		if( argNode.op !== undefined && argNode.op.endSourcePos !== undefined )
+		argText = SWYM.GetSource(argNode.op.pos, argNode.op.endSourcePos+1);
+
+		if( argNode !== undefined && argNode.op !== undefined && argNode.op.text === "(" && argNode.children[0] === undefined &&
+			argNode.children[1] !== undefined )
 		{
-			debugName = SWYM.GetSource(argNode.op.pos, argNode.op.endSourcePos+1) + "->" + debugName;
+			// argument is parenthesized
+			argNode = argNode.children[1];
 		}
-		else
+	}
+		
+	if( argNode !== undefined && argNode.type === "decl" )
+	{
+		if( argText === undefined )
 		{
-			debugName = argNode.text + "->" + debugName;
+			argText = argNode.text;
 		}
+		var argName = argNode.value;
 	}
 	else
 	{
-		debugName = "'it'->" + debugName;
+		if( argText === undefined )
+		{
+			argText = "'it'";
+		}
+		var argName = "it";
+	}
+	
+	if( argText !== undefined )
+	{
+		debugName = argText + "->" + debugName;
 	}
 
-	var executableBlock = { type:"closure", debugName:debugName, debugText:bodyText };
+	// TODO: closureInfo should list what variables need to be captured from the containing scope.
+	// (we can determine this now.)
+	var closureInfo = { type:"closure", debugName:debugName, debugText:bodyText, argName:argName };
 
 	executable.push("#Closure");
-	executable.push(executableBlock);
+	executable.push(closureInfo);
 
 	var closureType = {type:"type",
-		needsCompiling:
-		[{
-			bodyNode:braceNode.children[1],
-			argNode:argNode,
-			cscope:cscope,
-			executableBlock:executableBlock
-		}]
+		debugName:"Closure("+debugName+")",
+		nativeType:"Closure",
+		argNode:argNode,
+		argName:argName,
+		bodyNode:braceNode.children[1],
+		cscope:cscope,
+		needsCompiling:true,
+		closureInfo:closureInfo,
 	};
-	
-	// TODO: if the argtype is declared explicitly, we could do the compile now
-	if( braceNode.children[1] === undefined )
-	{
-		SWYM.GetOutType(closureType, SWYM.DontCareType);
-	}
 	
 	return closureType;
 }
 
-SWYM.CompileLambdaInternal = function(compileBlock, argType)
+SWYM.CompileLambdaInternal = function(closureType, argType, executable, errorNode)
 {
-	var node = compileBlock.bodyNode;
-	var argNode = compileBlock.argNode;
-	var cscope = compileBlock.cscope;
-	var executableBlock = compileBlock.executableBlock;
+	if( !closureType.needsCompiling )
+	{
+		return SWYM.GetOutType(closureType, argType, errorNode);
+	}
+	
+	var argNode = closureType.argNode;
+	var cscope = closureType.cscope;
+	var node = closureType.bodyNode;
 	
 	var innerCScope;
-	var bodyExecutable = [];
 	
-	if( SWYM.TypeMatches(SWYM.VoidType, argType) )
+	if( argNode !== undefined && SWYM.TypeMatches(SWYM.VoidType, argType) )
 	{
-		if( argNode )
-		{
-			SWYM.LogError(argNode, "This block requires a non-Void argument.");
-		}
+		SWYM.LogError(errorNode, "This block requires a non-Void argument.");
+	}
 		
-		innerCScope = cscope;
+	var innerCScope = object(cscope);
+	var argName;
+
+	// argument is parenthesized
+	if( argNode !== undefined && argNode.op !== undefined && argNode.op.text === "(" && argNode.children[0] === undefined &&
+		argNode.children[1] !== undefined )
+	{
+		argNode = argNode.children[1];
+	}
+	
+	if( argNode !== undefined )
+	{
+		var requiredArgType = SWYM.GetTypeFromPatternNode( argNode, cscope );
+		SWYM.TypeCoerce(requiredArgType, argType, argNode? argNode: node, "Block parameter type");
+	}
+
+	if( argNode !== undefined && argNode.type === "decl" )
+	{
+		argName = argNode.value;
+		innerCScope["__default"] = undefined;
+		innerCScope["it"] = undefined;
+	}
+	else if ( argNode !== undefined && argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
+	{
+		// destructuring an array/table arg
+		argName = "it";
+		innerCScope["__default"] = {redirect:"it"};
+		
+		executable.push("#Load");
+		executable.push("it");
+
+		SWYM.CompileDeconstructor(argNode, cscope, executable, argType);
+
+		executable.push("#Pop");
 	}
 	else
 	{
-		var innerCScope = object(cscope);
-		var argName;
+		argName = "it";
+		innerCScope["__default"] = {redirect:"it"};
 
-		// argument is parenthesized
-		if( argNode !== undefined && argNode.op !== undefined && argNode.op.text === "(" && argNode.children[0] === undefined &&
-			argNode.children[1] !== undefined )
+		if( argNode !== undefined && requiredArgType === undefined )
 		{
-			argNode = argNode.children[1];
+			SWYM.LogError(argNode, "Don't understand argument name "+argNode);
+			return {type:"novalues"};
 		}
-		
-		var requiredArgType = SWYM.GetTypeFromPatternNode( argNode, cscope );
-		SWYM.TypeCoerce(requiredArgType, argType, argNode, "Block parameter type");
-
-		if( argNode !== undefined && argNode.type === "decl" )
-		{
-			argName = argNode.value;
-			innerCScope["__default"] = undefined;
-			innerCScope["it"] = undefined;
-		}
-		else if ( argNode !== undefined && argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
-		{
-			// destructuring an array/table arg
-			argName = "~arglist~";
-			bodyExecutable.push("#Load");
-			bodyExecutable.push("~arglist~");
-
-			SWYM.CompileDeconstructor(argNode, cscope, bodyExecutable, argType);
-
-			bodyExecutable.push("#Pop");
-			
-			//argType = {type:"swymObject", ofClass:SWYM.ArrayClass, outType:{type:"value", canConstrain:true}};
-		}
-		else
-		{
-			argName = "it";
-			innerCScope["__default"] = {redirect:"it"};
-
-			if( requiredArgType === undefined )
-			{
-				SWYM.LogError(argNode, "Don't understand argument name "+argNode);
-				return {type:"novalues"};
-			}
-		}
-		
-		innerCScope[argName] = argType;
 	}
-
-	var returnType = SWYM.CompileNode(node, innerCScope, bodyExecutable);
 	
-	executableBlock.argName = argName;
+	innerCScope[argName] = argType;
+
+	var returnType = SWYM.CompileNode(node, innerCScope, executable);
+	return returnType;
+	
+/*	executableBlock.argName = argName;
 	executableBlock.body = bodyExecutable;
 
 	//TODO: Blocks will probably want more members, such as "parseTree".
-	return {type:"type", argType:argType, outType:returnType, baked:executableBlock};
+	var closureType = {type:"type",
+		debugName:"Closure("+debugName+")",
+		nativeType:"closure",
+		argNode:argNode,
+		bodyNode:braceNode.children[1],
+		cscope:cscope,
+		needsCompiling:true,
+		closureInfo:closureInfo,
+	};
+	
+	return closureType;
+	return {type:"type",
+		nativeType:"closure" argType:argType, outType:returnType, baked:executableBlock};
+		*/
 }
 
-SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureExecutable, cscope, executable)
+SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureExecutable, cscope, executable, errorNode)
 {
+	if( !closureType.needsCompiling )
+	{
+		SWYM.pushEach(argExecutable, executable);
+		SWYM.pushEach(closureExecutable, executable);
+		executable.push("#ClosureCall");
+		return SWYM.GetOutType(closureType, argType, errorNode);
+	}
+
 	var numArgReferences = 0;
 	var numClosureReferences = 0;
 	var cannotInline = false;
+	
+	var bodyExecutable = [];
+	var returnType = SWYM.CompileLambdaInternal(closureType, argType, bodyExecutable);
 
 	if( closureType && closureType.baked && closureType.baked.body )
 	{
@@ -1605,9 +1649,21 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 	if( cannotInline || numArgReferences > 1 || numClosureReferences > 1 )
 	{
 		// not suitable for inlining
-		SWYM.pushEach(argExecutable, executable);
-		SWYM.pushEach(closureExecutable, executable);
-		executable.push("#ClosureCall");
+		/*if( numClosureReferences === 0 )
+		{
+			SWYM.pushEach(argExecutable, executable);
+			executable.push("#FnCall");
+			executable.push("DO:"+SWYM.TypeToString(closureType));
+			executable.push([closureType.argName]);
+			executable.push(bodyExecutable);
+		}
+		else
+		{*/
+			SWYM.pushEach(argExecutable, executable);
+			SWYM.pushEach(closureExecutable, executable);
+			executable.push("#ClosureExec");
+			executable.push(bodyExecutable);
+		//}
 	}
 	else
 	{
@@ -1635,6 +1691,8 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 			}
 		}
 	}
+	
+	return returnType;
 }
 
 // Compile deconstructing expressions such as ['x','y']->{ x+y }
@@ -2501,6 +2559,11 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 
 SWYM.pushEach = function(from, into)
 {
+	if( into === undefined || from === undefined )
+	{
+		SWYM.LogError(0, "Fsckup: invalid pushEach");
+		return;
+	}
 	for( var Idx = 0; Idx < from.length; Idx++ )
 	{
 		into.push( from[Idx] );

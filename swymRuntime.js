@@ -22,14 +22,26 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 	{
 		switch(executable[PC])
 		{
+		case "#RawNative":
+			executable[PC+1](stack);
+			PC += 2;
+			break;
+
 		case "#Literal":
 			stack.push(executable[PC+1]);
 			PC += 2;
 			break;
 
 		case "#SingletonArray":
-			var newValue = SWYM.jsArray([stack.pop()]);
-			stack.push( newValue );
+			var original = stack.pop();
+			if( original === SWYM.value_novalues )
+			{
+				stack.push( SWYM.jsArray([]) );
+			}
+			else
+			{
+				stack.push( SWYM.jsArray([original]) );
+			}
 			PC += 1;
 			break;
 
@@ -196,20 +208,13 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			break;
 			
 		case "#Closure":
-			var closureData = executable[PC+1];
+			var closureInfo = executable[PC+1];
 			var newClosure =
 			{
 				type: "closure",
-				debugName: closureData.debugName,
-				argName:closureData.argName,
-				body:closureData.body,
-				scope: rscope,
-				run:function(arg)
-				{
-					var callScope = object(this.scope)
-					callScope[this.argName] = arg;
-					return SWYM.ExecWithScope(this.debugName, this.body, callScope, []);
-				}
+				debugName: closureInfo.debugName,
+				argName:closureInfo.argName,
+				scope: rscope // TODO: pick out the elements of rscope which the closure actually refers to
 			}
 			stack.push(newClosure);
 			PC += 2;
@@ -222,6 +227,14 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			stack.push( SWYM.ClosureCall(closure, arg) );
 			PC += 1;
 			break;
+			
+		case "#ClosureExec":
+			var closure = stack.pop();
+			var arg = stack.pop();
+
+			stack.push( SWYM.ClosureExec(closure, arg, executable[PC+1]) );
+			PC += 2;
+			break;
 
 		case "#MultiClosureCall":
 			var multiArgs = SWYM.CollectArgs(stack, 2);
@@ -231,6 +244,16 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			});
 			stack.push( result );
 			PC += 1;
+			break;
+			
+		case "#MultiClosureExec":
+			var multiArgs = SWYM.CollectArgs(stack, 2);
+			var result = SWYM.ForEachPairing(multiArgs, function(args)
+			{
+				return SWYM.ClosureExec(args[1], args[0], executable[PC+1]);
+			});
+			stack.push( result );
+			PC += 2;
 			break;
 
 		case "#LazyClosureCall":
@@ -545,6 +568,28 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 				stack.push( SWYM.ExecWithScope("IfYes", executable[PC+1], rscope, []) );
 			else
 				stack.push( SWYM.ExecWithScope("IfNo", executable[PC+2], rscope, []) );
+			PC += 3;
+			break;
+
+		case "#EtcExpansion":
+			var etcStepExecutable = executable[PC+1];
+			var etcComposer = executable[PC+2];
+			var index = stack.pop();
+			if( index === undefined )
+			{
+				SWYM.LogError(-1, "Fsckup: missing etcIndex!");
+			}
+			var result = stack.pop();
+
+			//NB: <= because we need one level of expansion on the first term
+			for( var subIndex = 0; subIndex <= index; ++subIndex )
+			{
+				rscope["<etcExpansion>"] = subIndex;
+				result.push( SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []) );
+			}
+			
+			stack.push( etcComposer(result) );
+
 			PC += 3;
 			break;
 			
@@ -1167,6 +1212,24 @@ SWYM.TableMatches = function(table, tablePattern)
 	}
 	
 	return true;
+}
+
+SWYM.ClosureExec = function(closure, arg, executable)
+{
+	if( !closure )
+	{
+		SWYM.LogError(-1, "Fsckup: missing closure body");
+	}
+	else if( closure.run !== undefined )
+	{
+		return closure.run(arg);
+	}
+	else
+	{
+		var callScope = object(closure.scope)
+		callScope[closure.argName] = arg;
+		return SWYM.ExecWithScope(closure.debugName, executable, callScope, []);
+	}
 }
 
 SWYM.ClosureCall = function(closure, arg)

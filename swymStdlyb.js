@@ -54,7 +54,7 @@ SWYM.AnyType = {type:"type", debugName:"Anything"};
 SWYM.AnythingType = SWYM.AnyType;
 SWYM.DontCareType = {type:"type", nativeType:"NoValues", debugName:"DontCare"};
 SWYM.BoolType = {type:"type", enumValues:SWYM.jsArray([true, false]), debugName:"Bool"};
-SWYM.MaybeFalseType = {type:"type", requireFalse:true, debugName:"MaybeFalse"};
+SWYM.MaybeFalseType = {type:"type", requireSomeBool:true, debugName:"MaybeFalse"};
 
 SWYM.NumberType = {type:"type", nativeType:"Number", debugName:"Number"};
 SWYM.IntType = {type:"type", nativeType:"Number", multipleOf:1, debugName:"Int"};
@@ -315,7 +315,10 @@ SWYM.operators = {
 					{
 						if( typeN && typeN.baked !== undefined )
 						{
-							bakedArray.push(typeN.baked);
+							if( typeN.baked !== SWYM.value_novalues )
+							{
+								bakedArray.push(typeN.baked);
+							}
 						}
 						else
 						{
@@ -398,12 +401,12 @@ SWYM.operators = {
 			}
 			else if ( lhs.type === "fnnode" )
 			{
-				SWYM.LogError(node, "Invalid function declaration. (Did you forget to 'quote' the new function's name?)");
+				SWYM.LogError(op.pos, "Invalid function declaration. (Did you forget to 'quote' the new function's name?)");
 				return undefined;
 			}
 			else
 			{
-				SWYM.LogError(node, "Invalid function declaration.");
+				SWYM.LogError(op.pos, "Invalid function declaration.");
 				return undefined;
 			}
 		},
@@ -720,7 +723,7 @@ SWYM.operators = {
 					executable.push("#MultiNative");
 				else
 					executable.push("#Native");
-					
+				
 				executable.push(1);
 				executable.push(function(v){return !v});
 				
@@ -977,7 +980,7 @@ SWYM.operators = {
 	"~bitwise": {precedence:96, argTypes:[SWYM.NumberType], returnType:SWYM.NumberType, prefix:function(v){return ~v} },
 
 	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("+") },
-	"-": {precedence:102, infix:true, prefix:true, customParseTreeNode:(function(baseCPTN)
+	"-": {precedence:102, prefixPrecedence:350, infix:true, prefix:true, customParseTreeNode:(function(baseCPTN)
 		{
 			return function(lhs, op, rhs)
 			{
@@ -1069,6 +1072,21 @@ SWYM.operators = {
 	".>=some": { precedence:300, returnType:SWYM.BoolType, prefix:true, infix:true, customParseTreeNode:SWYM.FunctionesqueParseTreeNode(">=some") },
 	".<=some": { precedence:300, returnType:SWYM.BoolType, prefix:true, infix:true, customParseTreeNode:SWYM.FunctionesqueParseTreeNode("<=some") },
 
+	"?": { precedence:300, infix:true, postfix:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			if( rhs && rhs.type === "fnnode" && rhs.name === "else" )
+			{
+				//Ugh, this is so hacky. Need a proper grammar parser.
+				rhs = {type:"fnnode", body:undefined, pos:rhs.pos, isDecl:false, name:undefined, children:[rhs.children[0]], argNames:["else"]};
+			}
+			
+			var result = {type:"fnnode", body:undefined, pos:op.pos, isDecl:false, name:"?", children:[lhs], argNames:["this"]};
+			
+			return SWYM.CombineFnNodes(result, rhs);
+		}
+	},
+
 	// terse stringify operator: $$["hello world",[3,"woot"]] -> "hello world3woot"
 	"$": {precedence:310, returnType:SWYM.StringType, prefix:function(v){ return SWYM.StringWrapper(SWYM.ToTerseString(v)); }},
 
@@ -1127,7 +1145,15 @@ SWYM.operators = {
 				var rhs = SWYM.ParseTreeNode(undefined, curly, rhs);
 			}
 
+			if( lhs && lhs.type !== "fnnode" )
+			{
+				// if the left hand side hasn't been composed into a function call node yet, do it now
+				// (necessary if you write x?{1}else{0}, because {1}else{0} has higher precedence.)
+				lhs = {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[lhs], argNames:["__"]};
+			}
+
 			var result = {type:"fnnode", pos:op.pos, body:undefined, isDecl:undefined, name:undefined, children:[rhs], argNames:["else"]};
+						
 			return SWYM.CombineFnNodes(lhs, result);
 		}
 	},
@@ -1321,9 +1347,9 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			if( !argTypes[0].baked && (!argTypes[0].needsCompiling || argTypes[0].needsCompiling.length !== 1) )
+			if( !argTypes[0].baked && !argTypes[0].bodyNode )
 			{
-				SWYM.LogError(0, "The body of the Struct function must be known at compile time!");
+				SWYM.LogError(errorNode, "The body of the Struct function must be known at compile time!");
 				return undefined;
 			}
 			
@@ -1331,15 +1357,7 @@ SWYM.DefaultGlobalCScope =
 			var unusedExecutable = [];
 			var defaultNodes = {};
 			
-			if( argTypes[0].baked )
-			{
-				var memberTypes = SWYM.CompileClassBody(argTypes[0].baked.bodyNode, innerCScope, defaultNodes);
-			}
-			else
-			{
-				var memberTypes = SWYM.CompileClassBody(argTypes[0].needsCompiling[0].bodyNode, innerCScope, defaultNodes);
-			}
-			
+			var memberTypes = SWYM.CompileClassBody(argTypes[0].bodyNode, innerCScope, defaultNodes);			
 			var newStruct = {type:"type", nativeType:"Struct", defaultNodes:defaultNodes, memberTypes:memberTypes};
 			var targetCScope = SWYM.MainCScope !== undefined? SWYM.MainCScope: SWYM.DefaultGlobalCScope;
 			
@@ -1595,21 +1613,24 @@ SWYM.DefaultGlobalCScope =
 						(argTypes[3] && argTypes[3].multivalueOf !== undefined);
 			
 			var selfType = SWYM.ToSinglevalueType(argTypes[0]);
-			var condType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), selfType, errorNode);
-						
+			var condExecutable = [];
+			var condType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), selfType, condExecutable, errorNode);
+			
 			var bodyType = selfType;
 			if( argTypes[1] && argTypes[1].baked && argTypes[1].baked.type === "type" )
 			{
 				bodyType = SWYM.TypeIntersect(selfType, argTypes[1].baked, errorNode);
 			}
-			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[2]), bodyType, errorNode);
+			var thenExecutable = [];
+			var thenType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[2]), bodyType, thenExecutable, errorNode);
 			
 			// TODO: do some kind of type-subtract so we can pass selfType minus bodyType in here.
-			var elseType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[3]), selfType, errorNode);
+			var elseExecutable = [];
+			var elseType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[3]), selfType, elseExecutable, errorNode);
 			
-			if( !SWYM.IsOfType(false, condType) )
+			if( !SWYM.IsOfType(false, condType) && !SWYM.IsOfType(true, condType) )
 			{
-				SWYM.LogError(errorNode, "if: condition is of type "+SWYM.TypeToString(condType)+", which is never false");
+				SWYM.LogError(errorNode, "if: condition is of type "+SWYM.TypeToString(condType)+", which is never true or false.");
 			}
 			
 			// optimizations needed -
@@ -1640,7 +1661,7 @@ SWYM.DefaultGlobalCScope =
 			executable.push(4);
 			executable.push(function(self, test, then, els)
 			{
-				var cond = SWYM.ClosureCall(test, self);
+				var cond = SWYM.ClosureExec(test, self, condExecutable);
 				if( condToSingle )
 				{
 					cond = SWYM.ForceSingleValue(cond);
@@ -1649,20 +1670,137 @@ SWYM.DefaultGlobalCScope =
 				if( cond === false )
 				{
 					if( elseToMulti )
-						return SWYM.jsArray([SWYM.ClosureCall(els, self)]);
+						return SWYM.jsArray([SWYM.ClosureExec(els, self, elseExecutable)]);
 					else
-						return SWYM.ClosureCall(els, self);
+						return SWYM.ClosureExec(els, self, elseExecutable);
 				}
 				else
 				{
 					if( thenToMulti )
-						return SWYM.jsArray([SWYM.ClosureCall(then, self)]);
+						return SWYM.jsArray([SWYM.ClosureExec(then, self, thenExecutable)]);
 					else
-						return SWYM.ClosureCall(then, self);
+						return SWYM.ClosureExec(then, self, thenExecutable);
 				}
 			});
 
 			return SWYM.TypeUnify(thenType, elseType);
+		}
+	}],
+
+	"fn#?":
+	[{
+		expectedArgs:{
+			"this":{index:0, typeCheck:SWYM.AnythingType},
+			"then":{index:1, typeCheck:SWYM.CallableType},
+			"else":{index:2, typeCheck:SWYM.CallableType}
+		},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			for( var Idx = 0; Idx < argExecutables.length; ++Idx)
+			{
+				SWYM.pushEach(argExecutables[Idx], executable);
+			}
+			executable.push("#RawNative");
+			executable.push(function(stack)
+			{
+				var els = stack.pop();
+				var then = stack.pop();
+				var a = stack.pop();
+				
+				if( a !== SWYM.value_novalues )
+				{
+					var result = SWYM.ClosureCall(then, a);
+				}
+				else
+				{
+					var result = SWYM.ClosureCall(els, null);
+				}
+				
+				stack.push(result);
+			});
+			
+			var thenType = SWYM.GetOutType(argTypes[1], argTypes[0]);
+			return SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2]));
+		},
+		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			for( var Idx = 0; Idx < argExecutables.length; ++Idx)
+			{
+				SWYM.pushEach(argExecutables[Idx], executable);
+			}
+			executable.push("#Native");
+			executable.push(3);
+			executable.push(function(a, then, els)
+			{
+				if( a.length > 0 )
+				{
+					return SWYM.ForEachPairing([ a, SWYM.jsArray([then]) ], function(args)
+					{
+						return SWYM.ClosureCall(args[1], args[0]);
+					});
+				}
+				else
+				{
+					return SWYM.jsArray([SWYM.ClosureCall(els, null)]);
+				}
+			});
+			
+			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]));
+			return SWYM.ToMultivalueType( SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2])) );
+		}
+	},
+	{
+		expectedArgs:{
+			"this":{index:0, typeCheck:SWYM.AnythingType},
+			"else":{index:1, typeCheck:SWYM.CallableType}
+		},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			for( var Idx = 0; Idx < argExecutables.length; ++Idx)
+			{
+				SWYM.pushEach(argExecutables[Idx], executable);
+			}
+			executable.push("#RawNative");
+			executable.push(function(stack)
+			{
+				var els = stack.pop();
+				var a = stack.pop();
+				
+				if( a !== SWYM.value_novalues )
+				{
+					stack.push(a);
+				}
+				else
+				{
+					stack.push(SWYM.ClosureCall(els, null));
+				}
+			});
+			
+			return SWYM.TypeUnify(argTypes[0], SWYM.GetOutType(argTypes[1]));
+		},
+		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			for( var Idx = 0; Idx < argExecutables.length; ++Idx)
+			{
+				SWYM.pushEach(argExecutables[Idx], executable);
+			}
+			executable.push("#Native");
+			executable.push(2);
+			executable.push(function(a, els)
+			{
+				if( a.length > 0 )
+				{
+					return a;
+				}
+				else
+				{
+					return SWYM.jsArray([SWYM.ClosureCall(els, null)]);
+				}
+			});
+			
+			return SWYM.ToMultivalueType( SWYM.TypeUnify(SWYM.ToSinglevalueType(argTypes[0]), SWYM.GetOutType(argTypes[1])) );
 		}
 	}],
 
@@ -1672,13 +1810,13 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			if( !argTypes[0].baked && (!argTypes[0].needsCompiling || argTypes[0].needsCompiling.length !== 1) )
+			if( !argTypes[0].baked && !argTypes[0].bodyNode )
 			{
 				SWYM.LogError(0, "The body of a javascript literal must be known at compile time!");
 				return undefined;
 			}
 			
-			var argsNode = argTypes[0].baked? argTypes[0].baked.bodyNode: argTypes[0].needsCompiling[0].bodyNode;
+			var argsNode = argTypes[0].bodyNode;
 			var nameNodes = [];
 			var defaultValueNodes = [];
 			SWYM.CollectClassMembers(argsNode, nameNodes, defaultValueNodes);
@@ -1773,9 +1911,9 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 			
-			//FIXME: this is pretty half-assed. javascript parsing uses quite different rules from swym.
+			//FIXME: this is pretty half-assed. javascript's tokenizer uses quite different rules from swym's.
 			// To do this right, we need to switch into javascript mode way back in the tokenizer.
-			var functionText = "var jsFunction = function("+argNamesText+")"+argTypes[1].needsCompiling[0].executableBlock.debugText;
+			var functionText = "var jsFunction = function("+argNamesText+")"+argTypes[1].closureInfo.debugText;
 			eval(functionText);
 			
 			if( bakedArgs !== undefined && ( thisArgIdx === undefined || bakedThisArg !== undefined ) )
@@ -2009,12 +2147,41 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
-			var returnType = SWYM.GetOutType( argTypes[1], argTypes[0], errorNode );
-			SWYM.CompileClosureCall(argTypes[0], argExecutables[0], argTypes[1], argExecutables[1], cscope, executable);
-			return returnType;
+			return SWYM.CompileClosureCall(argTypes[0], argExecutables[0], argTypes[1], argExecutables[1], cscope, executable, errorNode);
 		},
 		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
+			SWYM.pushEach(argExecutables[0], executable);
+			if( argTypes[0].multivalueOf === undefined )
+			{
+				executable.push("#SingletonArray");
+			}
+			SWYM.pushEach(argExecutables[1], executable);
+			if( argTypes[1].multivalueOf === undefined )
+			{
+				executable.push("#SingletonArray");
+			}
+			
+			if( !argTypes[1].needsCompiling )
+			{
+				executable.push("#MultiClosureCall");
+				
+				return SWYM.ToMultivalueType( SWYM.GetOutType(argTypes[1], argTypes[0], errorNode) );
+			}
+			else
+			{
+				var closureType = argTypes[1];
+				var bodyExecutable = [];
+				var returnType = SWYM.CompileLambdaInternal(argTypes[1], SWYM.ToSinglevalueType(argTypes[0]), bodyExecutable);
+				
+				executable.push("#MultiClosureExec");
+				executable.push(bodyExecutable);
+
+				return SWYM.ToMultivalueType(returnType);
+			}
+			
+
+/*		
 			var isLazy = false;
 			for( var Idx = 0; Idx < argExecutables.length; ++Idx )
 			{
@@ -2029,10 +2196,11 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 			executable.push(isLazy? "#LazyClosureCall": "#MultiClosureCall");
+			SWYM.CompileClosureCall( SWYM.ToSinglevalueType(argTypes[1]), 
 			var resultType = SWYM.GetOutType( SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]));
 			
-			// FIXME: subtle bug - if both arguments are quantifiers, and they were supplied in the opposite order,
-			// we ought to be processing them in the opposite order.
+			// FIXME: subtle bug - if both arguments are quantifiers, and they were supplied in the opposite order
+			// (thanks to the magic of named parameters), then we ought to be processing them in the opposite order.
 			if( argTypes[0] && argTypes[0].multivalueOf )
 			{
 				resultType = SWYM.ToMultivalueType( resultType, argTypes[0].quantifier );
@@ -2041,7 +2209,7 @@ SWYM.DefaultGlobalCScope =
 			{
 				resultType = SWYM.ToMultivalueType( resultType, argTypes[1].quantifier );
 			}
-			return resultType;
+			return resultType;*/
 		}
 	},
 	{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.CallableType} },
@@ -2155,7 +2323,9 @@ SWYM.DefaultGlobalCScope =
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
 			var elementType = SWYM.GetOutType(argTypes[0], SWYM.IntType, errorNode);
-			var outType = SWYM.GetOutType(argTypes[1], SWYM.TupleTypeOf([elementType,elementType], elementType), errorNode);
+			
+			var bodyExecutable = [];
+			var outType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), SWYM.TupleTypeOf([elementType,elementType], elementType), bodyExecutable, errorNode);
 			
 			executable.push("#Native");
 			executable.push(2);
@@ -2172,7 +2342,7 @@ SWYM.DefaultGlobalCScope =
 
 					while( workingSet.length > 1 )
 					{
-						var newValues = SWYM.ClosureCall(body, SWYM.jsArray([workingSet.shift(), workingSet.shift()]));
+						var newValues = SWYM.ClosureExec(body, SWYM.jsArray([workingSet.shift(), workingSet.shift()]), bodyExecutable);
 						for( var Idx = 0; Idx < newValues.length; Idx++ )
 						{
 							workingSet.push( newValues.run(Idx) );
@@ -2191,7 +2361,7 @@ SWYM.DefaultGlobalCScope =
 					var current = array.run(0);
 					for( var Idx = 1; Idx < array.length; Idx++ )
 					{
-						current = SWYM.ClosureCall(body, SWYM.jsArray([current, array.run(Idx)]));
+						current = SWYM.ClosureExec(body, SWYM.jsArray([current, array.run(Idx)]), bodyExecutable);
 					}
 					return current;
 				});
@@ -2221,7 +2391,9 @@ SWYM.DefaultGlobalCScope =
 		},
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			var elementType = SWYM.GetOutType(argTypes[1], SWYM.IntType);
+			var elementExecutable = [];
+			var elementType = SWYM.CompileLambdaInternal(argTypes[1], SWYM.IntType, elementExecutable, errorNode);
+
 			executable.push("#Native");
 			
 			if( argTypes[2] === undefined )
@@ -2231,7 +2403,7 @@ SWYM.DefaultGlobalCScope =
 
 			if( elementType && elementType.multivalueOf !== undefined )
 			{
-				SWYM.LogError(0, "Invalid array constructor - element type cannot be a multivalue");
+				SWYM.LogError(errorNode, "Invalid array constructor - element type cannot be a multivalue");
 			}
 			else
 			{
@@ -2240,7 +2412,7 @@ SWYM.DefaultGlobalCScope =
 					return {
 						type:"lazyArray",
 						length:len,
-						run:function(key) {return SWYM.ClosureCall(lookup,key);}
+						run:function(key) {return SWYM.ClosureExec(lookup,key,elementExecutable);}
 					};
 				});
 			}
@@ -2302,18 +2474,24 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#table":[{
 		expectedArgs:{
-			"keys":{index:0, typeCheck:SWYM.ArrayType}, "body":{index:1, typeCheck:SWYM.CallableType}
+			"keys":{index:0, typeCheck:SWYM.ArrayType},
+			"body":{index:1, typeCheck:SWYM.CallableType}
 			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
 		},
-		nativeCode:function(keys, lookup)
+		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			return {type:"table", keys:SWYM.Distinct(keys), run:function(key){return SWYM.ClosureCall(lookup,key)} }
-		},
-		getReturnType:function(argTypes, cscope)
-		{
-			var keyType = SWYM.GetOutType(argTypes[0], SWYM.IntType);
-			var valueType = SWYM.GetOutType(argTypes[1], keyType);
+			var keyType = SWYM.GetOutType(argTypes[0], SWYM.IntType, errorNode);
 			
+			var valueExecutable = [];
+			var valueType = SWYM.CompileLambdaInternal(argTypes[1], keyType, valueExecutable, errorNode);
+		
+			executable.push("#Native");
+			executable.push(2);
+			executable.push( function(keys, lookup)
+			{
+				return {type:"table", keys:SWYM.Distinct(keys), run:function(key){return SWYM.ClosureExec(lookup,key,valueExecutable)} }
+			} );
+
 			return {type:"swymObject", ofClass:SWYM.TableClass, argType:keyType, outType:valueType};
 		}
 	}],
@@ -2348,7 +2526,6 @@ SWYM.DefaultGlobalCScope =
 		}
 	}],
 
-/*	
 	"fn#values":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.EnumType} },
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
@@ -2362,7 +2539,6 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.ArrayTypeContaining(argTypes[0].baked);
 		}
 	}],
-*/
 
 	"fn#while":[{ expectedArgs:{ "test":{index:0, typeCheck:SWYM.CallableType}, "body":{index:1, typeCheck:SWYM.CallableType} },
 		returnType:SWYM.VoidType,
@@ -2506,7 +2682,7 @@ SWYM.stdlyb =
 //are not defined here.\n\
 \n\
 Anything.'javascript'('body','pure'=false) returns javascript(pure=pure){'this'}(body)\n\
-'unchanged' = {it}\n\
+'unchanged' = (Anything 'x')->{x}\n\
 //Default operator overloads\n\
 '-'(Int 'rhs') returns Int<< javascript(pure=true){'rhs'}{ return -rhs }\n\
 Int.'-'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
@@ -2522,19 +2698,30 @@ Number.'/'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ 
 Number.'%'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this%rhs }\n\
 Number.'^'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
 Array.'+'(Array 'arr', '__identity'=[]) returns [.each, arr.each]\n\
-Array.'*'(Int 'times')  returns  array(length=.length*times) 'index'->{ this.at( index%this.length ) }\n\
+Array.'*'(Int 'times') returns array(length=.length*times)(.cyclic)\n\
 String.'+'(String 'str', '__identity'=\"\") returns [.each, str.each]\n\
 Number.'<'(Number 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
 String.'<'(String 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
+\n\
+'test_block' = ['a','b']->{a+b}\n\
+'{+}' = ['a','b']->{a+b}\n\
+'{-}' = ['a','b']->{a-b}\n\
+'{*}' = ['a','b']->{a*b}\n\
+'{/}' = ['a','b']->{a/b}\n\
+'{%}' = ['a','b']->{a%b}\n\
+'{^}' = ['a','b']->{a^b}\n\
 \n\
 Array.'atEnd'('idx') returns .at(.length-1-idx)\n\
 Array.'#st' returns .at(#-1)\n\
 Array.'#nd' returns .at(#-1)\n\
 Array.'#rd' returns .at(#-1)\n\
 Array.'#th' returns .at(#-1)\n\
-Table.'at'('key') returns key.(this)\n\
-Table.'at'('key','then','else') returns .if{ key.in(.keys) }{ .at(key).(then) } else (else)\n\
+Callable.'at'('key') returns key.(this)\n\
+Callable.'atEach'(Int.Array 'keys') returns [ this.at(keys.each) ]\n\
+Callable.'map'('body') returns 'key'->{ .(this).(body) }\n\
+Table.'at'('key','then') returns .at(key)(then) else {novalues}\n\
 Table.'at'('key','else') returns .if{ key.in(.keys) }{ .at(key) } else (else)\n\
+Table.'at'('key','then','else') returns .if{ key.in(.keys) }{ .at(key).(then) } else (else)\n\
 Array.'atEach'(Int.Array 'keys') returns [ this.at(keys.where{ .in(this.keys) }.each) ]\n\
 Array.'keys' returns [0..<.length]\n\
 Array.'#st'('else') returns .at(#-1) else(else)\n\
@@ -2573,6 +2760,8 @@ Table.'cellTable' returns table(.keys) 'key'->{ Cell.new(key, this) }\n\
 Cell.Array.'table' returns table[.each.key](.1st.container)\n\
 Cell.Array.'cellKeys' returns [.each.key]\n\
 Cell.Array.'cellValues' returns [.each.value]\n\
+Cell.'toSlice'('length') returns .container.slice(start=.key, length=length)\n\
+Cell.'toSlice'('end') returns .container.slice(start=.key, end=end)\n\
 Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
@@ -2583,16 +2772,16 @@ Array.'where'('test', 'body', 'else') returns forEach(this){ .if(test)(body) els
 Array.'whereKey'('test') returns forEach(.keys){ .if(test)(this) else {novalues} }\n\
 Array.'whereKey'('test', 'body') returns forEach(.keys){ .if(test){.(this).(body)} else {novalues} }\n\
 Array.'whereKey'('test', 'body', 'else') returns forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} }\n\
-Array.'slice'(Int 'start') returns .atEach[start ..< .length]\n\
-Array.'slice'(Int 'length') returns .atEach[0..<length]\n\
-Array.'slice'(Int 'end') returns .atEach[0..<end]\n\
-Array.'slice'(Int 'last') returns .atEach[0..last]\n\
-Array.'slice'(Int 'trimEnd') returns .atEach[0 ..< .length-trimEnd]\n\
-Array.'slice'(Int 'start',Int 'end') returns .atEach[start..<end]\n\
-Array.'slice'(Int 'start',Int 'last') returns .atEach[start..last]\n\
-Array.'slice'(Int 'start',Int 'length') returns .atEach[start..<start+length]\n\
-Array.'slice'(Int 'length',Int 'end') returns .atEach[end-length..<end]\n\
-Array.'slice'(Int 'length',Int 'last') returns .atEach[last-length-1..last]\n\
+Callable.'slice'(Int 'start') returns .atEach[start ..< .length]\n\
+Callable.'slice'(Int 'length') returns .atEach[0..<length]\n\
+Callable.'slice'(Int 'end') returns .atEach[0..<end]\n\
+Callable.'slice'(Int 'last') returns .atEach[0..last]\n\
+Callable.'slice'(Int 'trimEnd') returns .atEach[0 ..< .length-trimEnd]\n\
+Callable.'slice'(Int 'start',Int 'end') returns .atEach[start..<end]\n\
+Callable.'slice'(Int 'start',Int 'last') returns .atEach[start..last]\n\
+Callable.'slice'(Int 'start',Int 'length') returns .atEach[start..<start+length]\n\
+Callable.'slice'(Int 'length',Int 'end') returns .atEach[end-length..<end]\n\
+Callable.'slice'(Int 'length',Int 'last') returns .atEach[last-length-1..last]\n\
 Array.'slice'(Int 'start',Int 'trimEnd') returns .atEach[start ..< .length-trimEnd]\n\
 Array.'slice'(Int 'length',Int 'trimEnd') returns .atEach[.length-length-fromEnd ..< .length-trimEnd]\n\
 Array.'slice'['a'..<'b'] returns [ .at(a.clamp(min=0)..<b.clamp(max=.length)) ]\n\
@@ -2612,9 +2801,9 @@ Array.'splitAtEnd'(Int 'n') returns [ .slice(trimEnd=n), .tail(n) ]\n\
 \n\
 Array.'splitAt'(Int.Array 'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
-  .slice[..<keys.1st]\n\
-  .slice[keys.1st..<keys.2nd], .slice[keys.2nd..<keys.3rd], etc\n\
-  .slice[keys.last..]\n\
+  this.slice[..<keys.1st];\n\
+  this.slice[keys.1st..<keys.2nd], this.slice[keys.2nd..<keys.3rd], etc;\n\
+  this.slice[keys.last..];\n\
 ]}\n\
 \n\
 Cell.Array.'split' returns .1st.container.splitAt(.cellKeys)\n\
@@ -2661,7 +2850,7 @@ Array.'whereDistinct'('property') returns .singletonOr\n\
 \n\
 Array.'withBounds'('bound') returns array(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
 Array.'safeBounds' returns .withBounds{novalues}\n\
-Array.'cyclic' returns .withBounds{ this.at( it%this.length ) }\n\
+Array.'cyclic' returns (Int 'idx')->{ idx.mod(this.length).(this) }\n\
 Array.'total' returns .1st + .2nd + etc;\n\
 Array.'sum' returns .total\n\
 Array.'product' returns .1st * .2nd * etc;\n\
@@ -2731,21 +2920,21 @@ Array.'countWhere'('test')\n\
 \n\
 Array.'firstWhere'('test')\n\
 {\n\
-  forEach(this){ if(.(test)){ return it } }\n\
+  forEach(this){ .if(test){ return it } }\n\
   \n\
   return novalues\n\
 }\n\
 \n\
 Array.'firstWhere'('test', 'then')\n\
 {\n\
-  forEach(this){ if(.(test)){ return it.(then) } }\n\
+  forEach(this){ .if(test){ return it.(then) } }\n\
   \n\
   return novalues\n\
 }\n\
 \n\
 Array.'firstWhere'('test', 'else')\n\
 {\n\
-  forEach(this){ if(.(test)){ return it } }\n\
+  forEach(this){ .if(test){ return it } }\n\
   \n\
   return .(else)\n\
 }\n\
@@ -2834,6 +3023,14 @@ String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
   .1stLast*1 + .2ndLast*10 + .3rdLast*100 + etc\n\
 }\n\
 \n\
+String.'caesarCypher'(Int 'offset')\n\
+{\n\
+  'alphabet' = $[\"A\"..\"Z\"]\n\
+  'shifted' = alphabet.cyclic.slice(start=offset, length=26)\n\
+  this.map~table(keys=alphabet+alphabet.lowercase, values=shifted+shifted.lowercase, default=unchanged)\n\
+}\n\
+String.'rot13' returns .caesarCypher(13)\n\
+\n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
 Type.'mutableArray'(Int 'length', 'equals') returns this.mutableArray[equals**length]\n\
@@ -2896,7 +3093,12 @@ Number.'cos' returns Number<< .javascript{ return Math.cos(this) }\n\
 Number.'floor' returns Int<< .javascript{ return Math.floor(this) }\n\
 Number.'ceiling' returns Int<< .javascript{ return Math.ceiling(this) }\n\
 String.'lowercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toLowerCase()) }\n\
+StringChar.'lowercase' returns StringChar<< .javascript{ return SWYM.StringWrapper(this.toLowerCase()) }\n\
 String.'uppercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
+StringChar.'uppercase' returns StringChar<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
+String.'codePoints' returns [.each.{ Int<< .javascript{ return this.charCodeAt(0); } }]\n\
+Int.Array.'stringFromCodePoints' returns $[.each.stringFromCodePoint]\n\
+Int.'stringFromCodePoint' returns StringChar<<.javascript{ return SWYM.StringWrapper(String.fromCharCode(this)); }\n\
 ";/**/
 
 /*

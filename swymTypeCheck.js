@@ -14,8 +14,6 @@ SWYM.TypeToString = function(type)
 		return "<missing type>"
 	else if( type.debugName !== undefined )
 		return type.debugName;
-	else if ( type.needsCompiling !== undefined )
-		return "Block";
 	else
 		return ""+type;
 }
@@ -66,6 +64,7 @@ SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 			case "Variable": if(value.type !== "variable") return false; break;
 			case "Number":   if(typeof value !== "number") return false; break;
 			case "JSString": if(typeof value !== "string") return false; break;
+			case "Closure": if(typeof value !== "closure") return false; break;
 			case "Callable":
 			{
 				if(value.type !== "jsArray" && value.type !== "rangeArray" &&
@@ -165,6 +164,11 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 		return true;
 	}
 	
+	if( valueInfo.needsCompiling && typeCheck.needsCompiling )
+	{
+		return false; // because they're not the same value (see above.)
+	}
+	
 	if( typeCheck.nativeType === "Void" )
 	{
 		return valueInfo.nativeType === "Void";
@@ -175,7 +179,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 		return true;
 	}
 	
-	if( typeCheck.requiresFalse && !SWYM.IsOfType(false, valueInfo) )
+	if( typeCheck.requireSomeBool && !SWYM.IsOfType(false, valueInfo) && !SWYM.IsOfType(true, valueInfo) )
 	{
 		return false;
 	}
@@ -208,7 +212,7 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 	
 	if( typeCheck.nativeType === "Callable" )
 	{
-		if( valueInfo.needsCompiling === undefined && valueInfo.outType === undefined )
+		if( !valueInfo.needsCompiling && valueInfo.outType === undefined )
 		{
 			return false;
 		}
@@ -896,8 +900,7 @@ SWYM.GetArgType = function(callableType, errorContext)
 	
 	if( callableType.needsCompiling )
 	{
-		var compileBlock = callableType.needsCompiling[0];
-		var argNode = compileBlock.argNode;
+		var argNode = callableType.argNode;
 		
 		if( argNode !== undefined &&
 			argNode.op !== undefined &&
@@ -908,7 +911,7 @@ SWYM.GetArgType = function(callableType, errorContext)
 			argNode = argNode.children[1];
 		}
 
-		return SWYM.GetTypeFromPatternNode( argNode, compileBlock.cscope );
+		return SWYM.GetTypeFromPatternNode( argNode, callableType.cscope );
 	}
 }
 
@@ -934,18 +937,19 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 		return SWYM.DontCareType;
 	}
 	
+	var returnType = callableType.outType;
+	
 	if( callableType.needsCompiling )
 	{
 		// this lambda function hasn't been compiled yet!
-		var toCompile = callableType.needsCompiling;
-		callableType.needsCompiling = undefined;
-		
-		var compiledType;
-		if( toCompile.length > 0 )
-		{
-			compiledType = SWYM.CompileLambdaInternal(toCompile[0], argType);
+		returnType = SWYM.CompileLambdaInternal(callableType.bodyNode, callableType.argNode, callableType.cscoper, argType);
+	}
+	else
+	{
+		returnType = callableType.outType;
+	}
 
-			for( var Idx = 1; Idx < toCompile.length; ++Idx )
+/*			for( var Idx = 1; Idx < toCompile.length; ++Idx )
 			{
 				compiledType = SWYM.TypeUnify(compiledType, SWYM.CompileLambdaInternal(toCompile[Idx], argType));
 			}
@@ -959,9 +963,9 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 		
 		if( compiledType.baked !== undefined )
 			callableType.baked = compiledType.baked;
-	}
+	}*/
 	
-	if( !callableType.outType )
+	if( !returnType )
 	{
 		if( !SWYM.errors )
 		{
@@ -992,11 +996,11 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 
 	if( isMultivalue )
 	{
-		return SWYM.ToMultivalueType(callableType.outType, quantifier);
+		return SWYM.ToMultivalueType(returnType, quantifier);
 	}
 	else
 	{
-		return callableType.outType;
+		return returnType;
 	}
 }
 

@@ -51,7 +51,7 @@ SWYM.EtcMatchesExceptChildren = function(leftNode, rightNode)
 		{
 			return true;
 		}
-		else if ( leftNode.etcSequence ||
+		else if ( leftNode.etcSequence || rightNode.etcSequence || 
 			(typeof leftNode.value === "number" && typeof rightNode.value === "number") ||
 			(typeof leftNode.value === "string" && typeof rightNode.value === "string")
 			)
@@ -219,7 +219,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 			return cloned;
 		}
 	}
-
+	
 	var baseMatch = SWYM.EtcMatchesExceptChildren(leftTerm, rightTerm);
 	if ( baseMatch )
 	{
@@ -285,42 +285,81 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		}
 		else if ( baseMatch !== true )
 		{
-			// a partially matched literal
-			var etcSequence = [];
-			var oldSeq = leftTerm.etcSequence;
-			
-			if ( oldSeq )
+			if( leftTerm.etcExpandingSequence !== undefined )
 			{
-				for(var elem in oldSeq)
-					etcSequence.push(oldSeq[elem]);
-			}
-			else if ( nth === 0 || nth > 1 )
-			{
-				// can only start a new etcSequence when nth == 1
-				// (i.e. when we're seeing the second term of the sequence)
-				return false;
-			}
-			else
-			{
-				etcSequence.push(leftTerm.value);
-			}
-
-			if( nth === "finalExample" )
-			{
-				etcSequence.finalExample = rightTerm.value;
-				etcSequence.excludeFinalExample = false;
-			}
-			else if( nth === "finalExampleExcluded" )
-			{
-				etcSequence.finalExample = rightTerm.value;
-				etcSequence.excludeFinalExample = true;
-			}
-			else
-			{
-				etcSequence.push(rightTerm.value);
-			}
+				leftTerm.etcExpandingSequence.push(rightTerm.etcSequence);
 				
-			return {type:"literal", text:leftTerm.text+"/"+rightTerm.text, etcSequence:etcSequence, etcId:etcId};
+				// continuing an expanding sequence term
+				return {
+					type:"literal",
+					text:leftTerm.text+"("+rightTerm.text+")",
+					etcExpandingSequence:leftTerm.etcExpandingSequence,
+					expandingId:etcId,
+					etcId:leftTerm.etcId
+				};
+			}
+			else if( rightTerm.etcSequence !== undefined )
+			{
+				var etcExpandingSequence = [];
+				if( leftTerm.etcSequence !== undefined )
+				{
+					etcExpandingSequence.push(leftTerm.etcSequence);
+				}
+				else
+				{
+					etcExpandingSequence.push([leftTerm.value]);
+				}
+				etcExpandingSequence.push(rightTerm.etcSequence);
+				etcExpandingSequence.type = rightTerm.etcSequence.type;
+				
+				// starting a new expanding sequence term
+				return {
+					type:"literal",
+					text:"("+leftTerm.text+")("+rightTerm.text+")",
+					etcExpandingSequence:etcExpandingSequence,
+					expandingId:etcId,
+					etcId:leftTerm.etcId
+				};
+			}
+			else
+			{
+				// a partially matched literal
+				var etcSequence = [];
+				var oldSeq = leftTerm.etcSequence;
+				
+				if ( oldSeq )
+				{
+					for(var elem in oldSeq)
+						etcSequence.push(oldSeq[elem]);
+				}
+				else if ( nth === 0 || nth > 1 )
+				{
+					// can only start a new etcSequence when nth == 1
+					// (i.e. when we're seeing the second term of the sequence)
+					return false;
+				}
+				else
+				{
+					etcSequence.push(leftTerm.value);
+				}
+
+				if( nth === "finalExample" )
+				{
+					etcSequence.finalExample = rightTerm.value;
+					etcSequence.excludeFinalExample = false;
+				}
+				else if( nth === "finalExampleExcluded" )
+				{
+					etcSequence.finalExample = rightTerm.value;
+					etcSequence.excludeFinalExample = true;
+				}
+				else
+				{
+					etcSequence.push(rightTerm.value);
+				}
+					
+				return {type:"literal", text:leftTerm.text+"/"+rightTerm.text, etcSequence:etcSequence, etcId:etcId};
+			}
 		}
 
 		// matched perfectly, just use the existing node
@@ -348,13 +387,31 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		}
 		else
 		{
-			var newChildren = [];
-			for( var Idx = 0; Idx < rightTerm.children.length; Idx++ )
+			var expansionId = etcId+1;
+			
+			if( rightTerm.children.length === 2 )
 			{
-//				newChildren[Idx] = rightTerm.children[Idx];
-				newChildren[Idx] = SWYM.MergeEtc(leftTerm, rightTerm.children[Idx], nth, etcId);
+				var mergedRightChildren = SWYM.MergeEtc(rightTerm.children[0], rightTerm.children[1], 1, expansionId);
 			}
-//			newChildren[BestIdx] = SWYM.MergeEtc(leftTerm, rightTerm.children[BestIdx], nth, etcId);
+			else
+			{
+				var mergedRightChildren = false;
+			}
+			
+			var newChildren = [];
+			if( mergedRightChildren !== false )
+			{
+				newChildren[0] = SWYM.MergeEtc(leftTerm, mergedRightChildren, nth, etcId);
+				BestIdx = undefined;
+			}
+			else
+			{
+				for( var Idx = 0; Idx < rightTerm.children.length; ++Idx )
+				{
+					newChildren[Idx] = SWYM.MergeEtc(leftTerm, rightTerm.children[Idx], nth, etcId);
+				}
+			}
+
 			if( rightTerm.type === "node" )
 			{
 				return {type:"node",
@@ -363,7 +420,8 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 					text:rightTerm.text,
 					op:rightTerm.op,
 					children:newChildren,
-					etcExpandAround:BestIdx,
+					etcExpansionIdx:BestIdx,
+					etcExpansionId:expansionId,
 					etcId:etcId};
 			}
 			else // rightTerm.type === "fnnode"
@@ -663,6 +721,73 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 	}
 	
 	return true;
+}
+
+SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
+{
+	// simple rule, for now: we just build a generator for the longest sequence,
+	// and then check that all the others match the stem/tail of it.
+	
+	// TODO: if this fails, try flattening the sequence and applying the generator to it
+	// (to handle [1],[2,3],[4,5,6],[7,8,9,10],etc)
+	
+	var longestSequence = expandingSequence[expandingSequence.length-1];
+
+	var forwardGenerator = SWYM.EtcCreateGenerator(longestSequence);
+	expandingSequence.type = longestSequence.type;
+	
+	longestSequence.reverse();
+	var reverseGenerator = SWYM.EtcCreateGenerator(longestSequence);
+	longestSequence.reverse();
+
+	var matchesStem = (forwardGenerator !== undefined);
+	var matchesTail = (reverseGenerator !== undefined);
+	
+	for(var expIdx = 0; expIdx < expandingSequence.length-1; ++expIdx)
+	{
+		var subSequence = expandingSequence[expIdx];
+		var lengthOffset = longestSequence.length - subSequence.length;
+		for(var subIdx = 0; subIdx < subSequence.length; ++subIdx)
+		{
+			if( matchesStem )
+			{
+				matchesStem = SWYM.IsEqual(subSequence[subIdx], longestSequence[subIdx]);
+			}
+			if( matchesTail )
+			{
+				matchesTail = SWYM.IsEqual(subSequence[subIdx], longestSequence[lengthOffset+subIdx]);
+			}
+		}
+	}
+	
+	if( matchesStem )
+	{
+		return function(expIdx, subIdx)
+		{
+			return forwardGenerator(subIdx);
+		};
+	}
+	
+	if( matchesTail )
+	{
+		return function(expIdx, subIdx)
+		{
+			return reverseGenerator(expIdx-subIdx);
+		};
+	}
+	
+	var flattened = Array.prototype.concat.apply([], expandingSequence);
+	var flattenedGenerator = SWYM.EtcCreateGenerator(flattened);
+	
+	if( flattenedGenerator !== undefined )
+	{
+		return function(expIdx, subIdx)
+		{
+			return flattenedGenerator( (expIdx*expIdx + expIdx)/2 + subIdx ) ;
+		}
+	}
+	
+	return undefined;
 }
 
 SWYM.EtcCreateGenerator = function(sequence)
