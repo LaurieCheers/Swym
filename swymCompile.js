@@ -42,20 +42,41 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 	{
 		return SWYM.VoidType;
 	}
-	else if ( parsetree.type === "etc" )
-	{
-		return SWYM.CompileEtc(parsetree, cscope, executable);
-	}
-	else if( parsetree.etcExpansionId !== undefined )
+
+	if( parsetree.etcExpansionId !== undefined )
 	{
 		var childExecutable = [];
-		var childType = SWYM.CompileNode(parsetree.children[0], cscope, childExecutable);
-
-		var composeFunction = function(a){ return SWYM.jsArray(a); }; //TEMP
-
-		SWYM.pushEach(["#Native", 0, parsetree.op.behaviour.identity, "#Load", "<etcIndex>", "#EtcExpansion", childExecutable, composeFunction], executable);
 		
-		return SWYM.ToMultivalueType(childType);
+		cscope = object(cscope);
+		cscope["<etcExpansionCurrent>"] = SWYM.DontCareType;
+		
+		if( parsetree.op !== undefined )
+		{
+			if( parsetree.op.text === "," )
+			{
+				cscope["<etcExpansionCurrent>"] = SWYM.ToMultivalueType(SWYM.DontCareType); //FIXME
+			}
+			
+			SWYM.pushEach(["#Native", 0, parsetree.op.behaviour.identity], executable);
+		}
+		else if( parsetree.type === "fnnode" )
+		{
+			SWYM.pushEach(["#Literal", SWYM.GetFunctionIdentity(parsetree, cscope)], executable);
+		}
+		
+		SWYM.pushEach([
+			"#Load", "<etcIndex>",
+			"#EtcExpansion", childExecutable
+		], executable);
+		
+		executable = childExecutable;
+		
+		// and now we proceed to compile the node into childExecutable...
+	}
+
+	if ( parsetree.type === "etc" )
+	{
+		return SWYM.CompileEtc(parsetree, cscope, executable);
 	}
 	else if( parsetree.op && parsetree.op.behaviour.customCompile )
 	{
@@ -2351,34 +2372,8 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 
 		if( parsetree.mergedBaseCase )
 		{
-			var unusedExecutable = [];
-			var chosenFunction = {};
-			SWYM.CompileFunctionCall(parsetree.body, etcScope, unusedExecutable, chosenFunction);
-			
-			if( chosenFunction.theFunction === undefined )
-			{
-				SWYM.LogError(parsetree, "Function "+parsetree.body.name+" is unknown!?");
-			}
-			else
-			{
-				var identityArg = chosenFunction.theFunction.expectedArgs["__identity"];
-				if( identityArg === undefined || identityArg.defaultValueNode === undefined )
-				{
-					SWYM.LogError(parsetree, "Function "+parsetree.body.name+" has no __identity argument");
-				}
-				else
-				{
-					var identityType = SWYM.CompileNode(identityArg.defaultValueNode, etcScope, []);
-					if( !identityType || identityType.baked === undefined )
-					{
-						SWYM.LogError(identityArg.defaultValueNode, "Function "+parsetree.body.name+" __identity argument has no default value");
-					}
-					else
-					{
-						baseCaseExecutable = ["#Literal", identityType.baked];
-					}
-				}
-			}
+			// there's no base case provided, so we'll use the function's identity value instead.
+			baseCaseExecutable = ["#Literal", SWYM.GetFunctionIdentity(parsetree.body, etcScope)];
 		}
 	
 		// main executable needs to initialize etcSoFar.
@@ -2509,35 +2504,43 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 			case "&&":
 				SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "&&etc arguments");
 				if( elementType && elementType.multivalueOf !== undefined )
+				{
 					composer = function(tru, v)
 					{
 						var result = SWYM.ResolveBool_Every(v);
 						if(!result){ SWYM.g_etcState.halt = true; };
 						return result;
 					};
+				}
 				else
+				{
 					composer = function(tru, v)
 					{
 						if(!v){ SWYM.g_etcState.halt = true; };
 						return v;
 					};
+				}
 				break;
 
 			case "||":
 				SWYM.TypeCoerce(SWYM.BoolType, elementType, parsetree, "||etc arguments");
 				if( elementType && elementType.multivalueOf !== undefined )
+				{
 					composer = function(fals, v)
 					{
 						var result = SWYM.ResolveBool_Some(v);
 						if(result){ SWYM.g_etcState.halt = true; };
 						return result;
 					};
+				}
 				else
+				{
 					composer = function(fals, result)
 					{
 						if(result){ SWYM.g_etcState.halt = true; };
 						return result;
 					};
+				}
 				break;
 				
 			default:
@@ -2555,6 +2558,40 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	executable.push(haltExecutable);
 	executable.push(haltCondition);
 	return returnType;
+}
+
+SWYM.GetFunctionIdentity = function(parsetree, cscope)
+{
+	var unusedExecutable = [];
+	var chosenFunction = {};
+	SWYM.CompileFunctionCall(parsetree, cscope, unusedExecutable, chosenFunction);
+	
+	if( chosenFunction.theFunction === undefined )
+	{
+		SWYM.LogError(parsetree, "Function "+parsetree.name+" is unknown!");
+	}
+	else
+	{
+		var identityArg = chosenFunction.theFunction.expectedArgs["__identity"];
+		if( identityArg === undefined || identityArg.defaultValueNode === undefined )
+		{
+			SWYM.LogError(parsetree, "Function "+parsetree.name+" can't be used in etc expressions because it has no default argument named __identity.");
+		}
+		else
+		{
+			var identityType = SWYM.CompileNode(identityArg.defaultValueNode, cscope, []);
+			if( !identityType || identityType.baked === undefined )
+			{
+				SWYM.LogError(identityArg.defaultValueNode, "Function "+parsetree.name+" __identity argument has no default value");
+			}
+			else
+			{
+				return identityType.baked;
+			}
+		}
+	}
+	
+	return undefined;
 }
 
 SWYM.pushEach = function(from, into)

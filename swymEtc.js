@@ -96,18 +96,10 @@ SWYM.EtcFindBestMatch = function(leftTerm, possibleTerms)
 	for( var Idx = 0; Idx < possibleTerms.length; Idx++ )
 	{
 		var newMatch = SWYM.EtcMatches(leftTerm, possibleTerms[Idx]);
-		if( newMatch === true )
+		if( newMatch === true && bestMatchSoFar !== true )
 		{
-			if( bestMatchSoFar === true )
-			{
-				SWYM.LogError(possibleTerms[bestIdx].pos, "Ambiguous etc expression - too many perfect matches");
-				return -1;
-			}
-			else
-			{
-				bestMatchSoFar = newMatch;
-				bestIdx = Idx;
-			}
+			bestMatchSoFar = newMatch;
+			bestIdx = Idx;
 		}
 		else if ( newMatch !== false && bestMatchSoFar !== true && (bestMatchSoFar === false || newMatch < bestMatchSoFar) )
 		{
@@ -129,9 +121,9 @@ SWYM.CloneNode = function(node, newChildren)
 	}
 	
 	if( node.type === "node" )
-		return {type:"node", text:node.text, op:node.op, etcExpandAround:node.etcExpandAround, children:newChildren};
+		return {type:"node", text:node.text, op:node.op, children:newChildren};
 	else if ( node.type === "fnnode" )
-		return {type:"fnnode", name:node.name, etcExpandAround:node.etcExpandAround, children:newChildren, argNames:node.argNames};
+		return {type:"fnnode", name:node.name, children:newChildren, argNames:node.argNames};
 	else
 		SWYM.LogError(0, "Fsckup: invalid node for CloneNode");
 }
@@ -202,23 +194,6 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 {
 	if( !leftTerm || !rightTerm )
 		return false;
-		
-	if( leftTerm.etcExpandAround !== undefined && nth === 0 )
-	{
-		// this is an expanding operator (e.g. 'x, x*2, x*2*2, etc'), so when we backtrack to the first term,
-		// it doesn't actually exist
-		var matchChild = SWYM.MergeEtc(leftTerm.children[leftTerm.etcExpandAround], rightTerm, nth, etcId);
-		if( matchChild === leftTerm.children[leftTerm.etcExpandAround] )
-		{
-			return leftTerm;
-		}
-		else
-		{
-			var cloned = SWYM.CloneNode(leftTerm);
-			cloned.children[leftTerm.etcExpandAround] = matchChild;
-			return cloned;
-		}
-	}
 	
 	var baseMatch = SWYM.EtcMatchesExceptChildren(leftTerm, rightTerm);
 	if ( baseMatch )
@@ -374,7 +349,8 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 			return SWYM.MergeEtc(leftTerm, rightTerm.children[0], nth, etcId);
 		}
 
-		// we're matching a single value with a node; rightTerm must have been spliced in, or else can't match
+		// we're matching a single value with a node; it must be an expanding sequence where the
+		// rightTerm was spliced in, or else can't match
 
 		// this kind of splice is only legal if we do it in the first step
 		if( nth !== 1 )
@@ -383,6 +359,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		var BestIdx = SWYM.EtcFindBestMatch(leftTerm, rightTerm.children);
 		if ( BestIdx === -1 )
 		{
+			SWYM.LogError(rightTerm, "Ambiguous etc expression - no obvious matches");
 			return false;
 		}
 		else
@@ -398,19 +375,13 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 				var mergedRightChildren = false;
 			}
 			
-			var newChildren = [];
-			if( mergedRightChildren !== false )
+			if( mergedRightChildren === false )
 			{
-				newChildren[0] = SWYM.MergeEtc(leftTerm, mergedRightChildren, nth, etcId);
-				BestIdx = undefined;
+				SWYM.LogError(0, "Failed to merge expanding sequence: ["+rightTerm.children[0]+","+rightTerm.children[1]+"]");
+				return;
 			}
-			else
-			{
-				for( var Idx = 0; Idx < rightTerm.children.length; ++Idx )
-				{
-					newChildren[Idx] = SWYM.MergeEtc(leftTerm, rightTerm.children[Idx], nth, etcId);
-				}
-			}
+			
+			var mergedChild = SWYM.MergeEtc(leftTerm, mergedRightChildren, nth, etcId);
 
 			if( rightTerm.type === "node" )
 			{
@@ -419,8 +390,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 					identity:rightTerm.identity,
 					text:rightTerm.text,
 					op:rightTerm.op,
-					children:newChildren,
-					etcExpansionIdx:BestIdx,
+					children:[SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergedChild],
 					etcExpansionId:expansionId,
 					etcId:etcId};
 			}
@@ -431,8 +401,8 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 					identity:rightTerm.identity,
 					name:rightTerm.name,
 					argNames:rightTerm.argNames,
-					children:newChildren,
-					etcExpandAround:BestIdx,
+					children:[SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergedChild],
+					etcExpansionId:expansionId,
 					etcId:etcId};
 			}
 		}
@@ -716,6 +686,18 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 	for(var Idx = 0; Idx < sequence.length; Idx++ )
 	{
 		var resultAtIdx = generator(Idx);
+		if( !SWYM.IsEqual(resultAtIdx, sequence[Idx]) )
+			return false;
+	}
+	
+	return true;
+}
+
+SWYM.EtcTryNumberGenerator = function(sequence, generator)
+{  
+	for(var Idx = 0; Idx < sequence.length; Idx++ )
+	{
+		var resultAtIdx = generator(Idx);
 		if( resultAtIdx + 0.0000000001 < sequence[Idx] || resultAtIdx - 0.0000000001 > sequence[Idx] )
 			return false;
 	}
@@ -725,11 +707,10 @@ SWYM.EtcTryGenerator = function(sequence, generator)
 
 SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 {
-	// simple rule, for now: we just build a generator for the longest sequence,
+	// simple rule: build a generator for the longest sequence,
 	// and then check that all the others match the stem/tail of it.
-	
-	// TODO: if this fails, try flattening the sequence and applying the generator to it
-	// (to handle [1],[2,3],[4,5,6],[7,8,9,10],etc)
+	// This handles sequences like [[1],[1,2],[1,2,3],etc]
+	// and [[1],[2,1],[3,2,1],etc]
 	
 	var longestSequence = expandingSequence[expandingSequence.length-1];
 
@@ -753,6 +734,11 @@ SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 			{
 				matchesStem = SWYM.IsEqual(subSequence[subIdx], longestSequence[subIdx]);
 			}
+			else if( !matchesTail )
+			{
+				break;
+			}
+			
 			if( matchesTail )
 			{
 				matchesTail = SWYM.IsEqual(subSequence[subIdx], longestSequence[lengthOffset+subIdx]);
@@ -776,6 +762,8 @@ SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 		};
 	}
 	
+	// Try flattening the seuquence and applying the generator to it as a whole.
+	// This handles sequences like [[1], [2,3], [4,5,6], etc]
 	var flattened = Array.prototype.concat.apply([], expandingSequence);
 	var flattenedGenerator = SWYM.EtcCreateGenerator(flattened);
 	
@@ -787,6 +775,7 @@ SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 		}
 	}
 	
+	SWYM.LogError(0, "etc - can't find a rule for sequence ["+expandingSequence+"].");
 	return undefined;
 }
 
@@ -872,7 +861,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 	var arithmetic = function(index){ return base + (second-base)*index; };
 	
 	// this will match all 2-element sequences.
-	if ( SWYM.EtcTryGenerator(sequence, arithmetic) )
+	if ( SWYM.EtcTryNumberGenerator(sequence, arithmetic) )
 	{
 		if( second > base )
 			sequence.direction = "ascending";
@@ -888,7 +877,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 	{
 		var geometric = function(index){ return base * Math.pow(second/base, index); };
 
-		if (SWYM.EtcTryGenerator(sequence, geometric ))
+		if (SWYM.EtcTryNumberGenerator(sequence, geometric ))
 		{
 			if( second > base )
 				sequence.direction = "ascending";
@@ -913,7 +902,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 	};
 
 	// only try this when there are 4 examples, because literally all 3-value sequences can fit a quadratic sequence.
-	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, quadratic))
+	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, quadratic))
 	{
 		if( firstDiff >= 0 && pDiff >= 0 )
 			sequence.direction = "ascending";
@@ -952,7 +941,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		return lastValue;
 	};
 
-	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, cumgeometric))
+	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, cumgeometric))
 	{
 		if( factor > 0 )
 		{
@@ -980,7 +969,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		return (base + arithStep*index) * Math.pow(geoFactor, index);
 	};
 
-	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeo))
+	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeo))
 	{
 		sequence.type = (base%1==0 && arithStep%1==0 && geoFactor%1==0)? SWYM.IntType: SWYM.NumberType;
 
@@ -1003,7 +992,7 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		return (base + arithStepB*index) * Math.pow(geoFactorB, index);
 	};
 
-	if( sequence.length >= 4 && SWYM.EtcTryGenerator(sequence, arithxgeoB))
+	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeoB))
 	{
 		sequence.type = (base%1==0 && arithStepB%1==0 && geoFactorB%1==0)? SWYM.IntType: SWYM.NumberType;
 

@@ -237,7 +237,7 @@ SWYM.operators = {
 		}},
 	
 	",":  {precedence:20, infix:true, postfix:true, noImplicitSemicolon:true,
-		identity:function(){ return [] },
+		identity:function(){ return SWYM.jsArray([]); },
 		customCompile:function(node, cscope, executable)
 		{
 			// compose a tree of comma operators into a single list expression.
@@ -2751,7 +2751,7 @@ Array.'no'('body') returns [.no.(body)]\n\
 \n\
 Cell.'value' returns .container.at(.key)\n\
 Cell.'value'('equals') returns .container.at(.key)=equals\n\
-Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
+//Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
 Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
 Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
 Array.'cells' returns array(.length) 'idx'->{ Cell.new(idx, this) }\n\

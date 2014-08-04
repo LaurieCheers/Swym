@@ -573,7 +573,6 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 		case "#EtcExpansion":
 			var etcStepExecutable = executable[PC+1];
-			var etcComposer = executable[PC+2];
 			var index = stack.pop();
 			if( index === undefined )
 			{
@@ -585,12 +584,13 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			for( var subIndex = 0; subIndex <= index; ++subIndex )
 			{
 				rscope["<etcExpansion>"] = subIndex;
-				result.push( SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []) );
+				rscope["<etcExpansionCurrent>"] = result;
+				result = SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
 			}
 			
-			stack.push( etcComposer(result) );
+			stack.push( result );
 
-			PC += 3;
+			PC += 2;
 			break;
 			
 		case "#EtcSimple":
