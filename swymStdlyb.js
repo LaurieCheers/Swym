@@ -2492,7 +2492,7 @@ SWYM.DefaultGlobalCScope =
 				return {type:"table", keys:SWYM.Distinct(keys), run:function(key){return SWYM.ClosureExec(lookup,key,valueExecutable)} }
 			} );
 
-			return {type:"swymObject", ofClass:SWYM.TableClass, argType:keyType, outType:valueType};
+			return SWYM.TableTypeFromTo(keyType, valueType);
 		}
 	}],
 	
@@ -2544,18 +2544,30 @@ SWYM.DefaultGlobalCScope =
 		returnType:SWYM.VoidType,
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
+			var testExecutable = [];
+			var testType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[0]), SWYM.VoidType, testExecutable, errorNode);
+			
+			var bodyExecutable = [];
+			var bodyType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), testType, bodyExecutable, errorNode);
+			
 			executable.push("#Native");
 			executable.push(2);
 			executable.push(function(test, body)
 			{
-				while( SWYM.ClosureCall(test) != false && !SWYM.halt)
+				while(!SWYM.halt)
 				{
-					SWYM.ClosureCall(body);
+					var condValue = SWYM.ClosureExec(test, undefined, testExecutable);
+					if( condValue === false )
+					{
+						break;
+					}
+					else
+					{
+						SWYM.ClosureExec(body, condValue, bodyExecutable);
+					}
 				}
 			});
 
-			SWYM.TypeCoerce(SWYM.BoolType, SWYM.GetOutType(argTypes[0], SWYM.VoidType), errorNode);
-			SWYM.GetOutType(argTypes[1], SWYM.VoidType);
 			return SWYM.VoidType;
 		}
 	}],
@@ -2734,7 +2746,10 @@ Array.'#rdLast' returns .atEnd(#-1)\n\
 Array.'#thLast' returns .atEnd(#-1)\n\
 Array.'last' returns .atEnd(0)\n\
 Array.'flatten' returns [ .each.each ]\n\
-Array.'tabulate'('body') returns table(this)(body)\n\
+Array.'tabulate'(Callable 'key'={it}, Callable 'value'={it})\n\
+{\n\
+  table(keys=.map(key), values=.map(value))\n\
+}\n\
 Array.'each'('fn') returns [.each.(fn)]\n\
 Array.'no' { yield .none }\n\
 Array.'oneOrMore' { yield .some }\n\
@@ -2745,12 +2760,13 @@ Array.'no'('body') returns [.no.(body)]\n\
 \n\
 'Cell' = Struct\n\
 {\n\
-  Int 'key'\n\
+  Anything 'key'\n\
   Container 'container'\n\
 }\n\
 \n\
 Cell.'value' returns .container.at(.key)\n\
 Cell.'value'('equals') returns .container.at(.key)=equals\n\
+//Cell.'$$' returns \"cell($$.key:$$.value)\"\n\
 //Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
 Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
 Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
@@ -2859,6 +2875,8 @@ Array.'product'('body') returns product[.each.(body)]\n\
 Array.'map'('body') returns [.each.(body)]\n\
 Array.'copy' returns [.each]\n\
 Anything.'in'(Array 'array') returns this ==any array\n\
+Array.'frequencies' returns .distinct.tabulate 'key'->{ this.countWhere{==key} }\n\
+Table.'arrayFromFrequencies' returns [.keys.each.'key'->{ key**this.at(key) }]\n\
 Array.'min' returns .reduce ['a','b']-> { a.clamp(max=b) }\n\
 Array.'min'('else') returns if(.length>0){this.min} else (else)\n\
 Array.'max' returns .reduce ['a','b']-> { a.clamp(min=b) }\n\

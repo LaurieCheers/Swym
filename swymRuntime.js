@@ -1668,15 +1668,22 @@ SWYM.ToDebugString = function(value, loopBreaker)
 
 		case "struct":
 		{
-			var result = "";
-			for( var memberName in value.members )
+			if( value.structType.toDebugString !== undefined )
 			{
-				if( result !== "" )
-					result += ", ";
-
-				result += memberName+"="+SWYM.ToDebugString(value.members[memberName], loopBreaker);
+				return SWYM.ToTerseString( value.structType.toDebugString(value) );
 			}
-			return value.structType.debugName+"("+result+")";
+			else
+			{
+				var result = "";
+				for( var memberName in value.members )
+				{
+					if( result !== "" )
+						result += ", ";
+
+					result += memberName+"="+SWYM.ToDebugString(value.members[memberName], loopBreaker);
+				}
+				return value.structType.debugName+"("+result+")";
+			}
 		}
 
 		case "lazyArray":

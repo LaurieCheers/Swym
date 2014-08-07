@@ -353,6 +353,7 @@ function runAllTests()
   runTest("\"\"\"This is a haiku\nCounting all the syllables\nIs so tedious\"\"\".lines", "[\"This is a haiku\",\"Counting all the syllables\",\"Is so tedious\"]");
   runTest("\"\"\"This is a haiku\nCounting all the syllables\nIs so tedious\"\"\".words", "[\"This\",\"is\",\"a\",\"haiku\",\"Counting\",\"all\",\"the\",\"syllables\",\"Is\",\"so\",\"tedious\"]");
   runTest("\"ebg13\".rot13.print", "rot13");
+  runTest("Int 'x'=0; while{x != 10}{x=x+1}; x", "10");
   endReportTable();
 
   addReportTable("Destructuring:");

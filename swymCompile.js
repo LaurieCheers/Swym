@@ -1040,10 +1040,9 @@ SWYM.GetPrecompiled = function(theFunction, argTypes)
 	return result;
 }
 
-SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, returnTypeNode, cscope, executable)
+SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, returnTypeNode, cscope, executable, errorNode)
 {
 //	var bodyCScope = object(cscope);
-	var bodyExecutable = [];
 	var bodyScope = object(cscope);
 	
 	var expectedArgs = {};
@@ -1120,17 +1119,48 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		returnType = returnTypeBaked.baked;
 	}
 
+	if( fnName === "fn#$$" )
+	{
+		var structType = expectedArgs["this"].typeCheck;
+		if( structType === undefined || structType.nativeType !== "Struct" )
+		{
+			SWYM.LogError(errorNode, "The $$ operator can only be declared on a struct type.");
+			return SWYM.VoidType;
+		}
+		
+		var debugName = structType.debugName;
+		
+		// Ugh... this is really hacky, and doesn't even work if stdlyb wants to define $$ overrides.
+		//Surely we can do something better?
+		var bodyExecutable = [];
+		var bodyCScope = object(SWYM.MainCScope);
+		bodyCScope["this"] = structType;
+		bodyCScope["__default"] = {redirect:"this"};
+		
+		var returnType = SWYM.CompileNode(body, bodyCScope, bodyExecutable);
+		SWYM.TypeCoerce(returnType, SWYM.StringType);
+		
+		structType.toDebugString = function(value)
+		{
+			var rscope = object(SWYM.MainRScope);
+			rscope["this"] = value;
+			return SWYM.ExecWithScope(debugName, bodyExecutable, rscope, []);
+		}
+		
+		return SWYM.VoidType;
+	}
+
 	var cscopeFunction = {
 		bodyNode:body,
 		expectedArgs:expectedArgs,
-		executable:bodyExecutable,
+		executable:[],
 //		bodyCScope:bodyCScope, // used by implicit member definitions, like 'Yielded'.
 		toString: function(){ return "'"+fnName+"'"; },
 		returnType:returnType
 	};
 
 	SWYM.AddFunctionDeclaration(fnName, cscope, cscopeFunction);
-	
+		
 	var negateExecutable = ["#Native",1,function(v){return !v}];
 
 	if( fnName === "fn#<" )
@@ -2431,8 +2461,25 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 		initialExecutable = ["#Native", 0, function(){ return {values:[], keys:[]}; }];
 		composer = function(fields, pair)
 		{
-			fields.keys.push(pair[0]);
-			fields.values.push(pair[1]);
+			// O(N-squared) algorithm for excluding duplicates. :-/ Change to hashtable?
+			var foundIdx = -1;
+			for(var Idx = 0; Idx < fields.keys.length; ++Idx)
+			{
+				if( SWYM.IsEqual(fields.keys[Idx], pair[0]) )
+				{
+					foundIdx = Idx;
+					break;
+				}
+			}
+			if( foundIdx === -1 )
+			{
+				fields.keys.push(pair[0]);
+				fields.values.push(pair[1]);
+			}
+			else
+			{
+				fields.values[foundIdx] = pair[1];
+			}
 			return fields;
 		};
 		postProcessor = function(fields){ return SWYM.CreateTable(fields.keys, fields.values); };

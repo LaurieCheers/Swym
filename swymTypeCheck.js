@@ -396,6 +396,12 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	{
 		return typeA;
 	}
+	
+	if( typeA.needsCompiling || typeB.needsCompiling )
+	{
+		SWYM.LogError(errorContext, "Dynamic closures are not currently supported. Closure values must be known at compile time.");
+		return typeA;
+	}
 
 	if( typeA.multivalueOf !== undefined && typeB.multivalueOf !== undefined )
 	{
