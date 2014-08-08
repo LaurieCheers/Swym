@@ -1379,54 +1379,84 @@ SWYM.SimpleCharRange = function(startCode, endCode, result)
 
 SWYM.CharRange = function(startStr,endStr)
 {
-	var Acode = "A".charCodeAt(0);
-	var Zcode = "Z".charCodeAt(0);
-	var acode = "a".charCodeAt(0);
-	var zcode = "z".charCodeAt(0);
-	var zerocode = "0".charCodeAt(0);
-	var ninecode = "9".charCodeAt(0);
-	var startCode = startStr.data.charCodeAt(0);
-	var endCode = endStr.data.charCodeAt(0);
-	var startCodeAZ = startCode >= Acode && startCode <= Zcode;
-	var startCodeaz = startCode >= acode && startCode <= zcode;
-	var endCodeAZ = endCode >= Acode && endCode <= Zcode;
-	var endCodeaz = endCode >= acode && endCode <= zcode;
+	if( startStr.length !== endStr.length )
+	{
+		SWYM.LogError(0, "Invalid char range ("+startStr.data+".."+endStr.data+") - examples must be of the same length");
+		return startStr;
+	}
+	else if( startStr.length === 1 )
+	{
+		var startCode = startStr.data.charCodeAt(0);
+		var endCode = endStr.data.charCodeAt(0);
+		
+		var Acode = "A".charCodeAt(0);
+		var Zcode = "Z".charCodeAt(0);
+		var acode = "a".charCodeAt(0);
+		var zcode = "z".charCodeAt(0);
 
-	var result = "";
+		var result = "";
 
-	if( startCode >= zerocode && startCode <= ninecode && endCode >= zerocode && endCode <= ninecode )
-	{
-		// simple number range
-		return SWYM.StringWrapper( SWYM.SimpleCharRange(startCode,endCode, result) );
-	}
-	else if( startCodeAZ && endCodeAZ )
-	{
-		// simple uppercase range
-		result = SWYM.SimpleCharRange(startCode,endCode, result);
-	}
-	else if( startCodeAZ && endCodeaz )
-	{
-		// uppercase then lowercase
-		result = SWYM.SimpleCharRange(startCode,endCode+(Acode-acode), result);
-		result = SWYM.SimpleCharRange(startCode+(acode-Acode),endCode, result);
-	}
-	else if( startCodeaz && endCodeaz )
-	{
-		// simple lowercase range
-		result = SWYM.SimpleCharRange(startCode,endCode, result);
-	}
-	else if( startCodeaz && endCodeAZ )
-	{
-		// lowercase then uppercase
-		result = SWYM.SimpleCharRange(startCode,endCode+(acode-Acode), result);
-		result = SWYM.SimpleCharRange(startCode+(Acode-acode),endCode, result);
+		if( startCode >= Acode && startCode <= Zcode && endCode >= acode && endCode <= zcode )
+		{
+			// uppercase then lowercase (e.g. "B".."c" -> "BCbc")
+			result = SWYM.SimpleCharRange(startCode,endCode+(Acode-acode), result);
+			result = SWYM.SimpleCharRange(startCode+(acode-Acode),endCode, result);
+		}
+		else if( startCode >= acode && startCode <= zcode && endCode >= Acode && endCode <= Zcode )
+		{
+			// lowercase then uppercase (e.g. "b".."C" -> "bcBC")
+			result = SWYM.SimpleCharRange(startCode,endCode+(acode-Acode), result);
+			result = SWYM.SimpleCharRange(startCode+(Acode-acode),endCode, result);
+		}
+		else
+		{
+			// simple range
+			result = SWYM.SimpleCharRange(startCode,endCode, result);
+		}
+		
+		return SWYM.StringWrapper(result);
 	}
 	else
 	{
-		SWYM.LogError(-1, "Invalid character range: \""+(startStr.data)+"\" to \""+(endStr.data)+"\"");
+		var rangeSteps = [];
+		var rangeLength = 0;
+		for( var Idx = 0; Idx < startStr.length; ++Idx )
+		{
+			var offset = endStr.data.charCodeAt(Idx) - startStr.data.charCodeAt(Idx);
+			rangeSteps[Idx] = offset;
+			if( offset !== 0 )
+			{
+				if( rangeLength !== 0 && rangeLength !== offset && rangeLength !== -offset )
+				{
+					SWYM.LogError(0, "Invalid multi-character range ("+startStr.data+".."+endStr.data+"). All characters must either remain unchanged, or change by an equal amount.");
+					return startStr;
+				}
+				
+				rangeLength = Math.abs(offset);
+				if( offset > 0 )
+				{
+					rangeSteps[Idx] = 1;
+				}
+				else
+				{
+					rangeSteps[Idx] = -1;
+				}
+			}
+		}
+		
+		// NB: <= because "A".."A" -> "A"
+		var result = [];
+		for( var rangeIdx = 0; rangeIdx <= rangeLength; ++rangeIdx )
+		{
+			var stringN = "";
+			for( var stringIdx = 0; stringIdx < rangeSteps.length; ++stringIdx )
+			{
+				stringN += String.fromCharCode( startStr.data.charCodeAt(stringIdx) + rangeSteps[stringIdx]*rangeIdx );
+			}
+			result.push( SWYM.StringWrapper(stringN) );
+		}
+		return SWYM.jsArray(result);
 	}
-	
-	return SWYM.StringWrapper(result);
 }
 
 SWYM.ValueToClosure = function(val)

@@ -2746,9 +2746,13 @@ Array.'#rdLast' returns .atEnd(#-1)\n\
 Array.'#thLast' returns .atEnd(#-1)\n\
 Array.'last' returns .atEnd(0)\n\
 Array.'flatten' returns [ .each.each ]\n\
-Array.'tabulate'(Callable 'key'={it}, Callable 'value'={it})\n\
+Array.'tabulateBy'(Callable 'key', Callable 'value'={it})\n\
 {\n\
   table(keys=.map(key), values=.map(value))\n\
+}\n\
+Array.'tabulate'(Callable 'value')\n\
+{\n\
+  table(keys=this, values=this.map(value))\n\
 }\n\
 Array.'each'('fn') returns [.each.(fn)]\n\
 Array.'no' { yield .none }\n\
@@ -2867,6 +2871,7 @@ Array.'whereDistinct'('property') returns .singletonOr\n\
 Array.'withBounds'('bound') returns array(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
 Array.'safeBounds' returns .withBounds{novalues}\n\
 Array.'cyclic' returns (Int 'idx')->{ idx.mod(this.length).(this) }\n\
+Array.'arrayRotate'('offset') returns .cyclic.slice(start=offset, length=.length)\n\
 Array.'total' returns .1st + .2nd + etc;\n\
 Array.'sum' returns .total\n\
 Array.'product' returns .1st * .2nd * etc;\n\
@@ -3043,9 +3048,8 @@ String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
 \n\
 String.'caesarCypher'(Int 'offset')\n\
 {\n\
-  'alphabet' = $[\"A\"..\"Z\"]\n\
-  'shifted' = alphabet.cyclic.slice(start=offset, length=26)\n\
-  this.map~table(keys=alphabet+alphabet.lowercase, values=shifted+shifted.lowercase, default=unchanged)\n\
+  'alphabet' = $[\"Aa\"..\"Zz\"]\n\
+  this.map( table(alphabet, alphabet.arrayRotate(offset*2), default=unchanged) )\n\
 }\n\
 String.'rot13' returns .caesarCypher(13)\n\
 \n\
@@ -3114,9 +3118,9 @@ String.'lowercase' returns String<< .javascript{ return SWYM.StringWrapper(this.
 StringChar.'lowercase' returns StringChar<< .javascript{ return SWYM.StringWrapper(this.toLowerCase()) }\n\
 String.'uppercase' returns String<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
 StringChar.'uppercase' returns StringChar<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
-String.'codePoints' returns [.each.{ Int<< .javascript{ return this.charCodeAt(0); } }]\n\
-Int.Array.'stringFromCodePoints' returns $[.each.stringFromCodePoint]\n\
-Int.'stringFromCodePoint' returns StringChar<<.javascript{ return SWYM.StringWrapper(String.fromCharCode(this)); }\n\
+String.'unicode' returns [.each.{ Int<< .javascript{ return this.charCodeAt(0); } }]\n\
+Int.Array.'stringFromUnicode' returns $[.each.stringFromUnicode]\n\
+Int.'stringFromUnicode' returns StringChar<<.javascript{ return SWYM.StringWrapper(String.fromCharCode(this)); }\n\
 ";/**/
 
 /*
