@@ -2880,7 +2880,17 @@ Array.'product'('body') returns product[.each.(body)]\n\
 Array.'map'('body') returns [.each.(body)]\n\
 Array.'copy' returns [.each]\n\
 Anything.'in'(Array 'array') returns this ==any array\n\
-Array.'frequencies' returns .distinct.tabulate 'key'->{ this.countWhere{==key} }\n\
+Array.'categorizeBy'('key')\n\
+{\n\
+  'result' = this.map(key).tabulate{this.ElementType.mutableArray[]}\n\
+  forEach(this) 'value'->\n\
+  {\n\
+    result.at( value.(key) ).push(value)\n\
+  }\n\
+  result\n\
+}\n\
+Array.'categorize' returns .categorizeBy{it}\n\
+Array.'frequencies' returns .categorize.map{.length}\n\
 Table.'arrayFromFrequencies' returns [.keys.each.'key'->{ key**this.at(key) }]\n\
 Array.'min' returns .reduce ['a','b']-> { a.clamp(max=b) }\n\
 Array.'min'('else') returns if(.length>0){this.min} else (else)\n\
@@ -2989,7 +2999,7 @@ Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
   }\n\
 }\n\
 Table.'values' returns [.at(.keys.each)]\n\
-Table.'map'('body') returns Table.new(.keys) {.(this).(body)}\n\
+Table.'map'('body') returns .cells.tabulateBy{.key}{.value.(body)}\n\
 \n\
 'Empty' = {.length == 0}\n\
 'PI' = 3.1415926535897926\n\
