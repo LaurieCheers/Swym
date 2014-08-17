@@ -26,9 +26,16 @@ SWYM.NextToken = function(step)
 
 //=============================================================
 
-SWYM.PeekNextToken = function()
+SWYM.PeekNextToken = function(offset)
 {
-	return SWYM.tokenlist[SWYM.tokenIdx+1];
+	if( offset !== undefined )
+	{
+		return SWYM.tokenlist[SWYM.tokenIdx+offset];
+	}
+	else
+	{
+		return SWYM.tokenlist[SWYM.tokenIdx+1];
+	}
 }
 
 //=============================================================
@@ -138,7 +145,7 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 					newOp.endSourcePos = SWYM.curToken.pos;
 					SWYM.NextToken(); //chomp the close bracket
 
-					if( SWYM.curToken && SWYM.curToken.text === "->" )
+					if( SWYM.curToken && SWYM.curToken.text === "->" && SWYM.PeekNextToken() && SWYM.PeekNextToken().text === "{" )
 					{
 						// it's a ['foo']->{...} style block!
 
@@ -278,20 +285,15 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 			else
 				openBracketOp.etc = etcText;
 		}
-		else if ( SWYM.curToken.type === "decl" && SWYM.PeekNextToken() && SWYM.PeekNextToken().text === "->" )
+		else if ( SWYM.curToken.type === "decl" && SWYM.PeekNextToken() && SWYM.PeekNextToken().text === "->" &&
+			SWYM.PeekNextToken(2) && SWYM.PeekNextToken(2).text === "{" )
 		{
 			// it's a 'foo'->{...} block expression
 			var declToken = SWYM.curToken;
 			SWYM.NextToken();
 			SWYM.NextToken();
-			if( !SWYM.curToken || SWYM.curToken.text !== "{" )
-			{
-				SWYM.LogError(declToken.sourcePos, "Illegal use of the -> operator - expected a following {...}, got "+SWYM.curToken);
-			}
-			else
-			{
-				SWYM.curToken.argName = declToken;
-			}
+			// now curToken is the open brace
+			SWYM.curToken.argName = declToken;
 		}
 		else if ( SWYM.curToken.behaviour )
 		{
@@ -485,17 +487,23 @@ SWYM.IsTableNode = function(paramnode)
 	return ( paramnode && paramnode.op && paramnode.op.text === ":" );
 }
 
-SWYM.ReadParamBlock = function(paramnode, fnnode)
+SWYM.ReadParamBlock = function(paramnode, fnnode, isNamed)
 {
 	if( paramnode && paramnode.op &&
 		(paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
-		SWYM.ReadParamBlock(paramnode.children[0], fnnode);
-		SWYM.ReadParamBlock(paramnode.children[1], fnnode);
+		SWYM.ReadParamBlock(paramnode.children[0], fnnode, isNamed);
+		SWYM.ReadParamBlock(paramnode.children[1], fnnode, isNamed);
 	}
 	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
 				paramnode.children[0] && paramnode.children[0].type === "name" )
 	{
+//TO PUT BACK
+//		if( !isNamed )
+//		{
+//			SWYM.LogError(paramnode, "Invalid use of a named parameter. Named parameters can only occur in a @(...) block.");
+//		}
+
 		// passing a named parameter
 		fnnode.argNames.push( paramnode.children[0].text );
 		fnnode.children.push( paramnode.children[1] );
@@ -515,9 +523,18 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 	}
 	else if ( paramnode )
 	{
-		// passing an anonymous parameter
-		fnnode.argNames.push( "__" );
-		fnnode.children.push( paramnode );
+		if( isNamed )
+		{
+			// passing a boolean flag 'true'
+			fnnode.argNames.push( paramnode.children[0].text );
+			fnnode.children.push( SWYM.NewToken("name", paramnode.pos, "true") );
+		}
+		else
+		{
+			// passing an anonymous parameter
+			fnnode.argNames.push( "__" );
+			fnnode.children.push( paramnode );
+		}
 	}
 }
 
@@ -691,5 +708,27 @@ SWYM.BuildDotNode = function(lhs, op, rhs, wrapper)
 	{
 		op.behaviour = wrapper;
 		return SWYM.NonCustomParseTreeNode(undefined, op, result);
+	}
+}
+
+SWYM.BuildCompoundAssignmentNode = function(operatorName)
+{
+	return function(lhs, op, rhs)
+	{
+		if ( lhs && lhs.type === "fnnode" && !lhs.isDecl )
+		{
+			// pass a __mutator={it op rhs} argument to this function
+			var compoundOp = SWYM.NewToken("op", op.pos, operatorName);
+			var compoundNode = compoundOp.behaviour.customParseTreeNode( SWYM.NewToken("name", op.pos, "it"), compoundOp, rhs );
+			var braceOp = SWYM.NewToken("op", op.pos, "{");
+			var braceNode = braceOp.behaviour.customParseTreeNode(undefined, braceOp, compoundNode);
+			var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[braceNode], argNames:["__mutator"]};
+			
+			return SWYM.CombineFnNodes(lhs, result);
+		}
+		else
+		{
+			return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+		}
 	}
 }

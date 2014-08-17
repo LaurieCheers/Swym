@@ -513,6 +513,16 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			PC += 1;
 			break;
 			
+		case "#Swap3":
+			var a = stack.pop();
+			var b = stack.pop();
+			var c = stack.pop();
+			stack.push(a);
+			stack.push(b);
+			stack.push(c);
+			PC += 1;
+			break;
+			
 		case "#Dup":
 			stack.push( stack[stack.length-1] );
 			PC += 1;
@@ -1223,6 +1233,10 @@ SWYM.ClosureExec = function(closure, arg, executable)
 	else if( closure.run !== undefined )
 	{
 		return closure.run(arg);
+	}
+	else if( closure.type === "type" )
+	{
+		return SWYM.IsOfType(arg, closure);
 	}
 	else
 	{

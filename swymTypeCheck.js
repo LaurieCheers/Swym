@@ -152,7 +152,7 @@ SWYM.IsOfType = function(value, typeCheck, exact, errorContext)
 		
 		return false;
 	}
-	
+		
 	return true;
 }
 
@@ -198,7 +198,10 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 	
 	if( valueInfo.baked !== undefined )
 	{
-		return SWYM.IsOfType(valueInfo.baked, typeCheck, exact, errorContext);
+		if( !SWYM.IsOfType(valueInfo.baked, typeCheck, exact, errorContext) )
+		{
+			return false;
+		}
 	}
 	else if( typeCheck.baked !== undefined )
 	{
@@ -269,12 +272,15 @@ SWYM.TypeMatches = function(typeCheck, valueInfo, exact, errorContext)
 		}
 	}
 	
-	if( typeCheck.outType )
+	if( typeCheck.outType && typeCheck.outType !== SWYM.AnythingType && typeCheck.outType !== SWYM.DontCareType )
 	{
 		//TODO: take the typeCheck.argType into account when determining valueInfo.outType.
-		if( !SWYM.TypeMatches(typeCheck.outType, valueInfo.outType, exact) )
+		if( valueInfo.outType === undefined || !SWYM.TypeMatches(typeCheck.outType, valueInfo.outType, exact) )
 		{
-			return false;
+			if( !valueInfo.needsCompiling || !SWYM.TypeMatches(typeCheck.outType, SWYM.GetOutType(valueInfo, typeCheck.argType), exact) )
+			{
+				return false;
+			}
 		}
 	}
 
@@ -700,7 +706,7 @@ SWYM.LazyArrayTypeContaining = function(elementType)
 	return result;
 }
 
-SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
+SWYM.ArrayTypeContaining = function(elementType, isMutable, canBake, errorContext)
 {
 	if( !elementType )
 	{
@@ -720,19 +726,19 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 		outType:outType,
 		debugName:"Array("+SWYM.TypeToString(outType)+")"
 	};
-
-	if( elementType.tupleTypes !== undefined )
-	{
-		SWYM.AddTupleInfo(resultType, elementType.tupleTypes, errorContext);
-	}
 	
 	if( elementType.multivalueOf !== undefined )
 	{
+		if( elementType.tupleTypes !== undefined )
+		{
+			SWYM.AddTupleInfo(resultType, elementType.tupleTypes, errorContext);
+		}
+		
 		if( elementType.isLazy )
 		{
 			return SWYM.LazyArrayTypeContaining(outType);
 		}
-		else
+		else if( canBake )
 		{
 			resultType.baked = elementType.baked;
 		}
@@ -742,7 +748,7 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 			resultType.nativeType = elementType.nativeType;
 		}
 	}
-	else if( elementType.baked )
+	else if( canBake && elementType.baked )
 	{
 		resultType.baked = SWYM.jsArray([elementType.baked]);
 	}
@@ -752,8 +758,13 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, errorContext)
 
 SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 {
+	if( !arrayType )
+	{
+		return SWYM.ToMultivalueType(SWYM.DontCareType);
+	}
+	
 	var result;
-	if( arrayType && arrayType.isLazy )
+	if( arrayType.isLazy )
 	{
 		result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType.isMutable);
 		result.isLazy = true;
@@ -763,19 +774,24 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 		result = SWYM.ToMultivalueType(SWYM.GetOutType(arrayType), quantifier, arrayType? arrayType.isMutable: undefined);
 	}
 
-	if( arrayType && arrayType.memberTypes && arrayType.memberTypes.length !== SWYM.IntType )
+	if( arrayType.memberTypes && arrayType.memberTypes.length !== SWYM.IntType )
 	{
 		result.length = arrayType.memberTypes.length;
 	}
 	
-	if( arrayType && arrayType.tupleTypes )
+	if( arrayType.tupleTypes )
 	{
 		result.tupleTypes = arrayType.tupleTypes;
 	}
 	
-	if( arrayType && arrayType.baked !== undefined )
+	if( arrayType.baked !== undefined )
 	{
 		result.baked = arrayType.baked;
+	}
+	
+	if( arrayType.nativeType )
+	{
+		result.nativeType = arrayType.nativeType;
 	}
 	
 	return result;
@@ -791,7 +807,7 @@ SWYM.TupleTypeOf = function(tupleTypes, elementType, errorContext)
 			elementType = SWYM.TypeUnify(tupleTypes[Idx], elementType);
 		}
 	}
-	var result = SWYM.ArrayTypeContaining(elementType, false, errorContext);
+	var result = SWYM.ArrayTypeContaining(elementType, false, (tupleTypes.length === 1), errorContext);
 	SWYM.AddTupleInfo(result, tupleTypes, errorContext);
 	return result;
 }
@@ -810,9 +826,14 @@ SWYM.AddTupleInfo = function(arrayType, tupleTypes, errorContext)
 	arrayType.debugName = "Tuple["+debugName+"]";
 }
 
-SWYM.TableTypeFromTo = function(keyType, valueType, accessors)
+SWYM.TableTypeFromTo = function(keyType, valueType)
 {
-	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:SWYM.ValueType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
+	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:keyType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
+}
+
+SWYM.CallableTypeFromTo = function(argType, outType)
+{
+	return {type:"type", nativeType:"Callable", argType:argType, outType:outType, debugName:SWYM.TypeToString(argType)+"->"+SWYM.TypeToString(outType)};
 }
 
 SWYM.TypeOfValue = function(value, errorContext)
@@ -945,16 +966,6 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 	
 	var returnType = callableType.outType;
 	
-	if( callableType.needsCompiling )
-	{
-		// this lambda function hasn't been compiled yet!
-		returnType = SWYM.CompileLambdaInternal(callableType.bodyNode, callableType.argNode, callableType.cscoper, argType);
-	}
-	else
-	{
-		returnType = callableType.outType;
-	}
-
 /*			for( var Idx = 1; Idx < toCompile.length; ++Idx )
 			{
 				compiledType = SWYM.TypeUnify(compiledType, SWYM.CompileLambdaInternal(toCompile[Idx], argType));
@@ -971,7 +982,14 @@ SWYM.GetOutType = function(callableType, argType, errorContext)
 			callableType.baked = compiledType.baked;
 	}*/
 	
-	if( !returnType )
+	if( !returnType && callableType.needsCompiling )
+	{
+		// FIXME: this could be intolerably expensive.
+		// should implement type-functions, so we can calculate a return type without recompiling the whole closure each time.
+		var unusedExecutable = [];
+		returnType = SWYM.CompileLambdaInternal(callableType, argType, unusedExecutable, null);
+	}
+	else if( !returnType )
 	{
 		if( !SWYM.errors )
 		{

@@ -460,8 +460,10 @@ SWYM.operators = {
 		{
 			if ( lhs && lhs.type === "fnnode" && !lhs.isDecl )
 			{
-				// pass an "equals" argument to this function
-				var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[rhs], argNames:["equals"]};
+				// pass a __mutator={rhs} argument to this function
+				var braceOp = SWYM.NewToken("op", op.pos, "{");
+				var childNode = braceOp.behaviour.customParseTreeNode(undefined, braceOp, rhs);
+				var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[childNode], argNames:["__mutator"]};
 				
 				return SWYM.CombineFnNodes(lhs, result);
 			}
@@ -568,6 +570,7 @@ SWYM.operators = {
 		}
 	},
 	"+=": {precedence:50, argTypes:[undefined, SWYM.NumberType], returnType:SWYM.VoidType, infix:true,
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("+"),
 			customCompile:function(node, cscope, executable)
 			{
 				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
@@ -581,6 +584,7 @@ SWYM.operators = {
 			}
 		},
 	"-=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("-"),
 			customCompile:function(node, cscope, executable)
 			{
 				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
@@ -594,6 +598,7 @@ SWYM.operators = {
 			}
 		},
 	"*=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("*"),
 			customCompile:function(node, cscope, executable)
 			{
 				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
@@ -607,6 +612,7 @@ SWYM.operators = {
 			}
 		},
 	"/=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("/"),
 			customCompile:function(node, cscope, executable)
 			{
 				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
@@ -620,6 +626,7 @@ SWYM.operators = {
 			}
 		},
 	"%=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("%"),
 			customCompile:function(node, cscope, executable)
 			{
 				var varType = SWYM.CompileNode(node.children[0], cscope, executable);
@@ -789,16 +796,22 @@ SWYM.operators = {
 				node.children[1] === undefined ||
 				SWYM.TypeMatches(SWYM.IntType, startType) )
 			{
-				SWYM.TypeCoerce(SWYM.IntType, startType, node.children[0]);
-				SWYM.TypeCoerce(SWYM.IntType, endType, node.children[1]);
+				if( node.children[0] !== undefined )
+				{
+					SWYM.TypeCoerce(SWYM.IntType, startType, node.children[0]);
+				}
+				if( node.children[1] !== undefined )
+				{
+					SWYM.TypeCoerce(SWYM.IntType, endType, node.children[1]);
+				}
 			
 				if( startType.baked !== undefined && endType.baked !== undefined )
 				{
 					var literalValue = SWYM.RangeOp(startType.baked, endType.baked, true, true, undefined);
 					executable.push("#Literal");
 					executable.push( literalValue );
-					
-					var resultType = SWYM.ArrayTypeContaining(SWYM.IntType, false);
+
+					var resultType = object(SWYM.RangeArrayType);
 					resultType.baked = literalValue;
 					resultType = SWYM.ArrayToMultivalueType( resultType );
 					return resultType;
@@ -1173,13 +1186,33 @@ SWYM.operators = {
 				params.argNames.push("__");
 			}
 			
-			SWYM.ReadParamBlock(rhs, params);
+			SWYM.ReadParamBlock(rhs, params, false);
 			return SWYM.CombineFnNodes(lhs, params);
 		},
 		customCompile:function(node, cscope, executable)
 		{
 			// only bracketed expressions (i.e. plain old BODMAS) get here
 			return SWYM.CompileNode(node.children[1], cscope, executable);
+		}
+	},
+	"@(": { precedence:330, takeCloseBracket:")", infix:true, postfix:true, debugText:"paramBlock", noImplicitSemicolon:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			if( !lhs )
+			{
+				SWYM.LogError(node, "Named parameter blocks @() must be part of a function call.");
+				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+			}
+
+			// function call
+			var params = {type:"fnnode", etc:op.etc, pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
+			
+			SWYM.ReadParamBlock(rhs, params, true);
+			return SWYM.CombineFnNodes(lhs, params);
+		},
+		customCompile:function(node, cscope, executable)
+		{
+			SWYM.LogError(node, "A named parameter block @() must be part of a function call.");
 		}
 	},
 	"[": { precedence:330, takeCloseBracket:"]", prefix:true, infix:true, standalone:true, postfix:true, debugText:"square",
@@ -1215,7 +1248,7 @@ SWYM.operators = {
 				{
 					// wrap single values in a list
 					executable.push( "#SingletonArray" );
-					return SWYM.ArrayTypeContaining( type );
+					return SWYM.ArrayTypeContaining( type, false, true );
 				}
 				else if( type.quantifier !== undefined && type.quantifier[0] !== "EACH" )
 				{
@@ -1256,12 +1289,12 @@ SWYM.operators = {
 				{
 					// if the multivalue is a mutable array, make an immutable copy of it
 					executable.push("#CopyArray");
-					return SWYM.ArrayTypeContaining( type );
+					return SWYM.ArrayTypeContaining( type, false, false );
 				}
 				else
 				{
 					// otherwise, just reinterpret it back into an array (no-op)
-					return SWYM.ArrayTypeContaining( type );
+					return SWYM.ArrayTypeContaining( type, false, true );
 				}
 			}
 		}
@@ -1301,8 +1334,21 @@ SWYM.operators = {
 	"]": { isCloseBracket:true },
 	"}": { isCloseBracket:true },
 	
-	// lambda argument name (processed entirely within the tokenizer)
-	"->": { precedence:1000, infix:true },
+	// lambda argument name (partly built into the parser; this bit just handles
+	// Int->String style function-type expressions)
+	"->": { precedence:1000, infix:true,
+		customCompile:function(node, cscope, executable)
+		{
+			var unusedExecutable = [];
+			var argType = SWYM.CompileNode(node.children[0], cscope, unusedExecutable);
+			var outType = SWYM.CompileNode(node.children[1], cscope, unusedExecutable);
+			
+			var resultType = SWYM.CallableTypeFromTo(argType.baked, outType.baked);
+			executable.push("#Literal");
+			executable.push(resultType);
+			return SWYM.BakedValue(resultType);
+		}
+	},
 
 	// this is the operator that string interpolations generate
 	"(str++)": {precedence:1000, returnType:SWYM.StringType, infix:function(a,b){return SWYM.StringWrapper(a.data+b.data)} }
@@ -1347,11 +1393,11 @@ SWYM.DefaultGlobalCScope =
 		customCompileWithoutArgs:true,
 		customCompile:function(argTypes, cscope, executable, errorNode)
 		{
-			if( !argTypes[0].baked && !argTypes[0].bodyNode )
+/*			if( !argTypes[0].baked && !argTypes[0].bodyNode )
 			{
 				SWYM.LogError(errorNode, "The body of the Struct function must be known at compile time!");
 				return undefined;
-			}
+			}*/
 			
 			var innerCScope = object(cscope);
 			var unusedExecutable = [];
@@ -2050,7 +2096,7 @@ SWYM.DefaultGlobalCScope =
 			}
 		}],
 
-	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "equals":{index:1} },
+	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "value":{index:1} },
 			customCompileWithoutArgs:true,
 			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 			{
@@ -2077,19 +2123,29 @@ SWYM.DefaultGlobalCScope =
 	"fn#at":[
 		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.MutableArrayType},
 						"key":{index:1, typeCheck:SWYM.IntType},
-						"equals":{index:2} },
+						"__mutator":{index:2}, typeCheck:SWYM.CallableType },
 			returnType:SWYM.VoidType,
-			customTypeCheck:function(argTypes)
+			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
-				if( argTypes[0] && !SWYM.TypeMatches(argTypes[0].outType, argTypes[2]) )
+				var elementType = SWYM.GetOutType(argTypes[0], SWYM.IntType);
+				
+				var mutatorExecutable = [];
+				var mutatorType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[2]), elementType, mutatorExecutable, errorNode);
+				
+				if( !SWYM.TypeMatches(elementType, mutatorType) )
 				{
-					return "Cannot store values of type "+SWYM.TypeToString(argTypes[2])+" in an array of type "+SWYM.TypeToString(argTypes[0].outType);
+					SWYM.LogError(errorNode, "Cannot store values of type "+SWYM.TypeToString(mutatorType)+" in an array of type "+SWYM.TypeToString(elementType));
 				}
-				return true;
-			},
-			nativeCode:function(array, key, equals)
-			{
-				array[key] = equals;
+				
+				executable.push("#Native");
+				executable.push(3);
+				executable.push
+				(
+					function(array, key, mutator)
+					{
+						array[key] = SWYM.ClosureExec( mutator, array[key], mutatorExecutable );
+					}
+				);
 			}
 		}],
 
@@ -2100,12 +2156,25 @@ SWYM.DefaultGlobalCScope =
 				return SWYM.GetVariableTypeContents(argTypes[0]);
 			}
 		},
-		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "equals":{index:1} },
+		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType}, "__mutator":{index:1} },
 			returnType:SWYM.VoidType,
 			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
-				SWYM.TypeCoerce(argTypes[0].contentType, argTypes[1], errorNode);
-				executable.push("#VariableAssign");
+				var mutatorExecutable = [];
+				var mutatorType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), argTypes[0].contentType, mutatorExecutable, errorNode);
+
+				SWYM.TypeCoerce(argTypes[0].contentType, mutatorType, errorNode);
+
+				SWYM.pushEach([
+					// initial stack: VAR, MUT
+					"#Swap", "#Dup", // MUT, VAR, VAR
+					"#VariableContents", // MUT, VAR, VALUE
+					"#Swap", "#Swap3", // VAR, VALUE, MUT
+					"#ClosureExec", mutatorExecutable, // VAR, MUTATED
+					"#VariableAssign",
+				], executable);
+				
+				return SWYM.VoidType;
 			}
 		}],
 
@@ -2116,7 +2185,7 @@ SWYM.DefaultGlobalCScope =
 				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
 				{
 					SWYM.LogError(0, "The first argument to 'mutableArray' must be a type.");
-					return SWYM.ArrayTypeContaining(SWYM.AnyType, true);
+					return SWYM.ArrayTypeContaining(SWYM.AnyType, true, false);
 				}
 				else
 				{
@@ -2126,7 +2195,7 @@ SWYM.DefaultGlobalCScope =
 					SWYM.pushEach(argExecutables[1], executable);
 					executable.push("#CopyArray");
 
-					return SWYM.ArrayTypeContaining(varType, true);
+					return SWYM.ArrayTypeContaining(varType, true, false);
 				}
 			}
 		}],
@@ -2769,7 +2838,7 @@ Array.'no'('body') returns [.no.(body)]\n\
 }\n\
 \n\
 Cell.'value' returns .container.at(.key)\n\
-Cell.'value'('equals') returns .container.at(.key)=equals\n\
+Cell.'value'('__mutator') returns .container.at(.key)(__mutator)\n\
 //Cell.'$$' returns \"cell($$.key:$$.value)\"\n\
 //Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
 Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
@@ -3044,7 +3113,7 @@ Int.Array.'gcd' returns .reduce\n\
 \n\
 'Maybe' = Struct{ Array 'internal' }\n\
 \n\
-Maybe.Literal.'new'('equals') returns Maybe.new( internal=[equals] )\n\
+Maybe.Literal.'new'('value') returns Maybe.new( internal=[value] )\n\
 Maybe.Literal.'none' returns Maybe.new( internal=[] )\n\
 Maybe.'hasValue' returns .internal.length > 0\n\
 Maybe.'value' returns .internal.each\n\
@@ -3065,7 +3134,7 @@ String.'rot13' returns .caesarCypher(13)\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
-Type.'mutableArray'(Int 'length', 'equals') returns this.mutableArray[equals**length]\n\
+Type.'mutableArray'(Int 'length', 'value') returns this.mutableArray[value**length]\n\
 Type.'buildArray'('body') { 'result' = .mutableArray[]; result.(body); result.copy }\n\
 \n\
 Type.'generator'('length', 'first', 'next')\n\

@@ -1319,17 +1319,11 @@ SWYM.GetTypeFromPatternNode = function(node, cscope)
 			debugName = node.text;
 			outType = cscope[node.text];
 		}
-		else if( node.type === "fnnode" )
-		{
-			// a type constructor expression such as Array(Int)
-			var executable = [];
-			outType = SWYM.CompileFunctionCall(node, cscope, executable);
-			debugName = node.name + "()";
-		}
 		else
 		{
-			SWYM.LogError(node, "Invalid type expression: "+node);
-			return;
+			var executable = [];
+			outType = SWYM.CompileNode(node, cscope, executable);
+			debugName = "??<FIXME>";
 		}
 
 		if( outType === undefined )
@@ -2067,6 +2061,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 				if( elseType && elseType.baked !== undefined )
 				{
 					elseValue = elseType.baked;
+					commonValueType = SWYM.TypeUnify(commonValueType, elseType);
 				}
 				else
 				{
@@ -2222,10 +2217,15 @@ SWYM.CompileTable = function(node, cscope, executable)
 		executable.push("#Literal");
 		executable.push(bakedTable);
 		
-		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
+		var resultType;
+		if( elseValue !== undefined )
+			resultType = SWYM.TableTypeFromTo(SWYM.AnythingType, commonValueType, accessors);
+		else
+			resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
+			
 		resultType.baked = bakedTable;
 	}
-	else if ( elseExecutable )
+	else if ( elseExecutable !== undefined )
 	{
 		SWYM.pushEach(elseExecutable, executable);
 		SWYM.pushEach(elementExecutable, executable);
@@ -2239,7 +2239,9 @@ SWYM.CompileTable = function(node, cscope, executable)
 			return constructor(SWYM.jsArray(args), elseValue);
 		});
 		
-		var resultType = SWYM.TableTypeFromTo(commonKeyType, commonValueType, accessors);
+		// TODO: What if the else executable doesn't actually accept AnythingType?
+		// Defer compilation of the else executable so that we know what argument type is being passed?
+		var resultType = SWYM.TableTypeFromTo(SWYM.AnythingType, commonValueType, accessors);
 	}
 	else
 	{
@@ -2730,12 +2732,26 @@ SWYM.DeclareMutator = function(memberName, classType, memberType, cscope)
 {
 	SWYM.AddFunctionDeclaration("fn#"+memberName, cscope,
 		{
-			expectedArgs:{"this":{index:0, typeCheck:classType}, "equals":{index:1, typeCheck:memberType}},
+			expectedArgs:{"this":{index:0, typeCheck:classType}, "__mutator":{index:1, typeCheck:SWYM.CallableType}},
 			customCompile:function(argTypes, cscope, executable, errorNode)
 			{
+				var mutatorExecutable = [];
+				var mutatorType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), memberType, mutatorExecutable, errorNode);
+				
+				if( !SWYM.TypeMatches(memberType, mutatorType) )
+				{
+					return "Cannot store values of type "+SWYM.TypeToString(mutatorType)+" in a variable of type "+SWYM.TypeToString(memberType);
+				}
+				
 				executable.push("#Native");
 				executable.push(2);
-				executable.push(function(obj, value){ obj.members[memberName] = value; });
+				executable.push
+				(
+					function(obj, mutator)
+					{
+						obj.members[memberName] = SWYM.ClosureExec( mutator, obj.members[memberName], mutatorExecutable );
+					}
+				);
 
 				return SWYM.VoidType;
 			},
