@@ -573,7 +573,8 @@ SWYM.TypeChecksStricter = function(curTypeChecks, bestTypeChecks)
 SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, errorNode)
 {
 	var overloadResult = {theFunction:theFunction, error:undefined, executable:[], typeChecks:{}, returnType:undefined, quality:0};
-
+	
+	// surely we should precompute this information?
 	var expectedArgNamesByIndex = [];
 	var numArgs = 0;
 	var hasOnlyThis = theFunction.expectedArgs["this"] !== undefined;
@@ -604,12 +605,8 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 				positionalArgName = "__"+nextPositionalArg;
 			}
 			
-			// The # and 'else' arguments can only be provided by name.
-			// The 'this' argument can only be provided anonymously if there are no other arguments.
-			if( args[positionalArgName] !== undefined &&
-					expectedArgName !== "#" &&
-					expectedArgName !== "else" &&
-					(expectedArgName !== "this" || hasOnlyThis))
+			// Some parameters don't accept anonymous positional arguments.
+			if( args[positionalArgName] !== undefined && !theFunction.expectedArgs[expectedArgName].explicitNameRequired )
 			{
 				inputArgNameList[expectedArgIndex] = positionalArgName;
 				++nextPositionalArg;
@@ -621,8 +618,27 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 				{
 					typeSig = "("+SWYM.TypeToString( theFunction.expectedArgs[expectedArgName].typeCheck ) + ") ";
 				}
-				overloadResult.error = "Function '"+fnName+"' requires an additional argument "+typeSig+"'"+expectedArgName+"'";
-				overloadResult.quality = 10; // very bad match
+				
+				if( expectedArgName === "this" )
+				{
+					overloadResult.error = "Function '"+fnName+"' requires a 'this' parameter. something."+fnName+"";
+					overloadResult.quality = 10; // very bad match
+				}				
+				else if( expectedArgName === "else" )
+				{
+					overloadResult.error = "Function '"+fnName+"' requires an 'else' parameter. fnName() else {...}";
+					overloadResult.quality = 10; // very bad match
+				}
+				else if( args[positionalArgName] !== undefined && theFunction.expectedArgs[expectedArgName].explicitNameRequired )
+				{
+					overloadResult.error = "Function '"+fnName+"'s parameter '"+expectedArgName+"' must be given explicitly: "+fnName+"@("+expectedArgName+"=something)";
+					overloadResult.quality = 50; // reasonable match
+				}
+				else
+				{
+					overloadResult.error = "Function '"+fnName+"' requires an additional argument "+typeSig+"'"+expectedArgName+"'";
+					overloadResult.quality = 10; // very bad match
+				}
 				return overloadResult;
 			}
 		}
@@ -1046,6 +1062,7 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 	var bodyScope = object(cscope);
 	
 	var expectedArgs = {};
+	var numPositionalArgs = 0;
 
 	for( var argIdx = 0; argIdx < argNames.length; ++argIdx )
 	{
@@ -1054,14 +1071,25 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		var argNode = argTypes[argIdx];
 		var defaultValueNode = undefined;
 		
-		if( finalName === "__" )
+		if( finalName === "this" || finalName === "else" || finalName === "#" || finalName === "__mutator" )
+		{
+			// special arguments must always be passed explicitly by name
+			// (we make an exception for "this" later in the function)
+			argNode.explicitNameRequired = true;
+		}
+		else if( finalName === "__" )
 		{
 			// turn anonymous arguments (e.g: deconstructors with named parts,
 			// but the argument as a whole is anonymous) into positional arguments
 			finalName += argIdx;
 		}
+		
+		if( !argNode.explicitNameRequired )
+		{
+			numPositionalArgs++;
+		}
 
-		var argData = {finalName:finalName, index:argIdx};
+		var argData = {finalName:finalName, index:argIdx, explicitNameRequired:argNode.explicitNameRequired};
 
 		if( argNode.op && argNode.op.text === "(" && !argNode.children[0] )
 		{
@@ -1106,6 +1134,13 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		}
 		
 		expectedArgs[finalName] = argData;
+	}
+	
+	// special exception for the "this" parameter: it can be passed
+	// anonymously if there's no other anonymous argument.
+	if( numPositionalArgs === 0 && expectedArgs["this"] !== undefined )
+	{
+		expectedArgs["this"].explicitNameRequired = false;
 	}
 	
 	var returnType = {type:"incomplete", debugName:"incomplete"};
@@ -1165,24 +1200,28 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 
 	if( fnName === "fn#<" )
 	{
+		expectedArgs["this"].explicitNameRequired = false;
 		SWYM.AddModifiedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, negateExecutable);
 		SWYM.AddSwappedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, undefined);
 		SWYM.AddSwappedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, negateExecutable);
 	}
 	else if( fnName === "fn#>" )
 	{
+		expectedArgs["this"].explicitNameRequired = false;
 		SWYM.AddModifiedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, negateExecutable);
 		SWYM.AddSwappedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, undefined);
 		SWYM.AddSwappedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, negateExecutable);
 	}
 	else if( fnName === "fn#<=" )
 	{
+		expectedArgs["this"].explicitNameRequired = false;
 		SWYM.AddModifiedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, negateExecutable);
 		SWYM.AddSwappedFunctionDeclaration("fn#>=", fnName, cscope, cscopeFunction, undefined);
 		SWYM.AddSwappedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, negateExecutable);
 	}
 	else if( fnName === "fn#>=" )
 	{
+		expectedArgs["this"].explicitNameRequired = false;
 		SWYM.AddModifiedFunctionDeclaration("fn#<", fnName, cscope, cscopeFunction, negateExecutable);
 		SWYM.AddSwappedFunctionDeclaration("fn#<=", fnName, cscope, cscopeFunction, undefined);
 		SWYM.AddSwappedFunctionDeclaration("fn#>", fnName, cscope, cscopeFunction, negateExecutable);
@@ -2790,7 +2829,7 @@ SWYM.DeclareNew = function(newStruct, defaultNodes, declCScope)
 	var nextIndex = 0;
 	for( var memberName in newStruct.memberTypes )
 	{
-		functionData.expectedArgs[memberName] = {index:nextIndex+1, typeCheck:newStruct.memberTypes[memberName], defaultValueNode:defaultNodes[memberName]};
+		functionData.expectedArgs[memberName] = {index:nextIndex+1, typeCheck:newStruct.memberTypes[memberName], defaultValueNode:defaultNodes[memberName], explicitNameRequired:true};
 		memberNames[nextIndex] = memberName;
 		nextIndex++;
 	}

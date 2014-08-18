@@ -1,0 +1,428 @@
+<html>
+<head>
+<script src="../ace-builds/src/ace.js" type="text/javascript" charset="utf-8"></script>
+<style type="text/css" media="screen">
+    #editor { 
+		width:100%;
+        height:300px;
+		display: inline-block
+    }
+	div.autocompleteMatch {
+		font-family: Courier;
+		padding-left: 15px;
+	}
+	span.autocompleteMatch {
+		color: #004400;
+		font-weight: bold;
+	}
+	span.autocompletePartial {
+	}
+	body{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+		background-color: #fcffff;
+		margin: 10px 40px 10px 40px;
+	}
+	table{
+		font-family: Verdana, Arial, Helvetica;
+		font-size: 10pt;
+	}
+	textarea{
+		background-color: #FAEFE8;
+		border-style: solid;
+		border-width: 1;
+		border-color: #AAAAAA;
+	}
+	div.outputcontainer{
+		background-color: #BCBCBC;
+		display: inline-block;
+		padding-top: 5px;
+		padding-bottom: 5px;
+		padding-right: 5px;
+		padding-left: 5px;
+	}
+	div.autocompleteBlock{
+		background-color: #BCBCBC;
+		display: table-cell;
+		width: 100px;
+		vertical-align: top;
+		padding-right: 5px;
+	}
+	textarea.outputarea{
+		background-color: #CCCCCC;
+	}
+	code{
+		color: #0044AA;
+		font-style: normal;
+	}
+	div.demo{
+		background-color: #F0F0F0;
+		padding: 10px 10px 5px 10px;
+		max-width: 750;
+		clear:right;
+	}
+	div.aside{
+		font-size: 9pt;
+		font-style: italic;
+		padding: 0px 0px 0px 20px;
+	}
+	div.floatbox{
+		float:right;
+		padding: 10px 10px 10px 10px;
+	}
+	div.control{
+		float:right;
+		vertical-align: top;
+	}
+	tr.odd{
+		background-color: #F0F0F0;
+	}
+</style>
+<title>Swym Interpreter</title>
+<script language=javascript src="swymloader.js"></script>
+<script language=javascript>
+window.onload = function()
+{
+	SWYM.EvalStdlyb();
+	initAutocomplete();
+	
+	var regex = new RegExp( "[\\?&](.*)" );
+	var results = regex.exec( window.location.href );
+
+    SWYM.editor = ace.edit("editor");
+	SWYM.editor.renderer.setShowGutter(false);
+	SWYM.editor.getSession().setUseWrapMode(true);
+    SWYM.editor.setTheme("ace/theme/github");
+    SWYM.editor.getSession().setMode("ace/mode/swym");
+	SWYM.editor.setBehavioursEnabled(false);
+	
+	if( results && results[1] )
+	{
+		var initialCode = unescape(results[1]);		
+		SWYM.editor.setValue(initialCode, 1);
+		//var session = SWYM.editor.getSession();
+		//SWYM.editor.resetSelection();
+	}
+	
+	
+	SWYM.editor.on("change", function(event)
+	{
+		var cursorPos = SWYM.editor.selection.getCursor();
+		var cursorColumn = cursorPos.column;
+		if( event.data.action === "insertText" )
+		{
+			//cursorColumn += event.data.text.length;
+		}
+		else if( event.data.action === "removeText" )
+		{
+			cursorColumn -= event.data.text.length;
+		}
+		else
+		{
+			return;
+		}
+		if( cursorColumn >= 0 )
+		{
+			var readPos = cursorColumn;
+			var rowText = SWYM.editor.getSession().getLine(cursorPos.row);
+			var completionText = undefined;
+			while(true)
+			{
+				var currentChar = rowText[readPos];
+				if( readPos === 0 || (!SWYM.IsLetter(currentChar) && !SWYM.IsDigit(currentChar)) )
+				{
+					if( currentChar === "." )
+					{
+						completionText = rowText.substring(readPos+1, cursorPos.column+1);
+					}
+					break;
+				}
+				--readPos;
+			}
+			
+			if( completionText !== undefined && completionText.length > 0 )
+			{
+				var stringList = doAutocomplete(completionText);
+				var autocompleteHtml = "";
+				
+				var Idx = 0;
+				if( stringList[0] === completionText || "."+stringList[0] === completionText )
+				{
+					var matchedFunctionsHtml = "";
+					var overloads = SWYM.DefaultGlobalCScope["fn#"+stringList[0]];
+					for( var ovIdx = 0; ovIdx < overloads.length; ++ovIdx )
+					{
+						var func = overloads[ovIdx];
+						if( func.expectedArgs["this"] === undefined )
+						{
+							continue;
+						}
+						
+						var signature = typeToString(func.expectedArgs["this"].typeCheck) + "." + stringList[0] + "<br>";
+						var positionalArgs = [];
+						var explicitNamedArgs = {};
+						for( var paramName in func.expectedArgs )
+						{
+							if( paramName === "this" ) continue;
+							var param = func.expectedArgs[paramName];
+							if( param.explicitNameRequired )
+							{
+								explicitNamedArgs[paramName] = typeToString(param.typeCheck);
+							}
+							else if( param.index !== undefined )
+							{
+								positionalArgs[param.index] = typeToString(param.typeCheck) + "&nbsp;" + paramName;
+							}
+						}
+						signature += "<div class=autocompleteMatch>";
+						for(var pIdx = 0; pIdx < positionalArgs.length; ++pIdx )
+						{
+							if( positionalArgs[pIdx] !== undefined )
+							{
+								signature += positionalArgs[pIdx]+"<br>";
+							}
+						}
+						
+						for(var pName in explicitNamedArgs)
+						{
+							signature += pName+"&nbsp;=&nbsp;"+explicitNamedArgs[pName]+"<br>";
+						}
+						
+						signature += "</div><br>";
+						matchedFunctionsHtml += signature;
+					}
+					autocompleteHtml += "<span class=autocompleteMatch>"+stringList[0]+"</span><div class=autocompleteMatch>"+matchedFunctionsHtml+"</div>";
+					++Idx;
+				}
+				for(; Idx < stringList.length; ++Idx)
+				{
+					autocompleteHtml += "<span class=autocompletePartial>"+stringList[Idx]+"</span><br>";
+				}
+				autocompleteBlock.innerHTML = autocompleteHtml;
+			}
+		}
+	});
+}
+
+var autocompleteFunctions = {};
+
+function typeToString(t)
+{
+	if( t === undefined )
+		return "Anything";
+	else
+		return SWYM.TypeToString(t);
+}
+
+function initAutocomplete()
+{
+	autocompleteFunctions = {};
+	
+	for(var name in SWYM.DefaultGlobalCScope)
+	{
+		if( name.substring(0,3) !== "fn#" )
+		{
+			continue;
+		}
+		
+		var overloads = SWYM.DefaultGlobalCScope[name];
+		var isInteresting = false;
+		for(var Idx = 0; Idx < overloads.length; ++Idx )
+		{
+			if( overloads[Idx].expectedArgs["this"] !== undefined )
+			{
+				isInteresting = true;
+				break;
+			}
+		}
+		if( !isInteresting )
+		{
+			continue;
+		}
+		
+		var finalName = name.substring(3);
+		
+		var list = autocompleteFunctions[finalName[0]];
+		if( list === undefined )
+		{
+			autocompleteFunctions[finalName[0]] = [finalName];
+		}
+		else
+		{
+			list.push(finalName);
+		}
+	}
+	
+	for(var prefix in autocompleteFunctions)
+	{
+		autocompleteFunctions[prefix].sort();
+	}
+}
+
+function doAutocomplete(completionText)
+{
+	if( completionText.length === 0 || autocompleteFunctions === undefined )
+	{
+		return [];
+	}
+	
+	var stringList = autocompleteFunctions[completionText[0]];
+	if( stringList === undefined || stringList.length < 1 )
+	{
+		return [];
+	}
+	else if( completionText.length === 1 )
+	{
+		return stringList;
+	}
+	
+	// binary search
+	var minPos = 0;
+	var maxPos = stringList.length;
+	var knownStart = undefined;
+	var knownEnd = undefined;
+	var currentPos = Math.floor((maxPos+minPos)/2);
+
+	while(true)
+	{
+		var currentPos;
+		if( knownStart === undefined )
+		{
+			currentPos = Math.floor((maxPos+minPos)/2);
+		}
+		else if( knownStart > minPos )
+		{
+			currentPos = Math.floor((knownStart+minPos)/2);
+		}
+		else if( knownEnd < maxPos )
+		{
+			currentPos = Math.floor((knownEnd+maxPos)/2);
+		}
+		else
+		{
+			break;
+		}
+		
+		var testString = stringList[currentPos].substring(0,completionText.length);
+		if( testString === completionText )
+		{
+			if( knownStart === undefined || knownStart > currentPos )
+			{
+				knownStart = currentPos;
+			}
+			if( knownEnd === undefined || knownEnd < currentPos+1 )
+			{
+				knownEnd = currentPos+1;
+			}
+		}
+		else if( testString < completionText )
+		{
+			minPos = currentPos+1;
+			if( maxPos <= minPos )
+			{
+				break;
+			}
+		}
+		else if( testString > completionText )
+		{
+			maxPos = currentPos;
+			if( maxPos <= minPos )
+			{
+				break;
+			}
+		}
+	}
+	
+	if( knownStart === undefined || knownEnd === undefined )
+		return [];
+	else if( knownEnd - knownStart > 30 )
+		return stringList.slice(knownStart, knownStart+30);
+	else
+		return stringList.slice(knownStart, knownEnd);
+}
+
+function saveURL()
+{
+	var baseURL = window.location.href;
+	var cutIndex = baseURL.indexOf("?");
+	if( cutIndex >= 0 )
+		baseURL = baseURL.slice(0, cutIndex);
+	
+	var interpSource = document.getElementById('interpSource');
+
+	window.location.href = "SwymDisplay.html?" + escape(interpSource.value);
+}
+
+function getTextfields(div)
+{
+		var destText;
+		
+		for( var Idx = 0; Idx < div.childNodes.length; Idx++ )
+		{
+			var nodeI = div.childNodes[Idx];
+			if ( nodeI && nodeI.type == "textarea" )
+			{
+/*				if ( !sourceText )
+				{
+					sourceText = nodeI;
+				}
+				else
+				{*/
+					destText = nodeI;
+//					break;
+//				}
+			}
+		}
+		
+		return {dest:destText};
+}
+
+function runDemo(div)
+{
+	//var theDiv = document.getElementById(divId);
+	var fields = getTextfields(div);
+		
+	fields.dest.value = "...waiting...";
+
+	var baseURL = window.location.href;
+	var cutIndex = baseURL.indexOf("?");
+	if( cutIndex >= 0 )
+		baseURL = baseURL.slice(0, cutIndex);
+	window.history.replaceState( {} , 'Swym Interpreter', baseURL + "?" + escape(SWYM.editor.getValue()) );	
+	
+	var sourceCode = SWYM.editor.getValue();
+	
+	// call out to the main "eval" method
+	SWYM.DisplayOutput = function(a){ fields.dest.value = a; SWYM.DisplayOutput = function(b){ fields.dest.value += b; }; };
+	SWYM.DisplayError = function(e){ fields.dest.value = e; SWYM.DisplayOutput = function(){}; };
+	SWYM.FullEval(sourceCode);
+	SWYM.DisplayOutput("");
+}
+
+function clearOutput(div)
+{
+	//var theDiv = document.getElementById(divId);
+	var fields = getTextfields(div);
+	
+	fields.dest.value = "";
+}
+</script>
+</head>
+<body>
+<span style="position:fixed; right:10px; bottom:5px;">cheersgames.com/swym</span>
+<img src="SwymLogo1.png">
+<div style="display:inline-block; vertical-align:top; padding-left:50px">
+<a href="http://cheersgames.com/swym/SwymViewStdlyb.html">Library Reference</a><br>
+<a href="http://cheersgames.com/swym/wiki.html">Documentation Wiki</a>
+</div>
+<div style="display:table-row;">
+  <div style="display:table-cell;">
+    <div class=outputcontainer>
+	  <div id="editor"></div><br>
+      <button type=button style="vertical-align: top;" onclick='runDemo(this.parentNode);'><div style="display:inline-block; vertical-align:middle;"><img src="play.png"></div>Run</button><br>
+      <textarea cols=75 rows=10 class=outputarea id=outputbox readonly="yes"></textarea>
+    </div>
+  </div>
+  <div class=autocompleteBlock id=autocompleteBlock></div>
+</div>
+</body>

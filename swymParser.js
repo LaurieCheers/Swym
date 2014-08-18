@@ -498,11 +498,10 @@ SWYM.ReadParamBlock = function(paramnode, fnnode, isNamed)
 	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
 				paramnode.children[0] && paramnode.children[0].type === "name" )
 	{
-//TO PUT BACK
-//		if( !isNamed )
-//		{
-//			SWYM.LogError(paramnode, "Invalid use of a named parameter. Named parameters can only occur in a @(...) block.");
-//		}
+		if( !isNamed )
+		{
+			SWYM.LogError(paramnode, "Invalid use of a named parameter. Named parameters can only occur in a @(...) block.");
+		}
 
 		// passing a named parameter
 		fnnode.argNames.push( paramnode.children[0].text );
@@ -512,12 +511,14 @@ SWYM.ReadParamBlock = function(paramnode, fnnode, isNamed)
 				paramnode.children[0] && paramnode.children[0].type === "decl" )
 	{
 		// declaring a parameter with a default value
+		paramnode.explicitNameRequired = isNamed;
 		fnnode.argNames.push( paramnode.children[0].value );
 		fnnode.children.push( paramnode );
 	}
 	else if( paramnode && paramnode.type === "decl" )
 	{
-		// declaring a parameter without a type or default value
+		// declaring a parameter without a default value
+		paramnode.explicitNameRequired = isNamed;
 		fnnode.argNames.push( paramnode.value );
 		fnnode.children.push( paramnode );
 	}
@@ -526,7 +527,7 @@ SWYM.ReadParamBlock = function(paramnode, fnnode, isNamed)
 		if( isNamed )
 		{
 			// passing a boolean flag 'true'
-			fnnode.argNames.push( paramnode.children[0].text );
+			fnnode.argNames.push( paramnode.text );
 			fnnode.children.push( SWYM.NewToken("name", paramnode.pos, "true") );
 		}
 		else

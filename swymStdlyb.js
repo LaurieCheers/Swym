@@ -2762,29 +2762,28 @@ SWYM.stdlyb =
 //constants that cannot be bootstrapped ('true', 'false' and 'novalues'),\n\
 //are not defined here.\n\
 \n\
-Anything.'javascript'('body','pure'=false) returns javascript(pure=pure){'this'}(body)\n\
+Anything.'javascript'('body','pure'=false) returns javascript@(pure=pure){'this'}(body)\n\
 'unchanged' = (Anything 'x')->{x}\n\
 //Default operator overloads\n\
-'-'(Int 'rhs') returns Int<< javascript(pure=true){'rhs'}{ return -rhs }\n\
-Int.'-'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
-Int.'+'(Int 'rhs', '__identity'=0) returns Int<< javascript(pure=true){'this', 'rhs'}{ return this+rhs }\n\
-Int.'*'(Int 'rhs', '__identity'=1) returns Int<< javascript(pure=true){'this', 'rhs'}{ return this*rhs }\n\
-Int.'%'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return this%rhs }\n\
-Int.'^'(Int 'rhs') returns Int<< javascript(pure=true){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
-'-'(Number 'rhs') returns Number<< javascript(pure=true){'rhs'}{ return -rhs }\n\
-Number.'-'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this-rhs }\n\
-Number.'+'(Number 'rhs', '__identity'=0) returns Number<< javascript(pure=true){'this', 'rhs'}{ return this+rhs }\n\
-Number.'*'(Number 'rhs', '__identity'=1) returns Number<< javascript(pure=true){'this', 'rhs'}{ return this*rhs }\n\
-Number.'/'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this/rhs }\n\
-Number.'%'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return this%rhs }\n\
-Number.'^'(Number 'rhs') returns Number<< javascript(pure=true){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
+'-'(Int 'rhs') returns Int<< javascript@(pure){'rhs'}{ return -rhs }\n\
+Int.'-'(Int 'rhs') returns Int<< javascript@(pure){'this', 'rhs'}{ return this-rhs }\n\
+Int.'+'(Int 'rhs', '__identity'=0) returns Int<< javascript@(pure){'this', 'rhs'}{ return this+rhs }\n\
+Int.'*'(Int 'rhs', '__identity'=1) returns Int<< javascript@(pure){'this', 'rhs'}{ return this*rhs }\n\
+Int.'%'(Int 'rhs') returns Int<< javascript@(pure){'this', 'rhs'}{ return this%rhs }\n\
+Int.'^'(Int 'rhs') returns Int<< javascript@(pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
+'-'(Number 'rhs') returns Number<< javascript@(pure){'rhs'}{ return -rhs }\n\
+Number.'-'(Number 'rhs') returns Number<< javascript@(pure){'this', 'rhs'}{ return this-rhs }\n\
+Number.'+'(Number 'rhs', '__identity'=0) returns Number<< javascript@(pure){'this', 'rhs'}{ return this+rhs }\n\
+Number.'*'(Number 'rhs', '__identity'=1) returns Number<< javascript@(pure){'this', 'rhs'}{ return this*rhs }\n\
+Number.'/'(Number 'rhs') returns Number<< javascript@(pure){'this', 'rhs'}{ return this/rhs }\n\
+Number.'%'(Number 'rhs') returns Number<< javascript@(pure){'this', 'rhs'}{ return this%rhs }\n\
+Number.'^'(Number 'rhs') returns Number<< javascript@(pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
 Array.'+'(Array 'arr', '__identity'=[]) returns [.each, arr.each]\n\
-Array.'*'(Int 'times') returns array(length=.length*times)(.cyclic)\n\
+Array.'*'(Int 'times') returns array@(length=.length*times)(.cyclic)\n\
 String.'+'(String 'str', '__identity'=\"\") returns [.each, str.each]\n\
-Number.'<'(Number 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
-String.'<'(String 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ return this<rhs }\n\
+Number.'<'(Number 'rhs') returns Bool<< javascript@(pure){'this', 'rhs'}{ return this<rhs }\n\
+String.'<'(String 'rhs') returns Bool<< javascript@(pure){'this', 'rhs'}{ return this<rhs }\n\
 \n\
-'test_block' = ['a','b']->{a+b}\n\
 '{+}' = ['a','b']->{a+b}\n\
 '{-}' = ['a','b']->{a-b}\n\
 '{*}' = ['a','b']->{a*b}\n\
@@ -2792,14 +2791,14 @@ String.'<'(String 'rhs') returns Bool<< javascript(pure=true){'this', 'rhs'}{ re
 '{%}' = ['a','b']->{a%b}\n\
 '{^}' = ['a','b']->{a^b}\n\
 \n\
-Array.'atEnd'('idx') returns .at(.length-1-idx)\n\
-Array.'#st' returns .at(#-1)\n\
-Array.'#nd' returns .at(#-1)\n\
-Array.'#rd' returns .at(#-1)\n\
-Array.'#th' returns .at(#-1)\n\
+Array.'atEnd'('idx') returns this.at(this.length-1-idx)\n\
+Array.'#st' returns this.at(#-1)\n\
+Array.'#nd' returns this.at(#-1)\n\
+Array.'#rd' returns this.at(#-1)\n\
+Array.'#th' returns this.at(#-1)\n\
 Callable.'at'('key') returns key.(this)\n\
 Callable.'atEach'(Int.Array 'keys') returns [ this.at(keys.each) ]\n\
-Callable.'map'('body') returns 'key'->{ .(this).(body) }\n\
+Callable.'map'('body') returns 'key'->{ key.(this).(body) }\n\
 Table.'at'('key','then') returns .at(key)(then) else {novalues}\n\
 Table.'at'('key','else') returns .if{ key.in(.keys) }{ .at(key) } else (else)\n\
 Table.'at'('key','then','else') returns .if{ key.in(.keys) }{ .at(key).(then) } else (else)\n\
@@ -2817,11 +2816,11 @@ Array.'last' returns .atEnd(0)\n\
 Array.'flatten' returns [ .each.each ]\n\
 Array.'tabulateBy'(Callable 'key', Callable 'value'={it})\n\
 {\n\
-  table(keys=.map(key), values=.map(value))\n\
+  table@(keys=.map(key), values=.map(value))\n\
 }\n\
 Array.'tabulate'(Callable 'value')\n\
 {\n\
-  table(keys=this, values=this.map(value))\n\
+  table@(keys=this, values=this.map(value))\n\
 }\n\
 Array.'each'('fn') returns [.each.(fn)]\n\
 Array.'no' { yield .none }\n\
@@ -2839,18 +2838,20 @@ Array.'no'('body') returns [.no.(body)]\n\
 \n\
 Cell.'value' returns .container.at(.key)\n\
 Cell.'value'('__mutator') returns .container.at(.key)(__mutator)\n\
+Container.'cellAt'('key') returns Cell.new@(key=key, container=this)\n\
 //Cell.'$$' returns \"cell($$.key:$$.value)\"\n\
-//Cell.'+'(Int 'offset') returns Cell.new(.key+offset, .container)\n\
-Cell.'nextCell' returns Cell.new(.key+1, .container)\n\
-Cell.'previousCell' returns Cell.new(.key-1, .container)\n\
-Array.'cells' returns array(.length) 'idx'->{ Cell.new(idx, this) }\n\
-Table.'cells' returns array(.keys.length) 'idx'->{ Cell.new(this.keys.at(idx), this) }\n\
-Table.'cellTable' returns table(.keys) 'key'->{ Cell.new(key, this) }\n\
+//Cell.'+'(Int 'offset') returns .container.cellAt(.key+offset)\n\
+Cell.'next' returns .container.cellAt(.key+1)\n\
+Cell.'prev' returns .container.cellAt(.key-1)\n\
+Container.'cells'(Callable 'body') returns .cells.(body).map{.value}\n\
+Array.'cells' returns array(.length) 'idx'->{ this.cellAt(idx) }\n\
+Table.'cells' returns array(.keys.length) 'idx'->{ this.cellAt(this.keys.at(idx)) }\n\
+Table.'cellTable' returns table(.keys) 'key'->{ this.cellAt(key) }\n\
 Cell.Array.'table' returns table[.each.key](.1st.container)\n\
 Cell.Array.'cellKeys' returns [.each.key]\n\
 Cell.Array.'cellValues' returns [.each.value]\n\
-Cell.'toSlice'('length') returns .container.slice(start=.key, length=length)\n\
-Cell.'toSlice'('end') returns .container.slice(start=.key, end=end)\n\
+Cell.'toSlice'@('length') returns .container.slice@(start=.key, length=length)\n\
+Cell.'toSlice'@('end') returns .container.slice@(start=.key, end=end)\n\
 Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
@@ -2861,32 +2862,32 @@ Array.'where'('test', 'body', 'else') returns forEach(this){ .if(test)(body) els
 Array.'whereKey'('test') returns forEach(.keys){ .if(test)(this) else {novalues} }\n\
 Array.'whereKey'('test', 'body') returns forEach(.keys){ .if(test){.(this).(body)} else {novalues} }\n\
 Array.'whereKey'('test', 'body', 'else') returns forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} }\n\
-Callable.'slice'(Int 'start') returns .atEach[start ..< .length]\n\
-Callable.'slice'(Int 'length') returns .atEach[0..<length]\n\
-Callable.'slice'(Int 'end') returns .atEach[0..<end]\n\
-Callable.'slice'(Int 'last') returns .atEach[0..last]\n\
-Callable.'slice'(Int 'trimEnd') returns .atEach[0 ..< .length-trimEnd]\n\
-Callable.'slice'(Int 'start',Int 'end') returns .atEach[start..<end]\n\
-Callable.'slice'(Int 'start',Int 'last') returns .atEach[start..last]\n\
-Callable.'slice'(Int 'start',Int 'length') returns .atEach[start..<start+length]\n\
-Callable.'slice'(Int 'length',Int 'end') returns .atEach[end-length..<end]\n\
-Callable.'slice'(Int 'length',Int 'last') returns .atEach[last-length-1..last]\n\
-Array.'slice'(Int 'start',Int 'trimEnd') returns .atEach[start ..< .length-trimEnd]\n\
-Array.'slice'(Int 'length',Int 'trimEnd') returns .atEach[.length-length-fromEnd ..< .length-trimEnd]\n\
-Array.'slice'['a'..<'b'] returns [ .at(a.clamp(min=0)..<b.clamp(max=.length)) ]\n\
+Callable.'slice'@(Int 'start') returns .atEach[start ..< .length]\n\
+Callable.'slice'@(Int 'length') returns .atEach[0..<length]\n\
+Callable.'slice'@(Int 'end') returns .atEach[0..<end]\n\
+Callable.'slice'@(Int 'last') returns .atEach[0..last]\n\
+Callable.'slice'@(Int 'trimEnd') returns .atEach[0 ..< .length-trimEnd]\n\
+Callable.'slice'@(Int 'start',Int 'end') returns .atEach[start..<end]\n\
+Callable.'slice'@(Int 'start',Int 'last') returns .atEach[start..last]\n\
+Callable.'slice'@(Int 'start',Int 'length') returns .atEach[start..<start+length]\n\
+Callable.'slice'@(Int 'length',Int 'end') returns .atEach[end-length..<end]\n\
+Callable.'slice'@(Int 'length',Int 'last') returns .atEach[last-length-1..last]\n\
+Array.'slice'@(Int 'start',Int 'trimEnd') returns .atEach[start ..< .length-trimEnd]\n\
+Array.'slice'@(Int 'length',Int 'trimEnd') returns .atEach[.length-length-fromEnd ..< .length-trimEnd]\n\
+Array.'slice'['a'..<'b'] returns [ .at(a.clamp@(min=0)..<b.clamp@(max=.length)) ]\n\
 \n\
-Array.'slices'(Int 'length') returns array(.length+1-length) 'start'->\n\
+Array.'slices'@(Int 'length') returns array(.length+1-length) 'start'->\n\
 {\n\
-  this.slice(start=start, end=start+length)\n\
+  this.slice@(start=start, end=start+length)\n\
 }\n\
 \n\
-Array.'slices' returns [ .slices(length=1 .. .length).each ]\n\
+Array.'slices' returns [ .slices@(length=1 .. .length).each ]\n\
 Array.'trimStart'(Int 'n') returns .atEach[n ..< .length]\n\
 Array.'trimEnd'(Int 'n') returns .atEach[0 ..< .length-n]\n\
 Array.'startsWith'(Array 'list') returns .length >= list.length && .stem(list.length) == list\n\
 Array.'endsWith'(Array 'list') returns .length >= list.length && .tail(list.length) == list\n\
 Array.'splitAt'(Int 'key') returns [ .slice[..<key], .slice[key..] ]\n\
-Array.'splitAtEnd'(Int 'n') returns [ .slice(trimEnd=n), .tail(n) ]\n\
+Array.'splitAtEnd'(Int 'n') returns [ .slice@(trimEnd=n), .tail(n) ]\n\
 \n\
 Array.'splitAt'(Int.Array 'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
@@ -2895,9 +2896,9 @@ Array.'splitAt'(Int.Array 'keys') returns if(keys == []){ [this] } else\n\
   this.slice[keys.last..];\n\
 ]}\n\
 \n\
-Cell.Array.'split' returns .1st.container.splitAt(.cellKeys)\n\
-Array.'splitWhere'(Callable 'test') returns .cells.where{.value.(test)}.split\n\
-Array.'splitOut'(Int.Array 'keys') returns [-1, keys.each, .length].{[this.slice(start=.1st+1, end=.2nd), this.slice(start=.2nd+1, end=.3rd), etc]}\n\
+Cell.Array.'split' returns .1st.container.splitAt(.map{.key})\n\
+Array.'splitWhere'(Callable 'test') returns .splitAt(.keysWhere(test))\n\
+Array.'splitOut'(Int.Array 'keys') returns [-1, keys.each, .length].{[this.slice@(start=.1st+1, end=.2nd), this.slice@(start=.2nd+1, end=.3rd), etc]}\n\
 Cell.Array.'splitOut' returns .1st.container.splitOut(.cellKeys)\n\
 Array.'splitOutWhere'(Callable 'test') returns .cells.where{.value.(test)}.splitOut\n\
 Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
@@ -2906,13 +2907,13 @@ String.'lines' returns .splitOn(\"\\n\")\n\
 String.'words' returns .splitOnAny(\" \\t\\n\")\n\
 \n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
-Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
-Array.'tailWhere'('test') returns .slice(start=1+.lastKeyWhere{.!(test)})\n\
+Array.'tail'(Int 'length') returns .slice@( start=(.length-length).clamp@(min=0) )\n\
+Array.'tailWhere'('test') returns .slice@(start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
-Array.'stem'(Int 'length') returns .slice(length=length)\n\
-Array.'stemWhere'('test') returns .slice(end=.firstKeyWhere{.!(test)})\n\
-Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
+Array.'stem'(Int 'length') returns .slice@(length=length)\n\
+Array.'stemWhere'('test') returns .slice@(end=.firstKeyWhere{.!(test)})\n\
+Array.'stemUntil'(Callable 'test') returns .stem@(length=.cells.firstWhere{.value.(test)}.key)\n\
 \n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
@@ -2937,19 +2938,19 @@ Array.'whereDistinct'('property') returns .singletonOr\n\
   [.1st] + .tail.where{.(property) != p}.whereDistinct(property)\n\
 }\n\
 \n\
-Array.'withBounds'('bound') returns array(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
+Array.'withBounds'(Callable 'bound') returns array@(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
 Array.'safeBounds' returns .withBounds{novalues}\n\
 Array.'cyclic' returns (Int 'idx')->{ idx.mod(this.length).(this) }\n\
-Array.'arrayRotate'('offset') returns .cyclic.slice(start=offset, length=.length)\n\
+Array.'arrayRotate'(Int 'offset') returns .cyclic.slice@(start=offset, length=.length)\n\
 Array.'total' returns .1st + .2nd + etc;\n\
 Array.'sum' returns .total\n\
 Array.'product' returns .1st * .2nd * etc;\n\
-Array.'total'('body') returns total[.each.(body)]\n\
-Array.'product'('body') returns product[.each.(body)]\n\
-Array.'map'('body') returns [.each.(body)]\n\
+Array.'total'(Callable 'body') returns total[.each.(body)]\n\
+Array.'product'(Callable 'body') returns product[.each.(body)]\n\
+Array.'map'(Callable 'body') returns [.each.(body)]\n\
 Array.'copy' returns [.each]\n\
 Anything.'in'(Array 'array') returns this ==any array\n\
-Array.'categorizeBy'('key')\n\
+Array.'categorizeBy'(Callable 'key')\n\
 {\n\
   'result' = this.map(key).tabulate{this.ElementType.mutableArray[]}\n\
   forEach(this) 'value'->\n\
@@ -2961,9 +2962,9 @@ Array.'categorizeBy'('key')\n\
 Array.'categorize' returns .categorizeBy{it}\n\
 Array.'frequencies' returns .categorize.map{.length}\n\
 Table.'arrayFromFrequencies' returns [.keys.each.'key'->{ key**this.at(key) }]\n\
-Array.'min' returns .reduce ['a','b']-> { a.clamp(max=b) }\n\
+Array.'min' returns .reduce ['a','b']-> { a.clamp@(max=b) }\n\
 Array.'min'('else') returns if(.length>0){this.min} else (else)\n\
-Array.'max' returns .reduce ['a','b']-> { a.clamp(min=b) }\n\
+Array.'max' returns .reduce ['a','b']-> { a.clamp@(min=b) }\n\
 Array.'max'('else') returns if(.length>0){this.max} else (else)\n\
 \n\
 Array.'min'('property') returns .reduce ['a','b']->\n\
@@ -2994,7 +2995,7 @@ Array.'whereMax' returns [.each.box].reduce ['a','b']->\n\
   else { a+b }\n\
 }\n\
 \n\
-Array.'whereMin'('property') returns [.each.box].reduce ['a','b']->\n\
+Array.'whereMin'(Callable 'property') returns [.each.box].reduce ['a','b']->\n\
 {\n\
   if (a == []) { b }\n\
   else if (b == []) { a }\n\
@@ -3003,7 +3004,7 @@ Array.'whereMin'('property') returns [.each.box].reduce ['a','b']->\n\
   else { a+b }\n\
 }\n\
 \n\
-Array.'whereMax'('property') returns [.each.box].reduce ['a','b']->\n\
+Array.'whereMax'(Callable 'property') returns [.each.box].reduce ['a','b']->\n\
 {\n\
   if (a == []) { b }\n\
   else if (b == []) { a }\n\
@@ -3012,7 +3013,7 @@ Array.'whereMax'('property') returns [.each.box].reduce ['a','b']->\n\
   else { a+b }\n\
 }\n\
 \n\
-Array.'countWhere'('test')\n\
+Array.'countWhere'(Callable 'test')\n\
 {\n\
   Int 'result' = 0\n\
   forEach(this){ if(.(test)){ result = result+1 } }\n\
@@ -3020,44 +3021,45 @@ Array.'countWhere'('test')\n\
   return result\n\
 }\n\
 \n\
-Array.'firstWhere'('test')\n\
+Array.'firstWhere'(Callable 'test')\n\
 {\n\
   forEach(this){ .if(test){ return it } }\n\
   \n\
   return novalues\n\
 }\n\
 \n\
-Array.'firstWhere'('test', 'then')\n\
+Array.'firstWhere'(Callable 'test', Callable 'then')\n\
 {\n\
   forEach(this){ .if(test){ return it.(then) } }\n\
   \n\
   return novalues\n\
 }\n\
 \n\
-Array.'firstWhere'('test', 'else')\n\
+Array.'firstWhere'(Callable 'test', Callable 'else')\n\
 {\n\
   forEach(this){ .if(test){ return it } }\n\
   \n\
   return .(else)\n\
 }\n\
 \n\
-Array.'firstWhere'('test', 'then', 'else')\n\
+Array.'firstWhere'(Callable 'test', Callable 'then', Callable 'else')\n\
 {\n\
   .each.if(test){ return .(then) }\n\
   \n\
   return .(else)\n\
 }\n\
 \n\
-Array.'lastWhere'('test') returns .reverse.firstWhere(test)\n\
-Array.'lastWhere'('test', 'else') returns .reverse.firstWhere(test) else (else)\n\
-Array.'lastWhere'('test', 'then', 'else') returns .reverse.firstWhere(test)(then) else (else)\n\
+Array.'lastWhere'(Callable 'test') returns .reverse.firstWhere(test)\n\
+Array.'lastWhere'(Callable 'test', Callable 'else') returns .reverse.firstWhere(test) else (else)\n\
+Array.'lastWhere'(Callable 'test', Callable 'then', Callable 'else') returns .reverse.firstWhere(test)(then) else (else)\n\
 \n\
-Array.'firstKeyWhere'('test') returns .cells.firstWhere{.value.(test)}{.key}\n\
-Array.'firstKeyWhere'('test', 'else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
-Array.'firstKeyWhere'('test', 'then', 'else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
-Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
+Array.'keysWhere'(Callable 'test') returns .cells.where{.value.(test)}.map{.key}\n\
+Array.'firstKeyWhere'(Callable 'test') returns .cells.firstWhere{.value.(test)}{.key}\n\
+Array.'firstKeyWhere'(Callable 'test', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
+Array.'firstKeyWhere'(Callable 'test', Callable 'then', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
+Array.'lastKeyWhere'(Callable 'test') returns .cells.lastWhere{.value.(test)}.key\n\
 \n\
-'table'(Array 'keys', Array 'values') returns { keys.1st:values.1st, keys.2nd:values.2nd, etc }\n\
+'table'@(Array 'keys', Array 'values') returns { keys.1st:values.1st, keys.2nd:values.2nd, etc }\n\
 'table'(Callable 'default', Array 'keys', Array 'values')\n\
 {\n\
   'indexer' = table(keys)(keys.keys)\n\
@@ -3068,7 +3070,7 @@ Array.'lastKeyWhere'('test') returns .cells.lastWhere{.value.(test)}.key\n\
   }\n\
 }\n\
 Table.'values' returns [.at(.keys.each)]\n\
-Table.'map'('body') returns .cells.tabulateBy{.key}{.value.(body)}\n\
+Table.'map'(Callable 'body') returns .cells.tabulateBy{.key}{.value.(body)}\n\
 \n\
 'Empty' = {.length == 0}\n\
 'PI' = 3.1415926535897926\n\
@@ -3078,11 +3080,11 @@ Number.'degToRad' returns this*PI/180\n\
 Number.'radToDeg' returns this*180/PI\n\
 Number.'abs' returns if(this>=0){ this } else { -this }\n\
 Number.'mod'(Number 'other') returns ((this%other)+other)%other\n\
-Number.'differenceFrom'('n') returns abs(this-n)\n\
-Number.'divisibleBy'('n') returns this%n == 0\n\
-Number.'clamp'(Number 'min') returns if(this < min){ min } else { this }\n\
-Number.'clamp'(Number 'max') returns if(this > max){ max } else { this }\n\
-Number.'clamp'(Number 'min', Number 'max') returns .clamp(min=min).clamp(max=max)\n\
+Number.'differenceFrom'(Number 'n') returns abs(this-n)\n\
+Number.'divisibleBy'(Number 'n') returns this%n == 0\n\
+Number.'clamp'@(Number 'min') returns if(this < min){ min } else { this }\n\
+Number.'clamp'@(Number 'max') returns if(this > max){ max } else { this }\n\
+Number.'clamp'@(Number 'min', Number 'max') returns .clamp@(min=min).clamp@(max=max)\n\
 Int.'factorial' returns product[1<=..this]\n\
 Int.'toHex'\n\
 {\n\
@@ -3113,12 +3115,12 @@ Int.Array.'gcd' returns .reduce\n\
 \n\
 'Maybe' = Struct{ Array 'internal' }\n\
 \n\
-Maybe.Literal.'new'('value') returns Maybe.new( internal=[value] )\n\
-Maybe.Literal.'none' returns Maybe.new( internal=[] )\n\
+Maybe.Literal.'new'('value') returns Maybe.new@( internal=[value] )\n\
+Maybe.Literal.'none' returns Maybe.new@( internal=[] )\n\
 Maybe.'hasValue' returns .internal.length > 0\n\
 Maybe.'value' returns .internal.each\n\
-Maybe.'value'('else') returns if(.hasValue){.internal.1st} else (else)\n\
-Maybe.'value'('then')('else') returns if(.hasValue){.internal.1st.(then)} else (else)\n\
+Maybe.'value'(Callable 'else') returns if(.hasValue){.internal.1st} else (else)\n\
+Maybe.'value'(Callable 'then')(Callable 'else') returns if(.hasValue){.internal.1st.(then)} else (else)\n\
 \n\
 String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
 {\n\
@@ -3128,16 +3130,16 @@ String.'toInt' returns [this.each.{$0:0, $1:1, etc**10}].do\n\
 String.'caesarCypher'(Int 'offset')\n\
 {\n\
   'alphabet' = $[\"Aa\"..\"Zz\"]\n\
-  this.map( table(alphabet, alphabet.arrayRotate(offset*2), default=unchanged) )\n\
+  this.map( table@(keys=alphabet, values=alphabet.arrayRotate(offset*2), default=unchanged) )\n\
 }\n\
 String.'rot13' returns .caesarCypher(13)\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
 Type.'mutableArray'(Int 'length', 'value') returns this.mutableArray[value**length]\n\
-Type.'buildArray'('body') { 'result' = .mutableArray[]; result.(body); result.copy }\n\
+Type.'buildArray'(Callable 'body') { 'result' = .mutableArray[]; result.(body); result.copy }\n\
 \n\
-Type.'generator'('length', 'first', 'next')\n\
+Type.'generator'(Int 'length', 'first', Callable 'next')\n\
 {\n\
   this 'curValue'=first\n\
   Int 'curIdx'=0\n\
@@ -3156,7 +3158,7 @@ Type.'generator'('length', 'first', 'next')\n\
 Array.'push'('value') { .at(.length) = value }\n\
 Array.'AnyOf' returns Type(.1st)\n\
 Array.'ElementType' returns .Type.ElementType\n\
-'case'('key')('body') returns body.at(key)\n\
+'case'('key')(Callable 'body') returns body.at(key)\n\
 Anything.'case'(Table 'body') returns body.at(this)\n\
 Anything.'box' returns [this]\n\
 'pair'('a','b') returns [a,b]\n\
@@ -3168,22 +3170,22 @@ Anything.'box' returns [this]\n\
 'tuple'('a','b','c','d','e','f') returns [a,b,c,d,e,f]\n\
 'tuple'('a','b','c','d','e','f','g') returns [a,b,c,d,e,f,g]\n\
 'for'('v')('fn') returns v.(fn)\n\
-'forEach'(Array 'array')('fn') returns [ array.each.(fn) ]\n\
-'forEach_lazy'(Array 'array')('fn') returns array(length=array.length) 'idx'->{ array.at(idx).(fn) }\n\
+'forEach'(Array 'array')(Callable 'fn') returns [ array.each.(fn) ]\n\
+'forEach_lazy'(Array 'array')(Callable 'fn') returns array@(length=array.length) 'idx'->{ array.at(idx).(fn) }\n\
 Anything.'of' returns this\n\
-Anything.'is'('fn') returns .(fn)\n\
+Anything.'is'(Callable 'fn') returns .(fn)\n\
 Anything.'print' { output($this) }\n\
 Anything.'println' { output(\"$this\\n\") }\n\
 Anything.'trace' { output(\"$$this\\n\") }\n\
 \n\
-'if'(MaybeFalse 'cond', 'then', 'else') returns void.if{ cond }(then) else (else)\n\
-'if'(MaybeFalse 'cond', 'then') returns void.if{ cond }(then) else { novalues }\n\
-Anything.'if'(Callable 'test', 'then') returns .if(test)(then) else { void }\n\
+'if'(MaybeFalse 'cond', Callable 'then', Callable 'else') returns void.if{ cond }(then) else (else)\n\
+'if'(MaybeFalse 'cond', Callable 'then') returns void.if{ cond }(then) else { novalues }\n\
+Anything.'if'(Callable 'test', Callable 'then') returns .if(test)(then) else { void }\n\
 Anything.'if'(MaybeFalse 'cond') returns .if{cond}{it} else {novalues}\n\
 Anything.'if'(Callable 'test') returns .if(test){it} else {novalues}\n\
-Anything.'if'(MaybeFalse 'cond', 'else') returns .if{cond}{it} else (else)\n\
-Anything.'if'(Callable 'test', 'else') returns .if(test){it} else (else)\n\
-Anything.'or_if'('cond')('body') returns .if(cond)(body) else {it}\n\
+Anything.'if'(MaybeFalse 'cond', Callable 'else') returns .if{cond}{it} else (else)\n\
+Anything.'if'(Callable 'test', Callable 'else') returns .if(test){it} else (else)\n\
+Anything.'or_if'(Callable 'cond')(Callable 'body') returns .if(cond)(body) else {it}\n\
 \n\
 String.'alert' { .javascript{ alert(this) }; void }\n\
 String.'log' returns Void<< .javascript{ console.log(this) }\n\
@@ -3205,7 +3207,7 @@ Int.'stringFromUnicode' returns StringChar<<.javascript{ return SWYM.StringWrapp
 /*
 Array.'random'(Int 'length') = [.random, etc**length]
 Array.'randomDraw'(Int 'length') = .randomSubset(length).shuffle
-Array.'randomSubset'(Int 'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(start=k+1).randomSubset(length-1) }
+Array.'randomSubset'(Int 'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice@(start=k+1).randomSubset(length-1) }
 Array.'randomSlice'(Int 'length') = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
 */
 /*
