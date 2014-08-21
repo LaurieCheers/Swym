@@ -987,11 +987,12 @@ SWYM.indexArray = function(length)
 
 SWYM.rangeArray = function(first, last)
 {
-	if( first > last )
+	if( last < first )
 	{
-		return SWYM.jsArray([]);
+		last = first-1; // length of the array can't be less than 0
 	}
-	else if( first === 0 )
+	
+	if( first === 0 )
 	{
 		return SWYM.indexArray(last+1);
 	}

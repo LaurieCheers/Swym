@@ -433,6 +433,16 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	{
 		return typeA;
 	}
+	
+	// I've made peace with this special case - a StringChar unified with a String(1)
+	// yields a StringChar.
+	// In other words, a string literal of length 1 acts like either a StringChar, or a String(1),
+	// as circumstances dictate. If you put it with StringChars, it will act like a StringChar.
+	if( (SWYM.TypeMatches(SWYM.StringCharType, typeA) && SWYM.TypeMatches(SWYM.String1Type, typeB)) ||
+		(SWYM.TypeMatches(SWYM.StringCharType, typeB) && SWYM.TypeMatches(SWYM.String1Type, typeA)) )
+	{
+		return SWYM.StringCharType;
+	}
 
 	if( SWYM.TypeMatches(typeA, typeB) )
 	{
@@ -476,7 +486,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		{
 			return typeA;
 		}
-		
+
 		// throw away the baked information, find a common type between the two
 		var strippedTypeA = SWYM.StripBakedInformation( typeA, errorContext );
 		var strippedTypeB = SWYM.StripBakedInformation( typeB, errorContext );
@@ -864,6 +874,10 @@ SWYM.TypeOfValue = function(value, errorContext)
 		if( value.isChar )
 		{
 			return SWYM.StringCharType;
+		}
+		else if( value.length === 1 )
+		{
+			return SWYM.String1Type;
 		}
 		else
 		{

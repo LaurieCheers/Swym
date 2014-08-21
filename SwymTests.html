@@ -106,6 +106,9 @@ function runAllTests()
   runTest("[\"x\"] + [\"x\"]", "[\"x\",\"x\"]");
   runTest("\"\"\"triple quoted\"\"\"", "\"triple quoted\"");
   runTest("\"\"\"triple<\n>quoted<\n>\"\"\"", "\"triple<\\n>quoted<\\n>\"");
+  runTest("[\"x\",\"y\"] + [\"z\"]", "[\"x\",\"y\",\"z\"]");
+  runTest("[\"x\",\"y\"] + \"z\"", "\"xyz\"");
+  runTest("\"xy\" + [\"z\"]", "\"xyz\"");
   endReportTable();
 
   addReportTable("Basic Functions:");
@@ -113,7 +116,6 @@ function runAllTests()
   runTest("({true})", "'it'->{true}");
   runTest("'x'->{x}", "'x'->{x}");
   runTest("['x']->{x}", "['x']->{x}");
-  runTest("for(3){it*2}", "6");
   runTest("'myfor'('arg')('body'){arg.do(body)}; myfor(3){it*2}", "6");
   runTest("5.{it+2}",												"7");
   runTest("Number.'x' {1+3}; 5.x",										"4");
@@ -197,7 +199,7 @@ function runAllTests()
 //  runTest("Array.'pretty'('and'){ $[.safeBounds.1st, \", \"+.middle.each, and+.tail.safeBounds.last] }; [\"Ciao\"].pretty(\" and \"); ",	"\"Ciao\"");
   runTest("[10..6].keys", "[0..4]");
   runTest("\"Hello\".keys", "[0..4]");
-  runTest("Int.'bottles' returns case(this){ 0:\"no more bottles\", 1:\"1 bottle\", else:\"$this bottles\" };\n  for(3..1){\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
+  runTest("Int.'bottles' returns case(this){ 0:\"no more bottles\", 1:\"1 bottle\", else:\"$this bottles\" };\n  forEach[3..1]{\nprint(\"$it.bottles of beer on the wall, $it.bottles of beer.\\n\");\n print(\"You take one down, pass it around, \"); print(\"$((it-1).bottles) of beer on the wall.\\n\\n\"); }",
 			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n\n");
   runTest("\"ebg13\".rot13.print", "rot13");
   runTest("Int.'b'{\"$(.{0:\"no more\",else:this}) bottle$.s_plural of beer\"}; Int.'w'{\"$.b on the wall\"};print[(3..1).{\"$.w, $.b.\\nYou take one down, pass it around, $(w(it-1)).\\n\"}]",
