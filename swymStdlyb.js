@@ -80,7 +80,7 @@ SWYM.ArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.AnyType, membe
 SWYM.ContainerType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Container"};
 SWYM.TableType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.ArrayType}, debugName:"Table"};
 SWYM.StringType = {type:"type", nativeType:"String", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"String"};
-SWYM.String1Type = {type:"type", nativeType:"String", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.BakedValue(1), "keys":SWYM.IntArrayType}, debugName:"String(1)"};
+SWYM.String1Type = SWYM.FixedLengthStringType(1);
 SWYM.CallableType = {type:"type", nativeType:"Callable", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Callable"};
 SWYM.BlockType = {type:"type", argType:SWYM.DontCareType, outType:SWYM.AnyType, debugName:"Block"}; // will have members at some point
 SWYM.PredicateType = {type:"type", argType:SWYM.AnyType, outType:SWYM.BoolType, debugName:"Predicate"};
@@ -194,7 +194,7 @@ SWYM.operators = {
 			if( parentFunction.returnType === baseReturnType )
 				parentFunction.returnType = yieldType;
 			else
-				parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, yieldType);
+				parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, yieldType, node);
 			parentFunction.bodyCScope["Yielded"] = parentFunction.returnType;
 			
 			return SWYM.VoidType;
@@ -222,7 +222,7 @@ SWYM.operators = {
 				}
 				
 				if( parentFunction.returnType !== undefined && parentFunction.returnType.type !== "incomplete" )
-					parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, returnType);
+					parentFunction.returnType = SWYM.TypeUnify(parentFunction.returnType, returnType, node);
 				else
 					parentFunction.returnType = returnType;
 
@@ -341,7 +341,7 @@ SWYM.operators = {
 
 				if( resultType !== undefined )
 				{
-					resultType = SWYM.TypeUnify(resultType,typeN);
+					resultType = SWYM.TypeUnify(resultType,typeN, node);
 				}
 				else
 				{
@@ -1015,7 +1015,7 @@ SWYM.operators = {
 	"%": {precedence:105, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("%") },
 	"^": {precedence:106, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("^") },
 
-	".": { precedence:300, prefix:true, infix:true,
+	".": { precedence:300, prefix:true, infix:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			return SWYM.BuildDotNode(lhs, op, rhs);
@@ -1023,7 +1023,7 @@ SWYM.operators = {
 	},
 	
 	// logically negated function call, e.g. bob.!likes(jim)
-	".!": { precedence:300, returnType:SWYM.BoolType, standalone:true, prefix:true, infix:true, postfix:true,
+	".!": { precedence:300, returnType:SWYM.BoolType, standalone:true, prefix:true, infix:true, postfix:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			return SWYM.BuildDotNode(lhs, op, rhs, SWYM.operators["!"]);
@@ -1031,7 +1031,7 @@ SWYM.operators = {
 	},
 
 	// toStringed function call, e.g. bob.$age
-	".$": { precedence:300, returnType:SWYM.StringType, standalone:true, prefix:true, infix:true, postfix:true,
+	".$": { precedence:300, returnType:SWYM.StringType, standalone:true, prefix:true, infix:true, postfix:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			return SWYM.BuildDotNode(lhs, op, rhs, SWYM.operators["$"]);
@@ -1039,7 +1039,7 @@ SWYM.operators = {
 	},
 
 	// toDebugStringed function call, e.g. bob.$$name
-	".$$": { precedence:300, returnType:SWYM.StringType, standalone:true, prefix:true, infix:true, postfix:true,
+	".$$": { precedence:300, returnType:SWYM.StringType, standalone:true, prefix:true, infix:true, postfix:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			return SWYM.BuildDotNode(lhs, op, rhs, SWYM.operators["$$"]);
@@ -1047,7 +1047,7 @@ SWYM.operators = {
 	},
 
 	// Postfix version of the square bracket operator
-	".[]": { precedence:300, returnType:SWYM.ArrayType, standalone:true, postfix:true,
+	".[]": { precedence:300, returnType:SWYM.ArrayType, standalone:true, postfix:true, noImplicitSemicolon:true,
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			if( !lhs )
@@ -1177,6 +1177,14 @@ SWYM.operators = {
 		{
 			if( !lhs )
 				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+				
+			if (lhs.type === "fnnode" && lhs.pendingArgName !== undefined )
+			{
+				lhs.argNames.push(lhs.pendingArgName);
+				lhs.children.push(rhs);
+				lhs.pendingArgName = undefined;
+				return lhs;
+			}
 
 			// function call
 			var params = {type:"fnnode", etc:op.etc, pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
@@ -1187,7 +1195,7 @@ SWYM.operators = {
 				params.argNames.push("__");
 			}
 			
-			SWYM.ReadParamBlock(rhs, params, false);
+			SWYM.ReadParamBlock(rhs, params);
 			return SWYM.CombineFnNodes(lhs, params);
 		},
 		customCompile:function(node, cscope, executable)
@@ -1196,31 +1204,19 @@ SWYM.operators = {
 			return SWYM.CompileNode(node.children[1], cscope, executable);
 		}
 	},
-	"@(": { precedence:330, takeCloseBracket:")", infix:true, postfix:true, debugText:"paramBlock", noImplicitSemicolon:true,
-		customParseTreeNode:function(lhs, op, rhs)
-		{
-			if( !lhs )
-			{
-				SWYM.LogError(node, "Named parameter blocks @() must be part of a function call.");
-				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
-			}
-
-			// function call
-			var params = {type:"fnnode", etc:op.etc, pos:lhs.pos, body:undefined, isDecl:undefined, name:undefined, children:[], argNames:[]};
-			
-			SWYM.ReadParamBlock(rhs, params, true);
-			return SWYM.CombineFnNodes(lhs, params);
-		},
-		customCompile:function(node, cscope, executable)
-		{
-			SWYM.LogError(node, "A named parameter block @() must be part of a function call.");
-		}
-	},
 	"[": { precedence:330, takeCloseBracket:"]", prefix:true, infix:true, standalone:true, postfix:true, debugText:"square",
 		customParseTreeNode:function(lhs, op, rhs)
 		{
 			if( !lhs )
 				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+
+			if (lhs.type === "fnnode" && lhs.pendingArgName !== undefined )
+			{
+				lhs.argNames.push(lhs.pendingArgName);
+				lhs.children.push(rhs);
+				lhs.pendingArgName = undefined;
+				return lhs;
+			}
 
 			// passing an array to a function call
 			var arrayNode = SWYM.NonCustomParseTreeNode(undefined, op, rhs);
@@ -1306,6 +1302,14 @@ SWYM.operators = {
 			if( !lhs )
 				return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
 
+			if (lhs.type === "fnnode" && lhs.pendingArgName !== undefined )
+			{
+				lhs.argNames.push(lhs.pendingArgName);
+				lhs.children.push(rhs);
+				lhs.pendingArgName = undefined;
+				return lhs;
+			}
+
 			// function call
 			if( lhs && (lhs.type === "decl" || (lhs.type === "fnnode" && lhs.isDecl)) )
 			{
@@ -1352,7 +1356,59 @@ SWYM.operators = {
 	},
 
 	// this is the operator that string interpolations generate
-	"(str++)": {precedence:1000, returnType:SWYM.StringType, infix:function(a,b){return SWYM.StringWrapper(a.data+b.data)} }
+	"(str++)": {precedence:1000, returnType:SWYM.StringType, infix:function(a,b){return SWYM.StringWrapper(a.data+b.data)} },
+
+	// composes expressions like "& arg" into an argname token.
+	// this is so messy. :-/
+	"&": {precedence:2000, prefix:true, infix:true,
+		customParseTreeNode:function(lhs, op, rhs)
+		{
+			if( lhs !== undefined )
+			{
+				if( lhs.type === "name" && rhs.type === "name" )
+				{
+					// function call with a named argument - fn&name(foo)
+					return {type:"fnnode", pos:lhs.pos, body:undefined, isDecl:undefined, name:lhs.text, children:[], argNames:[], pendingArgName:rhs.text};
+				}
+				else if( lhs.type === "fnnode" && rhs.type === "name" )
+				{
+					// function call with a named argument, and a previous argument - fn()&name(foo)
+					lhs.pendingArgName = rhs.text;
+					return lhs;
+				}
+				else if( rhs.type === "decl" )
+				{
+					// mandatory named argument with a type declaration - Anything &'foo'
+					rhs.children = [lhs];
+					rhs.explicitNameRequired = true;
+					return rhs;
+				}
+				else
+				{
+					SWYM.LogError(op.pos, "Invalid use of the & operator");
+					return lhs;
+				}
+			}
+			
+			if( rhs.type === "name" )
+			{
+				// an argument name
+				// occurs either as fn &arg(x), or fn(&arg=x), or fn(&arg)
+				return SWYM.NewToken("argname", op.pos, "&"+rhs.text, rhs.text);
+			}
+			else if( rhs.type === "decl" )
+			{
+				// declaration of a mandatory argument name
+				rhs.explicitNameRequired = true;
+				return rhs;
+			}
+			else
+			{
+				SWYM.LogError(op.pos, "Invalid use of the & operator");
+				return rhs;
+			}
+		}
+	}
 };
 
 //==================================================================================
@@ -1383,7 +1439,7 @@ SWYM.DefaultGlobalCScope =
 	"MaybeFalse": SWYM.BakedValue(SWYM.MaybeFalseType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
-	"novalues": {type:"type", debugName:"Literal(<no_values>)", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
+	"__novalues": {type:"type", debugName:"Literal(<no_values>)", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
 	"value_novalues": SWYM.BakedValue(SWYM.value_novalues),
 	
 	"StringChar": SWYM.BakedValue(SWYM.StringCharType),
@@ -1579,6 +1635,11 @@ SWYM.DefaultGlobalCScope =
 		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
 			var result = argTypes[0];
+			if( !argTypes[0] )
+			{
+				SWYM.LogError(0, "Calling Type - type was not known at compile time!");
+				return SWYM.DontCareType;
+			}
 			
 			executable.push("#Literal");
 			executable.push(result);
@@ -1730,7 +1791,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 
-			return SWYM.TypeUnify(thenType, elseType);
+			return SWYM.TypeUnify(thenType, elseType, errorNode);
 		}
 	}],
 
@@ -1768,7 +1829,7 @@ SWYM.DefaultGlobalCScope =
 			});
 			
 			var thenType = SWYM.GetOutType(argTypes[1], argTypes[0]);
-			return SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2]));
+			return SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2]), errorNode);
 		},
 		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
@@ -1794,7 +1855,7 @@ SWYM.DefaultGlobalCScope =
 			});
 			
 			var thenType = SWYM.GetOutType(SWYM.ToSinglevalueType(argTypes[1]), SWYM.ToSinglevalueType(argTypes[0]));
-			return SWYM.ToMultivalueType( SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2])) );
+			return SWYM.ToMultivalueType( SWYM.TypeUnify(thenType, SWYM.GetOutType(argTypes[2]), errorNode) );
 		}
 	},
 	{
@@ -1825,7 +1886,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 			
-			return SWYM.TypeUnify(argTypes[0], SWYM.GetOutType(argTypes[1]));
+			return SWYM.TypeUnify(argTypes[0], SWYM.GetOutType(argTypes[1]), errorNode);
 		},
 		multiCustomCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 		{
@@ -1847,7 +1908,7 @@ SWYM.DefaultGlobalCScope =
 				}
 			});
 			
-			return SWYM.ToMultivalueType( SWYM.TypeUnify(SWYM.ToSinglevalueType(argTypes[0]), SWYM.GetOutType(argTypes[1])) );
+			return SWYM.ToMultivalueType( SWYM.TypeUnify(SWYM.ToSinglevalueType(argTypes[0]), SWYM.GetOutType(argTypes[1]), errorNode) );
 		}
 	}],
 
@@ -1959,7 +2020,7 @@ SWYM.DefaultGlobalCScope =
 			}
 			
 			//FIXME: this is pretty half-assed. javascript's tokenizer uses quite different rules from swym's.
-			// To do this right, we need to switch into javascript mode way back in the tokenizer.
+			// To do this right, we'll have to receive javascript code as a string.
 			var functionText = "var jsFunction = function("+argNamesText+")"+argTypes[1].closureInfo.debugText;
 			eval(functionText);
 			
@@ -2096,6 +2157,40 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 		}],
+
+	"fn#block":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "body":{index:1, typeCheck:SWYM.BlockType} },
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+			{
+				SWYM.LogError(0, "The left argument to 'block' must be a type.");
+				return SWYM.VariableTypeContaining(SWYM.AnyType);
+			}
+			
+			var bodyExecutable = [];
+			var argType = argTypes[0].baked;
+			var outType = SWYM.CompileLambdaInternal(argTypes[1], argTypes[0].baked, bodyExecutable, errorNode);
+			
+			SWYM.pushEach(argExecutables[1], executable);
+
+			var result = object(SWYM.CallableTypeFromTo(argType, outType));
+			
+			SWYM.pushEach([
+				"#Native", 1,
+				function(lookup)
+				{
+					return {
+						type:"closure",
+						debugName:lookup.debugName,
+						run:function(key) { return SWYM.ClosureExec(lookup, key, bodyExecutable); }
+					};
+				}
+			], executable);
+			
+			return result;
+		}
+	}],
 
 	"fn#var":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "value":{index:1} },
 			customCompileWithoutArgs:true,
@@ -2305,14 +2400,6 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.ToMultivalueType(SWYM.GetOutType( argTypes[0], SWYM.VoidType ));
 		}
 	}],
-	
-	"fn#compile":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "body":{index:1, typeCheck:SWYM.BlockType} },
-		customCompile:function(argTypes, cscope, executable, errorNode)
-		{
-			SWYM.GetOutType(argTypes[1], argTypes[0].baked);
-			return argTypes[1];
-		}
-	}],
 
 	"fn#each":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayToMultivalueType(argTypes[0]); }, // each is basically a no-op!
@@ -2336,109 +2423,6 @@ SWYM.DefaultGlobalCScope =
 
 	"fn#eager":[{ expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 		customCompile:function(argTypes, cscope, executable, errorNode) { return SWYM.ArrayTypeContaining(SWYM.GetOutType(argTypes[0])); }, // no-op!
-	}],
-	
-	"fn#accumulate":[
-	{
-		expectedArgs:{ 
-			"this":{index:0},
-			"array":{index:1, typeCheck:SWYM.ArrayType}, 
-			"body":{index:2, typeCheck:SWYM.CallableType}
-		},
-		customCompile:function(argTypes, cscope, executable, errorNode)
-		{
-			var outType = SWYM.GetOutType(argTypes[2], SWYM.ArrayTypeContaining(argTypes[0]));
-			
-			executable.push("#Native");
-			executable.push(3);
-			
-			if( !outType || outType.multivalueOf !== undefined )
-			{
-				executable.push(function(start, array, body)
-				{
-					var current = start;
-					for( var Idx = 0; Idx < array.length; Idx++ )
-					{
-						current = SWYM.ClosureCall(body, SWYM.jsArray([current, array.run(Idx)]));
-					}
-					return current;
-				});
-			}
-			else
-			{
-				executable.push(function(start, array, body)
-				{
-					var current = SWYM.jsArray([start]);
-					for( var Idx = 0; Idx < array.length; Idx++ )
-					{
-						current = SWYM.Flatten( SWYM.ForEachPairing([current, SWYM.jsArray([array.run(Idx)])], function(args)
-						{
-							return SWYM.ClosureCall(body, SWYM.jsArray([args[0], args[1]]));
-						}));
-					}
-					return current;
-				});
-			}
-			
-			return outType;
-		}
-	}],
-
-	"fn#reduce":[
-	{
-		expectedArgs:{ 
-			"this":{index:0},
-			"body":{index:1, typeCheck:SWYM.CallableType}
-		},
-		customCompile:function(argTypes, cscope, executable, errorNode)
-		{
-			var elementType = SWYM.GetOutType(argTypes[0], SWYM.IntType, errorNode);
-			
-			var bodyExecutable = [];
-			var outType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[1]), SWYM.TupleTypeOf([elementType,elementType], elementType), bodyExecutable, errorNode);
-			
-			executable.push("#Native");
-			executable.push(2);
-			
-			if( outType && outType.multivalueOf !== undefined )
-			{
-				executable.push(function(array, body)
-				{
-					var workingSet = [];
-					for( var Idx = 0; Idx < array.length; Idx++ )
-					{
-						workingSet.push( array.run(Idx) );
-					}
-
-					while( workingSet.length > 1 )
-					{
-						var newValues = SWYM.ClosureExec(body, SWYM.jsArray([workingSet.shift(), workingSet.shift()]), bodyExecutable);
-						for( var Idx = 0; Idx < newValues.length; Idx++ )
-						{
-							workingSet.push( newValues.run(Idx) );
-						}
-					}
-					
-					return workingSet[0];
-				});
-				
-				return outType.multivalueOf;
-			}
-			else
-			{
-				executable.push(function(array, body)
-				{
-					var current = array.run(0);
-					for( var Idx = 1; Idx < array.length; Idx++ )
-					{
-						current = SWYM.ClosureExec(body, SWYM.jsArray([current, array.run(Idx)]), bodyExecutable);
-					}
-					return current;
-				});
-				
-				return outType;
-			}
-		}
 	}],
 	
 	"fn#isLazy":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
@@ -2514,6 +2498,25 @@ SWYM.DefaultGlobalCScope =
 			executable.push("#Literal");
 			executable.push(arrayType);
 			return SWYM.BakedValue(arrayType);
+		}
+	}],		
+
+	"fn#String":[{  expectedArgs:{
+			"this":{index:0, typeCheck:SWYM.IntType},
+		},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			if( !argTypes[0] || !argTypes[0].baked )
+			{
+				SWYM.LogError(0, "Argument to the String function must be known at compile time!");
+				return SWYM.DontCareType;
+			}
+			
+			var resultType = SWYM.FixedLengthStringType(argTypes[0].baked);
+			executable.push("#Literal");
+			executable.push(resultType);
+			return SWYM.BakedValue(resultType);
 		}
 	}],		
 
@@ -2774,12 +2777,12 @@ SWYM.stdlyb =
 'tuple'('a','b','c','d','e','f') returns [a,b,c,d,e,f]\n\
 'tuple'('a','b','c','d','e','f','g') returns [a,b,c,d,e,f,g]\n\
 \n\
-Anything.'javascript'('body','pure'=false) returns javascript@(pure=pure){'this'}(body)\n\
+Anything.'javascript'(&'pure'=false, 'body') returns javascript(&pure=pure){'this'}(body)\n\
 \n\
 'forEach'(Array 'arr')(Callable 'fn') returns arr.map(fn)\n\
 \n\
 'forEach_lazy'(Array 'arr')(Callable 'fn') returns\n\
-	array@(length=arr.length) 'idx'->{ arr.at(idx).(fn) }\n\
+	array(&length=arr.length) 'idx'->{ arr.at(idx).(fn) }\n\
 \n\
 'case'('key')(Callable 'body') returns key.(body)\n\
 Anything.'case'(Callable 'body') returns this.(body)\n\
@@ -2796,16 +2799,16 @@ Anything.'trace' { output(\"$$this\\n\") }\n\
 	void.if{ cond }(then) else (else)\n\
 \n\
 'if'(MaybeFalse 'cond', Callable 'then') returns\n\
-	void.if{ cond }(then) else { novalues }\n\
+	void.if{ cond }(then) else { __novalues }\n\
 \n\
 Anything.'if'(Callable 'test', Callable 'then') returns\n\
 	.if(test)(then) else { void }\n\
 \n\
 Anything.'if'(MaybeFalse 'cond') returns\n\
-	.if{cond}{it} else {novalues}\n\
+	.if{cond}{it} else {__novalues}\n\
 \n\
 Anything.'if'(Callable 'test') returns\n\
-	.if(test){it} else {novalues}\n\
+	.if(test){it} else {__novalues}\n\
 \n\
 Anything.'if'(MaybeFalse 'cond', Callable 'else') returns\n\
 	.if{cond}{it} else (else)\n\
@@ -2829,7 +2832,10 @@ Anything.'or_if'(MaybeFalse 'cond')(Callable 'body') returns\n\
 '{/}' = ['a','b']->{a/b}\n\
 '{%}' = ['a','b']->{a%b}\n\
 '{^}' = ['a','b']->{a^b}\n\
+'{&&}' = ['a','b']->{a&&b}\n\
+'{||}' = ['a','b']->{a||b}\n\
 '{==}' = ['a','b']->{a==b}\n\
+'{!=}' = ['a','b']->{a!=b}\n\
 '{>}' = ['a','b']->{a>b}\n\
 '{<}' = ['a','b']->{a<b}\n\
 '{>=}' = ['a','b']->{a>=b}\n\
@@ -2838,59 +2844,64 @@ Anything.'or_if'(MaybeFalse 'cond')(Callable 'body') returns\n\
 \n\
 //== Default operator overloads ==\n\
 '-'(Int 'rhs') returns\n\
-	Int<< javascript@(pure){'rhs'}{ return -rhs }\n\
+	Int<< javascript(&pure){'rhs'}{ return -rhs }\n\
 \n\
 Int.'-'(Int 'rhs') returns\n\
-	Int<< javascript@(pure){'this', 'rhs'}{ return this-rhs }\n\
+	Int<< javascript(&pure){'this', 'rhs'}{ return this-rhs }\n\
 \n\
 Int.'+'(Int 'rhs', '__identity'=0) returns\n\
-	Int<< javascript@(pure){'this', 'rhs'}{ return this+rhs }\n\
+	Int<< javascript(&pure){'this', 'rhs'}{ return this+rhs }\n\
 \n\
 Int.'*'(Int 'rhs', '__identity'=1) returns\n\
-	Int<< javascript@(pure){'this', 'rhs'}{ return this*rhs }\n\
+	Int<< javascript(&pure){'this', 'rhs'}{ return this*rhs }\n\
 \n\
 Int.'%'(Int 'rhs') returns\n\
-	Int<< javascript@(pure){'this', 'rhs'}{ return this%rhs }\n\
+	Int<< javascript(&pure){'this', 'rhs'}{ return this%rhs }\n\
 \n\
 Int.'^'(Int 'rhs') returns\n\
-	Int<< javascript@(pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
+	Int<< javascript(&pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
 \n\
 '-'(Number 'rhs') returns\n\
-	Number<< javascript@(pure){'rhs'}{ return -rhs }\n\
+	Number<< javascript(&pure){'rhs'}{ return -rhs }\n\
 \n\
 Number.'-'(Number 'rhs') returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return this-rhs }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return this-rhs }\n\
 \n\
 Number.'+'(Number 'rhs', '__identity'=0) returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return this+rhs }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return this+rhs }\n\
 \n\
 Number.'*'(Number 'rhs', '__identity'=1) returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return this*rhs }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return this*rhs }\n\
 \n\
 Number.'/'(Number 'rhs') returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return this/rhs }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return this/rhs }\n\
 \n\
 Number.'%'(Number 'rhs') returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return this%rhs }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return this%rhs }\n\
 \n\
 Number.'^'(Number 'rhs') returns\n\
-	Number<< javascript@(pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
+	Number<< javascript(&pure){'this', 'rhs'}{ return Math.pow(this,rhs) }\n\
 \n\
 Array.'+'(Array 'arr', '__identity'=[]) returns\n\
 	[.each, arr.each]\n\
 \n\
 Array.'*'(Int 'times') returns\n\
-	array@(length=.length*times)(.cyclic)\n\
+	array(&length=.length*times)(.cyclic)\n\
 \n\
 String.'+'(String 'str', '__identity'=\"\") returns\n\
 	[.each, str.each]\n\
 \n\
 Number.'<'(Number 'rhs') returns\n\
-	Bool<< javascript@(pure){'this', 'rhs'}{ return this<rhs }\n\
+	Bool<< javascript(&pure){'this', 'rhs'}{ return this<rhs }\n\
 \n\
 String.'<'(String 'rhs') returns\n\
-	Bool<< javascript@(pure){'this', 'rhs'}{ return this<rhs }\n\
+	Bool<< javascript(&pure){'this', 'rhs'}{ return this<rhs }\n\
 \n\
+String(1).'-'(String(1) 'rhs') returns .unicodeValue - rhs.unicodeValue\n\
+\n\
+String(1).'+'(Int 'rhs') returns String(1) << (.unicodeValue + rhs).unicodeToString\n\
+\n\
+StringChar.'+'(Int 'rhs') returns StringChar << (.unicodeValue + rhs).unicodeToString\n\
 \n\
 //== Numbers ==\n\
 'Empty' = {.length == 0}\n\
@@ -2902,14 +2913,10 @@ Number.'abs' returns if(this>=0){ this } else { -this }\n\
 Number.'mod'(Number 'other') returns ((this%other)+other)%other\n\
 Number.'differenceFrom'(Number 'n') returns abs(this-n)\n\
 Number.'divisibleBy'(Number 'n') returns this%n == 0\n\
-Number.'clamp'@(Number 'min') returns if(this < min){ min } else { this }\n\
-Number.'clamp'@(Number 'max') returns if(this > max){ max } else { this }\n\
-Number.'clamp'@(Number 'min', Number 'max') returns .clamp@(min=min).clamp@(max=max)\n\
+Number.'clamp'(Number &'min') returns if(this < min){ min } else { this }\n\
+Number.'clamp'(Number &'max') returns if(this > max){ max } else { this }\n\
+Number.'clamp'(Number &'min', Number &'max') returns .clamp(&min=min).clamp(&max=max)\n\
 Int.'factorial' returns product[1<=..this]\n\
-Int.'toHex'\n\
-{\n\
-  ( if(this<16) {\"\"} else {(this/16).floor.toHex} ) + [\"0\"..\"9\",\"a\"..\"f\"].at(this%16)\n\
-}\n\
 \n\
 Int.'choose'(Int 'n') // (Pascal's triangle)\n\
 {\n\
@@ -2938,40 +2945,50 @@ Callable.'map'(Callable 'body') returns 'key'->{ key.(this).(body) }\n\
 Callable.'at'(Anything 'key') returns key.(this)\n\
 Callable.'atEach'(Int.Array 'keys') returns keys.map(this)\n\
 Callable.'slice'['a'..<'b'] returns [a..<b].map(this)\n\
-Callable.'slice'@(Int 'start') returns .slice[start ..< .length]\n\
-Callable.'slice'@(Int 'length') returns .slice[0..<length]\n\
-Callable.'slice'@(Int 'end') returns .slice[0..<end]\n\
-Callable.'slice'@(Int 'last') returns .slice[0..last]\n\
-Callable.'slice'@(Int 'trimEnd') returns .slice[0 ..< .length-trimEnd]\n\
-Callable.'slice'@(Int 'start',Int 'end') returns .slice[start..<end]\n\
-Callable.'slice'@(Int 'start',Int 'last') returns .slice[start..last]\n\
-Callable.'slice'@(Int 'start',Int 'length') returns .slice[start..<start+length]\n\
-Callable.'slice'@(Int 'length',Int 'end') returns .slice[end-length..<end]\n\
-Callable.'slice'@(Int 'length',Int 'last') returns .slice[last-length-1..last]\n\
+Callable.'slice'(Int &'start') returns .slice[start ..< .length]\n\
+Callable.'slice'(Int &'length') returns .slice[0..<length]\n\
+Callable.'slice'(Int &'end') returns .slice[0..<end]\n\
+Callable.'slice'(Int &'last') returns .slice[0..last]\n\
+Callable.'slice'(Int &'trimEnd') returns .slice[0 ..< .length-trimEnd]\n\
+Callable.'slice'(Int &'start',Int &'end') returns .slice[start..<end]\n\
+Callable.'slice'(Int &'start',Int &'last') returns .slice[start..last]\n\
+Callable.'slice'(Int &'start',Int &'length') returns .slice[start..<start+length]\n\
+Callable.'slice'(Int &'length',Int &'end') returns .slice[end-length..<end]\n\
+Callable.'slice'(Int &'length',Int &'last') returns .slice[last-length-1..last]\n\
 Callable.'non' returns {!.(this)}\n\
 \n\
+Container.'else'('els') returns 'key'->\n\
+{\n\
+  this.at(key) else (els)\n\
+}\n\
+\n\
+Array.'cyclic' returns (Int 'idx')->{ idx.mod(this.length).(this) }\n\
+Container.'partial' returns .else(unchanged)\n\
 \n\
 //== Tables ==\n\
 Table.'map'(Callable 'body') returns .cells.tabulateBy{.key}{.value.(body)}\n\
 \n\
-Table.'at'('key','then') returns\n\
-	.at(key)(then) else {novalues}\n\
-\n\
-Table.'at'('key','else') returns\n\
-	.if{ key.in(.keys) }{ .at(key) } else (else)\n\
-\n\
-Table.'at'('key','then','else') returns\n\
-	.if{ key.in(.keys) }{ .at(key).(then) } else (else)\n\
+Container.'at'('key','then'=unchanged,'else')\n\
+{\n\
+  if( key.in(.keys) )\n\
+  {\n\
+    key.assert(this.KeyType).(this).(then)\n\
+  }\n\
+  else\n\
+  {\n\
+    key.(else)\n\
+  }\n\
+}\n\
 \n\
 Table.'frequenciesToArray' returns\n\
 	.keys.map 'key'->{ key**this.at(key) }\n\
 \n\
-'table'@(Array 'keys', Array 'values') returns\n\
+'table'(Array &'keys', Array &'values') returns\n\
 	{ keys.1st:values.1st, keys.2nd:values.2nd, etc }\n\
 \n\
-'table'@(Array 'keys', Array 'values', Callable 'default')\n\
+'table'(Array &'keys', Array &'values', Callable &'default')\n\
 {\n\
-  'indexer' = table@(keys=keys, values=keys.keys)\n\
+  'indexer' = table(&keys=keys, &values=keys.keys)\n\
   \n\
   table(keys) 'key'->\n\
   {\n\
@@ -2981,17 +2998,20 @@ Table.'frequenciesToArray' returns\n\
 \n\
 Table.'values' returns [.at(.keys.each)]\n\
 \n\
+// Used to replace a chain of if-else-ifs with a table\n\
+'select'(Table 'table') returns table.at(true)\n\
+\n\
+'selectWhere'(Callable 'test', Table 'table', Callable 'else') returns\n\
+    table.keys.firstWhere(test)(table) else (else)\n\
+\n\
+Array.'inverse' returns table(&keys=this, &values=.keys)\n\
+\n\
+Table.'inverse' returns table(&keys=.values, &values=.keys)\n\
+\n\
 \n\
 // == Strings ==\n\
 String.'lines' returns .splitOn(\"\\n\")\n\
 String.'words' returns .splitOnAny(\" \\t\\n\")\n\
-\n\
-String.'caesarCypher'(Int 'offset')\n\
-{\n\
-  'alphabet' = $[\"Aa\"..\"Zz\"]\n\
-  this.map( table@(keys=alphabet, values=alphabet.arrayRotate(offset*2), default=unchanged) )\n\
-}\n\
-String.'rot13' returns .caesarCypher(13)\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
@@ -3007,10 +3027,37 @@ String.'uppercase' returns\n\
 StringChar.'uppercase' returns\n\
 	StringChar<< .javascript{ return SWYM.StringWrapper(this.toUpperCase()) }\n\
 \n\
+// == Encoding & Decoding ==\n\
+\n\
 String.'unicode' returns\n\
 	[.each.{ Int<< .javascript{ return this.charCodeAt(0) } }]\n\
 \n\
-String.'decodeBase'(Array 'encoding')\n\
+String(1).'unicodeValue' returns .unicode.1st\n\
+\n\
+Int.Array.'unicodeToString' returns $[.each.unicodeToString]\n\
+Int.'unicodeToString' returns StringChar<<.javascript{ return SWYM.StringWrapper(String.fromCharCode(this)); }\n\
+\n\
+String.'caesarEncode'(Int 'offset')\n\
+{\n\
+  'alphabet' = $[\"Aa\"..\"Zz\"]\n\
+  this.map( table(&keys=alphabet, &values=alphabet.arrayRotate(offset*2), &default=unchanged) )\n\
+}\n\
+\n\
+String.'caesarDecode'(Int 'offset') returns .caesarEncode(-offset)\n\
+\n\
+String.'rot13' returns .caesarEncode(13)\n\
+\n\
+Int.'baseEncode'(Array 'encoding')\n\
+{\n\
+	'base' = [encoding.at(this%encoding.length)]\n\
+\n\
+	base.or_if( this >= encoding.length )\n\
+	{\n\
+		(this/encoding.length).floor.baseEncode(encoding) + base\n\
+	}\n\
+}\n\
+\n\
+String.'baseDecode'(Array 'encoding')\n\
 {\n\
 	'digits' = .map 'c'->{ encoding.firstKeyWhere{==c} else {return 0} }\n\
 	'factor' = encoding.length\n\
@@ -3018,46 +3065,40 @@ String.'decodeBase'(Array 'encoding')\n\
 	return digits.1stLast*factor^0 + digits.2ndLast*factor^1 + etc\n\
 }\n\
 \n\
-Int.'encodeBase'(Array 'encoding')\n\
-{\n\
-	'base' = [encoding.at(this%encoding.length)]\n\
+Int.'binaryEncode' returns .baseEncode(\"01\")\n\
+String.'binaryDecode' returns .baseDecode(\"01\")\n\
 \n\
-	base.or_if( this >= encoding.length )\n\
-	{\n\
-		(this/encoding.length).floor.encodeBase(encoding) + base\n\
-	}\n\
-}\n\
+Int.'octalEncode' returns .baseEncode[\"0\"..\"7\"]\n\
+String.'octalDecode' returns .baseDecode[\"0\"..\"7\"]\n\
+\n\
+Int.'decimalEncode' returns .baseEncode[\"0\"..\"9\"]\n\
+String.'decimalDecode' returns .baseDecode[\"0\"..\"9\"]\n\
+String.'toInt' returns .baseDecode[\"0\"..\"9\"]\n\
 \n\
 'hexEncoding' = $[\"0\"..\"9\", \"a\"..\"f\"]\n\
-String.'hexToInt' returns .lowercase.decodeBase(hexEncoding)\n\
-Int.'toHex' returns .encodeBase(hexEncoding)\n\
-Int.'toHex'@(Literal(true) 'uppercase') returns .encodeBase(hexEncoding).uppercase\n\
 \n\
-String.'binaryToInt' returns .lowercase.decodeBase(\"01\")\n\
-Int.'toBinary' returns .encodeBase(\"01\")\n\
+Int.'hexEncode' returns .baseEncode(hexEncoding)\n\
+String.'hexDecode' returns .lowercase.baseDecode(hexEncoding)\n\
 \n\
-String.'toInt' returns .decodeBase[\"0\"..\"9\"]\n\
+'base64DigitEncoding' = $[\"A\"..\"z\", \"0\"..\"9\", \"+\", \"/\"]\n\
 \n\
-'base64Encoding' = $[\"A\"..\"z\", \"0\"..\"9\", \"+\", \"/\"]\n\
-\n\
-String.'base64ToString'\n\
+String.'base64Encode'\n\
 {\n\
-	'decodedChars' = .where{!=\"=\"}.map( table@(keys=base64Encoding, values=[0..63]) )\n\
-	'binaryString' = decodedChars.map{.toBinary.prepad@(with=\"0\", length=6)}.flatten\n\
-	'bytes' = binaryString.splitAt[8, 16, etc..<binaryString.length]\n\
-\n\
-	bytes.map{.binaryToInt}.unicodeToString\n\
-}\n\
-\n\
-String.'toBase64'\n\
-{\n\
-    'binaryString' = .unicode.map{.toBinary.prepad@(with=\"0\", length=8)}.flatten\n\
+    'binaryString' = .unicode.map{.binaryEncode.prepad(&with=\"0\", &length=8)}.flatten\n\
 	'blocks' = binaryString.splitAt[6, 12, etc..<binaryString.length]\n\
-	'code' = blocks.map{.pad@(with=\"0\", length=6).binaryToInt.(base64Encoding)}\n\
+	'code' = blocks.map{.pad(&with=\"0\", &length=6).binaryDecode.(base64DigitEncoding)}\n\
 \n\
-	code.pad@(with=\"=\", length=4*ceil(result.length/4))\n\
+	code.pad(&with=\"=\", &length=4*ceil(code.length/4))\n\
 }\n\
 \n\
+String.'base64Decode'\n\
+{\n\
+	'decodedDigits' = .where{!=\"=\"}.map(base64DigitEncoding.inverse)\n\
+	'binaryString' = decodedDigits.map{.binaryEncode.prepad(&with=\"0\", &length=6)}.flatten\n\
+	'bytes' = [[binaryString.at(0..<8)], [binaryString.at(8..<16)], etc]\n\
+\n\
+	bytes.map{.binaryDecode}.unicodeToString\n\
+}\n\
 \n\
 //== Arrays ==\n\
 Array.'atEnd'('idx') returns this.at(this.length-1-idx)\n\
@@ -3077,13 +3118,15 @@ Array.'#ndLast' returns .atEnd(#-1)\n\
 Array.'#rdLast' returns .atEnd(#-1)\n\
 Array.'#thLast' returns .atEnd(#-1)\n\
 Array.'last' returns .atEnd(0)\n\
+['lhs','rhs'].'lhs' returns lhs\n\
+['lhs','rhs'].'rhs' returns rhs\n\
 \n\
 Array.'flatten' returns [ .each.each ]\n\
 \n\
-Array.Array.'flatten'@(Array 'separator') returns\n\
+Array.Array.'flatten'(Array &'separator') returns\n\
     .1st + .tail.map{separator+it}.flatten\n\
 \n\
-Array.Array.'flatten'@(Array 'separator', Array 'final')\n\
+Array.Array.'flatten'(Array &'separator', Array &'final')\n\
 {\n\
 	if( this.length <= 1 )\n\
 	{\n\
@@ -3095,18 +3138,28 @@ Array.Array.'flatten'@(Array 'separator', Array 'final')\n\
 	}\n\
 }\n\
 \n\
+// Broadside: compose two arrays together by pairing their corresponding\n\
+// elements. If one is longer than the other, its extra elements are ignored.\n\
+// (Mnemonic: one ship shooting cannonballs at another. Each cannonball hits\n\
+// the corresponding position in the other ship. AKA zip, but that metaphor sucks.)\n\
 Array.'broadside'(Array 'rhs')(Callable 'body') returns\n\
     [[this.1st, rhs.1st].(body), [this.2nd, rhs.2nd].(body), etc]\n\
 \n\
 Array.'broadside'(Callable 'body')(Array 'rhs') returns .broadside(rhs)(body)\n\
 \n\
+Anything.'accumulate'(Array 'terms', Callable 'body') returns\n\
+  this.{ [it, terms.1st].(body) }.{ [it, terms.2nd].(body) }.etc\n\
+\n\
+Array.'reduce'('body') returns\n\
+  .1st.{ [it, this.2nd].(body) }.{ [it, this.3rd].(body) }.etc\n\
+\n\
 Array.'tabulateBy'(Callable 'key', Callable 'value'={it})\n\
 {\n\
-  table@(keys=.map(key), values=.map(value))\n\
+  table(&keys=.map(key), &values=.map(value))\n\
 }\n\
 Array.'tabulate'(Callable 'value')\n\
 {\n\
-  table@(keys=this, values=this.map(value))\n\
+  table(&keys=this, &values=this.map(value))\n\
 }\n\
 Array.'each'('fn') returns [.each.(fn)]\n\
 Array.'no' { yield .none }\n\
@@ -3119,38 +3172,38 @@ Array.'no'('body') returns [.no.(body)]\n\
 Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
 Array.'containsValue'('target') returns (.1st == target) || (.2nd == target) || etc;\n\
 \n\
-Array.'where'('test') returns forEach(this){ .if(test) }\n\
+Array.'where'('test') returns .map{ .if(test) }\n\
 \n\
 Array.'where'('test')('body') returns\n\
-	forEach(this){ .if(test)(body) else {novalues}  }\n\
+	forEach(this){ .if(test)(body) else {__novalues}  }\n\
 \n\
 Array.'where'('test', 'body', 'else') returns\n\
 	forEach(this){ .if(test)(body) else (else) }\n\
 \n\
 Array.'whereKey'('test') returns\n\
-	forEach(.keys){ .if(test)(this) else {novalues} }\n\
+	forEach(.keys){ .if(test)(this) else {__novalues} }\n\
 \n\
 Array.'whereKey'('test', 'body') returns\n\
-	forEach(.keys){ .if(test){.(this).(body)} else {novalues} }\n\
+	forEach(.keys){ .if(test){.(this).(body)} else {__novalues} }\n\
 \n\
 Array.'whereKey'('test', 'body', 'else') returns\n\
 	forEach(.keys){ .if(test){.(this).(body)} else {.(this).(else)} }\n\
 \n\
-Array.'slice'@(Int 'start',Int 'trimEnd') returns\n\
+Array.'slice'(Int &'start',Int &'trimEnd') returns\n\
 	.slice[start ..< .length-trimEnd]\n\
 \n\
-Array.'slice'@(Int 'length',Int 'trimEnd') returns\n\
+Array.'slice'(Int &'length',Int &'trimEnd') returns\n\
 	.slice[.length-length-fromEnd ..< .length-trimEnd]\n\
 \n\
 Array.'slice'['a'..<'b'] returns\n\
-	[ .at(a.clamp@(min=0)..<b.clamp@(max=.length)) ]\n\
+	[ .at(a.clamp(&min=0)..<b.clamp(&max=.length)) ]\n\
 \n\
-Array.'slices'@(Int 'length') returns array(.length+1-length) 'start'->\n\
+Array.'slices'(Int &'length') returns array(.length+1-length) 'start'->\n\
 {\n\
-  this.slice@(start=start, end=start+length)\n\
+  this.slice(&start=start, &end=start+length)\n\
 }\n\
 \n\
-Array.'slices' returns [ .slices@(length=1 .. .length).each ]\n\
+Array.'slices' returns [ .slices(&length=1 .. .length).each ]\n\
 Array.'trimStart'(Int 'n') returns .atEach[n ..< .length]\n\
 Array.'trimEnd'(Int 'n') returns .atEach[0 ..< .length-n]\n\
 \n\
@@ -3164,7 +3217,7 @@ Array.'splitAt'(Int 'key') returns\n\
 	[ .slice[..<key], .slice[key..] ]\n\
 \n\
 Array.'splitAtEnd'(Int 'n') returns\n\
-	[ .slice@(trimEnd=n), .tail(n) ]\n\
+	[ .slice(&trimEnd=n), .tail(n) ]\n\
 \n\
 Array.'splitAt'(Int.Array 'keys') returns if(keys == []){ [this] } else\n\
 {[\n\
@@ -3177,8 +3230,8 @@ Array.'splitWhere'(Callable 'test') returns .splitAt(.keysWhere(test))\n\
 Array.'splitOut'(Int.Array 'keys') returns\n\
 	[-1, keys.each, .length].{\n\
 		[\n\
-			this.slice@(start=.1st+1, end=.2nd),\n\
-			this.slice@(start=.2nd+1, end=.3rd),\n\
+			this.slice(&start=.1st+1, &end=.2nd),\n\
+			this.slice(&start=.2nd+1, &end=.3rd),\n\
 			etc\n\
 		]\n\
 	}\n\
@@ -3187,13 +3240,13 @@ Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
 Array.'splitOnAny'(Array 'values') returns .splitOutWhere{==any values}\n\
 \n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
-Array.'tail'(Int 'length') returns .slice@( start=(.length-length).clamp@(min=0) )\n\
-Array.'tailWhere'('test') returns .slice@(start=1+.lastKeyWhere{.!(test)})\n\
+Array.'tail'(Int 'length') returns .slice( &start=(.length-length).clamp(&min=0) )\n\
+Array.'tailWhere'('test') returns .slice( &start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
-Array.'stem'(Int 'length') returns .slice@(length=length)\n\
-Array.'stemWhere'('test') returns .slice@(end=.firstKeyWhere{.!(test)})\n\
-Array.'stemUntil'(Callable 'test') returns .stem@(length=.cells.firstWhere{.value.(test)}.key)\n\
+Array.'stem'(Int 'length') returns .slice(&length=length)\n\
+Array.'stemWhere'('test') returns .slice(&end=.firstKeyWhere{.!(test)})\n\
+Array.'stemUntil'(Callable 'test') returns .stem(&length=.cells.firstWhere{.value.(test)}.key)\n\
 \n\
 Array.'middle' returns .atEach[1 ..< .length-1]\n\
 Array.'reverse' returns array(this.length) 'idx'->{ this.at(this.length-(idx+1)) }\n\
@@ -3218,10 +3271,9 @@ Array.'whereDistinct'('property') returns .singletonOr\n\
   [.1st] + .tail.where{.(property) != p}.whereDistinct(property)\n\
 }\n\
 \n\
-Array.'withBounds'(Callable 'bound') returns array@(length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
-Array.'safeBounds' returns .withBounds{novalues}\n\
-Array.'cyclic' returns (Int 'idx')->{ idx.mod(this.length).(this) }\n\
-Array.'arrayRotate'(Int 'offset') returns .cyclic.slice@(start=offset, length=.length)\n\
+Array.'withBounds'(Callable 'bound') returns array(&length=.length) 'key'->{ this.at(key) else {key.(bound)} }\n\
+Array.'safeBounds' returns .withBounds{__novalues}\n\
+Array.'arrayRotate'(Int 'offset') returns .cyclic.slice(&start=offset, &length=.length)\n\
 Array.'total' returns .1st + .2nd + etc;\n\
 Array.'sum' returns .total\n\
 Array.'product' returns .1st * .2nd * etc;\n\
@@ -3230,8 +3282,8 @@ Array.'product'(Callable 'body') returns product[.each.(body)]\n\
 Array.'copy' returns [.each]\n\
 Anything.'in'(Array 'array') returns this ==any array\n\
 \n\
-Array.'pad'@(Anything 'with', Int 'length') returns this + [with**(length-this.length)]\n\
-Array.'prepad'@(Anything 'with', Int 'length') returns [with**(length-this.length)] + this\n\
+Array.'pad'(Anything &'with', Int &'length') returns this + [with**(length-this.length)]\n\
+Array.'prepad'(Anything &'with', Int &'length') returns [with**(length-this.length)] + this\n\
 \n\
 Array.'categorizeBy'(Callable 'key')\n\
 {\n\
@@ -3244,9 +3296,9 @@ Array.'categorizeBy'(Callable 'key')\n\
 }\n\
 Array.'categorize' returns .categorizeBy{it}\n\
 Array.'frequencies' returns .categorize.map{.length}\n\
-Array.'min' returns .reduce ['a','b']-> { a.clamp@(max=b) }\n\
+Array.'min' returns .reduce ['a','b']-> { a.clamp(&max=b) }\n\
 Array.'min'('else') returns if(.length>0){this.min} else (else)\n\
-Array.'max' returns .reduce ['a','b']-> { a.clamp@(min=b) }\n\
+Array.'max' returns .reduce ['a','b']-> { a.clamp(&min=b) }\n\
 Array.'max'('else') returns if(.length>0){this.max} else (else)\n\
 \n\
 Array.'min'('property') returns .reduce ['a','b']->\n\
@@ -3307,14 +3359,14 @@ Array.'firstWhere'(Callable 'test')\n\
 {\n\
   forEach(this){ .if(test){ return it } }\n\
   \n\
-  return novalues\n\
+  return __novalues\n\
 }\n\
 \n\
 Array.'firstWhere'(Callable 'test', Callable 'then')\n\
 {\n\
   forEach(this){ .if(test){ return it.(then) } }\n\
   \n\
-  return novalues\n\
+  return __novalues\n\
 }\n\
 \n\
 Array.'firstWhere'(Callable 'test', Callable 'else')\n\
@@ -3351,7 +3403,7 @@ Array.'lastKeyWhere'(Callable 'test') returns .cells.lastWhere{.value.(test)}.ke
 \n\
 Cell.'value' returns .container.at(.key)\n\
 Cell.'value'('__mutator') returns .container.at(.key)(__mutator)\n\
-Container.'cellAt'('key') returns Cell.new@(key=key, container=this)\n\
+Container.'cellAt'('key') returns Cell.new(&key=key, &container=this)\n\
 //Cell.'$$' returns \"cell($$.key:$$.value)\"\n\
 //Cell.'+'(Int 'offset') returns .container.cellAt(.key+offset)\n\
 Cell.'next' returns .container.cellAt(.key+1)\n\
@@ -3363,9 +3415,9 @@ Table.'cellTable' returns table(.keys) 'key'->{ this.cellAt(key) }\n\
 Cell.Array.'table' returns table[.each.key](.1st.container)\n\
 Cell.Array.'cellKeys' returns [.each.key]\n\
 Cell.Array.'cellValues' returns [.each.value]\n\
-Cell.'toSlice'@('length') returns .container.slice@(start=.key, length=length)\n\
-Cell.'toSlice'@('end') returns .container.slice@(start=.key, end=end)\n\
-Cell.'toSlice'@('start') returns .container.slice@(start=start, end=.key)\n\
+Cell.'toSlice'(&'length') returns .container.slice(&start=.key, &length=length)\n\
+Cell.'toSlice'(&'end') returns .container.slice(&start=.key, &end=end)\n\
+Cell.'toSlice'(&'start') returns .container.slice(&start=start, &end=.key)\n\
 Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Cell.Array.'split' returns .1st.container.splitAt(.map{.key})\n\
@@ -3375,9 +3427,9 @@ Cell.Array.'splitOut' returns .1st.container.splitOut(.cellKeys)\n\
 //== Maybe==\n\
 'Maybe' = Struct{ Array 'internal' }\n\
 \n\
-Maybe.Literal.'new'('value') returns Maybe.new@( internal=[value] )\n\
+Maybe.Literal.'new'('value') returns Maybe.new( &internal=[value] )\n\
 \n\
-Maybe.Literal.'none' returns Maybe.new@( internal=[] )\n\
+Maybe.Literal.'none' returns Maybe.new( &internal=[] )\n\
 \n\
 Maybe.'hasValue' returns .internal.length > 0\n\
 \n\
@@ -3413,23 +3465,23 @@ Type.'generator'(Int 'length', 'first', Callable 'next')\n\
 \n\
 Array.'AnyOf' returns Type(.1st)\n\
 Array.'ElementType' returns .Type.ElementType\n\
+Container.'KeyType' returns .keys.ElementType\n\
+Anything.'assert'(Type 't') returns t<<this\n\
 \n\
 String.'alert' { .javascript{ alert(this) }; void }\n\
 String.'log' returns Void<< .javascript{ console.log(this) }\n\
 Number.'sqrt' returns Number<< .javascript{ return Math.sqrt(this) }\n\
 Number.'sin' returns Number<< .javascript{ return Math.sin(this) }\n\
 Number.'cos' returns Number<< .javascript{ return Math.cos(this) }\n\
-/*Number.'toInt' returns Int<< .javascript{ return this|0 }*/\n\
+//Number.'toInt' returns Int<< .javascript{ return this|0 }\n\
 Number.'floor' returns Int<< .javascript{ return Math.floor(this) }\n\
 Number.'ceil' returns Int<< .javascript{ return Math.ceil(this) }\n\
-Int.Array.'unicodeToString' returns $[.each.unicodeToString]\n\
-Int.'unicodeToString' returns StringChar<<.javascript{ return SWYM.StringWrapper(String.fromCharCode(this)); }\n\
 ";/**/
 
 /*
 Array.'random'(Int 'length') = [.random, etc**length]
 Array.'randomDraw'(Int 'length') = .randomSubset(length).shuffle
-Array.'randomSubset'(Int 'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice@(start=k+1).randomSubset(length-1) }
+Array.'randomSubset'(Int 'length') = .keys.trimEnd(length).random.'k'->{ [this.at(k)] + this.slice(&start=k+1).randomSubset(length-1) }
 Array.'randomSlice'(Int 'length') = .keys.trimEnd(length).random.'k'->{ this.atKeys[k ..< k+length] }
 */
 /*
@@ -3451,3 +3503,5 @@ else
 //SWYM.DefaultGlobalCScope = SWYM.scope;
 
 }; // initStdlyb ends
+
+SWYM.onLoad("swymStdlyb.js");

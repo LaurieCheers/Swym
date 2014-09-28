@@ -1,6 +1,6 @@
 <html>
 <head>
-<script src="../ace-builds/src/ace.js" type="text/javascript" charset="utf-8"></script>
+<script src="ace/ace.js" type="text/javascript" charset="utf-8"></script>
 <style type="text/css" media="screen">
     #editor { 
 		width:100%;
@@ -83,8 +83,11 @@
 <script language=javascript>
 window.onload = function()
 {
-	SWYM.EvalStdlyb();
-	initAutocomplete();
+	SWYM.setCallbackOnLoad(function()
+	{
+		SWYM.EvalStdlyb();
+		initAutocomplete();
+	});
 	
 	var regex = new RegExp( "[\\?&](.*)" );
 	var results = regex.exec( window.location.href );
@@ -383,6 +386,12 @@ function runDemo(div)
 	var fields = getTextfields(div);
 		
 	fields.dest.value = "...waiting...";
+	
+	var scratchNode = document.getElementById("swymscratcharea");
+	while(scratchNode.firstChild)
+	{
+		scratchNode.removeChild(scratchNode.firstChild);
+	}
 
 	var baseURL = window.location.href;
 	var cutIndex = baseURL.indexOf("?");
@@ -420,6 +429,8 @@ function clearOutput(div)
     <div class=outputcontainer>
 	  <div id="editor"></div><br>
       <button type=button style="vertical-align: top;" onclick='runDemo(this.parentNode);'><div style="display:inline-block; vertical-align:middle;"><img src="play.png"></div>Run</button><br>
+	  <div id=swymscratcharea>
+	  </div>
       <textarea cols=75 rows=10 class=outputarea id=outputbox readonly="yes"></textarea>
     </div>
   </div>

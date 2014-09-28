@@ -623,6 +623,7 @@ SWYM.BaseTokens = (function()
 	Add("op");
 	Add("rawdata");
 	Add("decl");
+	Add("argname");
 	Add("literal");
 	Add("etc");
 
@@ -670,3 +671,5 @@ SWYM.GetFunctionName = function(fromToken)
 		return "."+fromToken.text;
 	}
 }
+
+SWYM.onLoad("swymTokenize.js");

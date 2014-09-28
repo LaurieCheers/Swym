@@ -205,14 +205,27 @@ SWYM.ParseLevel = function(minpriority, openBracketOp)
 		}
         else if ( !curOp )
         {
-            // no operator provided (or not one that could take a right-hand side), so insert a semicolon here.
 			if( SWYM.curToken.followsBreak )
 			{
+				// no operator provided (or not one that could take a right-hand side), so insert a semicolon here.
 				var result = HandleAddOp( SWYM.NewToken("op", SWYM.curToken.sourcePos, "(blank_line)"), true );
 				if ( result ) { return result; }
 
 				// then try adding this leaf again
 				result = HandleAddLeaf();
+				if ( result ) { return result; }
+			}
+			else if( SWYM.curToken.type === "name" && (SWYM.curToken.text[0] === "(" || SWYM.curToken.text[0] === "{" || SWYM.curToken.text[0] === "[") )
+			{
+				// Slightly weird special case... it's a literal whose name contains brackets.
+				// insert parens around it. (this allows it to be a function call argument.)
+				var openParen = SWYM.NewToken("op", SWYM.curToken.sourcePos, "(");
+				SWYM.tokenlist.splice(SWYM.tokenIdx, 0, openParen);
+				SWYM.tokenlist.splice(SWYM.tokenIdx+2, 0, SWYM.NewToken("op", SWYM.curToken.sourcePos, ")"));
+				SWYM.curToken = SWYM.tokenlist[SWYM.tokenIdx];
+
+				// ...and proceed.
+				result = HandleAddOp(openParen);
 				if ( result ) { return result; }
 			}
 			else
@@ -464,7 +477,7 @@ SWYM.IsTableNode = function(paramnode)
 		if( etcOpText === "," || etcOpText === ";" || etcOpText === "(blank_line)")
 		{
 			var child = paramnode.body.children[1];
-			if( child && child.op && child.op.text === ":" )
+			if( child && child.op && (child.op.text === ":" || child.op.text === "->") )
 			{
 				return true;
 			}
@@ -484,58 +497,54 @@ SWYM.IsTableNode = function(paramnode)
 		}
 	}
 	
-	return ( paramnode && paramnode.op && paramnode.op.text === ":" );
+	return ( paramnode && paramnode.op && (paramnode.op.text === ":" || paramnode.op.text === "->") );
 }
 
-SWYM.ReadParamBlock = function(paramnode, fnnode, isNamed)
+SWYM.ReadParamBlock = function(paramnode, fnnode)
 {
-	if( paramnode && paramnode.op &&
+	if( paramnode === undefined )
+	{
+		// an empty param block 
+	}
+	else if( paramnode.op &&
 		(paramnode.op.text === "," || paramnode.op.text === ";" || paramnode.op.text === "(blank_line)") )
 	{
-		SWYM.ReadParamBlock(paramnode.children[0], fnnode, isNamed);
-		SWYM.ReadParamBlock(paramnode.children[1], fnnode, isNamed);
+		SWYM.ReadParamBlock(paramnode.children[0], fnnode);
+		SWYM.ReadParamBlock(paramnode.children[1], fnnode);
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
-				paramnode.children[0] && paramnode.children[0].type === "name" )
+	else if( paramnode.op && paramnode.op.text === "=" &&
+				paramnode.children[0] && paramnode.children[0].type === "argname" )
 	{
-		if( !isNamed )
-		{
-			SWYM.LogError(paramnode, "Invalid use of a named parameter. Named parameters can only occur in a @(...) block.");
-		}
-
 		// passing a named parameter
-		fnnode.argNames.push( paramnode.children[0].text );
+		fnnode.argNames.push( paramnode.children[0].value );
 		fnnode.children.push( paramnode.children[1] );
+		paramnode.children[1].explicitNameRequired = true;
 	}
-	else if( paramnode && paramnode.op && paramnode.op.text === "=" &&
-				paramnode.children[0] && paramnode.children[0].type === "decl" )
+	else if( paramnode.op && paramnode.op.text === "=" && paramnode.children[0] &&
+		paramnode.children[0].type === "decl" )
 	{
 		// declaring a parameter with a default value
-		paramnode.explicitNameRequired = isNamed;
 		fnnode.argNames.push( paramnode.children[0].value );
 		fnnode.children.push( paramnode );
+		paramnode.explicitNameRequired = paramnode.children[0].explicitNameRequired;
 	}
-	else if( paramnode && paramnode.type === "decl" )
+	else if( paramnode.type === "decl" )
 	{
 		// declaring a parameter without a default value
-		paramnode.explicitNameRequired = isNamed;
 		fnnode.argNames.push( paramnode.value );
 		fnnode.children.push( paramnode );
 	}
-	else if ( paramnode )
+	else if ( paramnode.type === "argname" )
 	{
-		if( isNamed )
-		{
-			// passing a boolean flag 'true'
-			fnnode.argNames.push( paramnode.text );
-			fnnode.children.push( SWYM.NewToken("name", paramnode.pos, "true") );
-		}
-		else
-		{
-			// passing an anonymous parameter
-			fnnode.argNames.push( "__" );
-			fnnode.children.push( paramnode );
-		}
+		// passing a boolean flag 'true'
+		fnnode.argNames.push( paramnode.value );
+		fnnode.children.push( SWYM.NewToken("name", paramnode.pos, "true") );
+	}
+	else
+	{
+		// passing an anonymous parameter
+		fnnode.argNames.push( "__" );
+		fnnode.children.push( paramnode );
 	}
 }
 
@@ -640,6 +649,11 @@ SWYM.CombineFnNodes = function(lhs, rhs)
 		
 		return result;
 	}
+	else if( lhs.type === "argname" )
+	{
+		SWYM.LogError(lhs.pos, "Work in progress");
+		return rhs;
+	}
 	else
 	{
 		SWYM.LogError(lhs.pos, "Error: expected a function expression, got "+lhs);
@@ -733,3 +747,5 @@ SWYM.BuildCompoundAssignmentNode = function(operatorName)
 		}
 	}
 }
+
+SWYM.onLoad("swymParser.js");

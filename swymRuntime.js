@@ -1836,3 +1836,5 @@ SWYM.DoIteration = function( debugName, array, curLevel, numLevels, stack, stack
 	
 	return SWYM.jsArray(result);
 }
+
+SWYM.onLoad("swymRuntime.js");

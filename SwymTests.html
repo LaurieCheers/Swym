@@ -182,7 +182,6 @@ function runAllTests()
   runTest("[\"B\"..\"y\"]", "\"BCDEFGHIJKLMNOPQRSTUVWXYbcdefghijklmnopqrstuvwxy\"");
   runTest("[\"y\"..\"B\"]", "\"yxwvutsrqponmlkjihgfedcbYXWVUTSRQPONMLKJIHGFEDCB\"");
   runTest("[\"1\"..\"5\"]", "\"12345\"");
-  runTest("[\"B\"..\"5\"]", "~error~");
   runTest("[\"9\"..\"0\"]", "\"9876543210\"");
   runTest("[1+1] == [4/2]", "true");
   runTest("Number.'divides'('n') {n%this == 0};  Number.'isPrime' returns length( [1..this].where{.divides(this)} ) == 2;  [0..20].where{.isPrime}", "[2,3,5,7,11,13,17,19]");
@@ -206,7 +205,7 @@ function runAllTests()
   			"3 bottles of beer on the wall, 3 bottles of beer.\nYou take one down, pass it around, 2 bottles of beer on the wall.\n2 bottles of beer on the wall, 2 bottles of beer.\nYou take one down, pass it around, 1 bottle of beer on the wall.\n1 bottle of beer on the wall, 1 bottle of beer.\nYou take one down, pass it around, no more bottles of beer on the wall.\n");
   runTest("\"Foo\".each.length.[]", "[1,1,1]");
   runTest("(1..10).if{>4}{ 1 } else { 2 }.[]", "[2,2,2,2,1,1,1,1,1,1]");
-  runTest("(1..10).if{>4}{ novalues } else { ==2 }", "false\ntrue\nfalse\nfalse");
+  runTest("(1..10).if{>4}{ __novalues } else { ==2 }", "false\ntrue\nfalse\nfalse");
   runTest("[\"hi\", \"lo\"].each.each", "\"h\"\n\"i\"\n\"l\"\n\"o\"");
   runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.length", "5\n4\n7");
   runTest("[\"Hello\", \"Hola\", \"Goodbye\"].each.{.length}", "5\n4\n7");
@@ -239,11 +238,15 @@ function runAllTests()
   runTest("table[1..10]{it^2}", "{1:1, 2:4, 3:9, 4:16, 5:25, 6:36, 7:49, 8:64, 9:81, 10:100}");
 //  runTest("[x:10, y:10].at(\"x\")+1", "11");
   runTest("[\"x\", 1, \"y\", 2, \"z\", 3].{{.1st:.2nd, .3rd:.4th, etc}}", "{\"x\":1, \"y\":2, \"z\":3}");
+  runTest("[1..10].categorizeBy{.divisibleBy(2)}", "{false:[1,3,5,7,9], true:[2,4,6,8,10]}");
+  runTest("\"hello\".tabulateBy{.unicodeValue}", "{104:\"h\", 101:\"e\", 108:\"l\", 111:\"o\"}");
+  runTest("\"hello\".categorizeBy{.unicodeValue}", "{104:[\"h\"], 101:[\"e\"], 108:[\"l\",\"l\"], 111:[\"o\"]}");
+  runTest("\"hello\".frequencies", "{\"h\":1, \"e\":1, \"l\":2, \"o\":1}");
   endReportTable();
 
   addReportTable("Type system torture");
   runTest("value_novalues.Type", "Literal(<no_values>)");
-  runTest("novalues.Type", "Literal(<no_values>)");
+  runTest("__novalues.Type", "Literal(<no_values>)");
   runTest("1.Type", "Literal(1)");
   runTest("(1..3).Type", "Int*");
   runTest("(3..1).Type", "Int*");
@@ -322,8 +325,8 @@ function runAllTests()
   runTest("Array.'isPalindrome' returns .reverse == this;\n[\"wontsixexistnow\".isPalindrome, \"a man a plan a canal panama\".isPalindrome, \"191\".isPalindrome]", "[true,false,true]");
   runTest("Array.'isPalindrome' returns .reverse == this;\n last([1..130].where{\"$it\".isPalindrome})", "121");
   runTest("forEach[1..5]{it*it}", "[1,4,9,16,25]");
-  runTest("if@(this=4, test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Not string\"");
-  runTest("if@(this=\"\", test=String, then={\"Yes, string\"}, else={\"Not string\"})", "\"Yes, string\"");
+  runTest("if(&this=4, &test=String, &then={\"Yes, string\"}, &else={\"Not string\"})", "\"Not string\"");
+  runTest("if(&this=\"\", &test=String, &then={\"Yes, string\"}, &else={\"Not string\"})", "\"Yes, string\"");
   runTest("[[8,5],[2,5],[6,2],[1,4]].whereMax{.2nd - .1st}", "[[2,5],[1,4]]");
             runTest("Array.'value'(Array->Array '__mutator') returns [this.each.value].(__mutator).'newValues'->{ this.keys.each.'key'->{ this.at(key).value = newValues.at(key) }}; 'x' = Anything.var(3); 'y' = Anything.var(4); [x,y].value=[y.value,x.value]; [x.value,y.value]",	"[4,3]");
   runTest("\"Hello\".distinct", "\"Helo\"");
@@ -348,7 +351,8 @@ function runAllTests()
   runTest("floor~sin(1..5)", "0\n0\n0\n-1\n-1");
   runTest("toInt(\"157\")+toInt(\"12\")", "169");
   runTest("toInt(\"157\" + \"12\")", "15712");
-  runTest("toInt(\"n\")", "~error~");
+  runTest("toInt(\"n\")", "0");
+  runTest("toInt(\"1n\")", "0");
   runTest("\"Hello Small World!\".words", "[\"Hello\",\"Small\",\"World!\"]");
   runTest("\"\"\"Hello Small<\n>World!\"\"\".lines", "[\"Hello Small<\",\">World!\"]");
   runTest("-2.abs", "2"); // precedence problem!
@@ -361,7 +365,7 @@ function runAllTests()
   addReportTable("Destructuring:");
   runTest("['x','y'].'test' returns x+y; test[5,6]", "11");
   runTest("'test'['x','y'] returns x+y; test[5,6]", "11");
-  runTest("'test'(['x','y'] 'xy') returns x+y; test@(xy=[5,6])", "11");
+  runTest("'test'(['x','y'] 'xy') returns x+y; test(&xy=[5,6])", "11");
   runTest("['x','y'].'test' returns x+y+.length; test[5,6]", "13");
   runTest("[['x'],['y','z']].'test' returns x+y+z; test[[5],[3,3]]", "11");
   runTest("[5,6].['x','y']->{x+y}", "11");
@@ -471,28 +475,30 @@ function runAllTests()
   runTest("'T'=Struct{}; 'obj'=new(T); obj.is(T)",				"true");
   runTest("'T'=Struct{}; 'obj'=new(T); obj == obj",				"true");
   runTest("'T'=Struct{}; 'obj1'=new(T); 'obj2'=new(T); obj1 == obj2", "false");
-  runTest("'T'=Struct{'x'}; T.new@(x=5).x", "5");
+  runTest("'T'=Struct{'x'}; T.new(&x=5).x", "5");
   runTest("'T'=Struct{'x'}; T.new(5).x", "~error~");
-  runTest("'T'=Struct{Number 'x'}; T.new@(x=5).x", "5");
-  runTest("'T'=Struct{Number 'last'}; T.new@(last=10).last + [1..10].last",	"20");
-  runTest("'T'=Struct{String 'name', Number 'num'}; T.new@(name=\"Hello\", num=3).{.name.length-.num}", "2");
-  runTest("'Wrapper'=Struct{Number 'value'}; 'mut' = Wrapper.Mutable.new@(value=10); mut.value=20; mut.value",	"20");
-  runTest("'XY' = Struct{Int 'x', Int 'y'}; [ XY.new@(x=0..1, y=2..3) ]", "[XY(x=0, y=2),XY(x=0, y=3),XY(x=1, y=2),XY(x=1, y=3)]");
+  runTest("'T'=Struct{Number 'x'}; T.new(&x=5).x", "5");
+  runTest("'T'=Struct{Number 'last'}; T.new(&last=10).last + [1..10].last",	"20");
+  runTest("'T'=Struct{String 'name', Number 'num'}; T.new(&name=\"Hello\", &num=3).{.name.length-.num}", "2");
+  runTest("'Wrapper'=Struct{Number 'value'}; 'mut' = Wrapper.Mutable.new(&value=10); mut.value=20; mut.value",	"20");
+  runTest("'XY' = Struct{Int 'x', Int 'y'}; [ XY.new(&x=0..1, &y=2..3) ]", "[XY(x=0, y=2),XY(x=0, y=3),XY(x=1, y=2),XY(x=1, y=3)]");
   endReportTable();
 
   addReportTable("Tuples:");
   runTest("[1, \"2\"].Type", "Tuple[Literal(1),Literal(\"2\")]");
   runTest("[1, \"2\"].at(0).Type", "Literal(1)");
   runTest("[1, \"2\"].['x','y']->{x.Type}", "Literal(1)");
-  runTest("[1, \"2\"].1st.Type", "Literal(1)");
   runTest("[1].is( Tuple[Int] )", "true");
   runTest("[\"2\"].is( Tuple[Int] )", "false");
   endReportTable();
   
   addReportTable("Future Work:");
-  runTest("'evil'('x') returns if(random[0,1] == 0){x} else {[evil(x)]}; evil(3).Type", "RecursiveArray(Literal(3))?");
+  runTest("[\"B\"..\"5\"]", "~error~");
+  runTest("[1, \"2\"].1st.Type", "Literal(1)");
+  runTest("Anything.'==test'(Anything 'x') returns [this, x];  5 ==test 6", "true");
+  runTest("'evil'('x') returns if(random[0,1] == 0){x} else {[evil(x)]}; evil(3).Type", "RecursiveArray(Literal(3))? or error?");
   runTest("if(true){ if(true){ if(true){ if(true){ if(true){ if(true){\"Hi!\"} } } } } }", "\"Hi!\"");
-  runTest("'A'=Struct{Int 'a'}; 'B'=Struct{Int 'b'}; A.'fnTest' returns \"a!\"; B.'fnTest' returns \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"Foo!\"\n\"Bar!\"\n\"Foo!\"");
+  runTest("'A'=Struct{Int 'a'}; 'B'=Struct{Int 'b'}; A.'fnTest' returns \"a!\"; B.'fnTest' returns \"b!\"; [A.new(0), B.new(0), A.new(0)].each.fnTest",			"\"a!\"\n\"b!\"\n\"a!\"");
   endReportTable();
 
 }

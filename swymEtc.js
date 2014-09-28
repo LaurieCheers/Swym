@@ -359,7 +359,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		var BestIdx = SWYM.EtcFindBestMatch(leftTerm, rightTerm.children);
 		if ( BestIdx === -1 )
 		{
-			SWYM.LogError(rightTerm, "Ambiguous etc expression - no obvious matches");
+			//SWYM.LogError(rightTerm, "Ambiguous etc expression - no obvious matches");
 			return false;
 		}
 		else
@@ -377,8 +377,8 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 			
 			if( mergedRightChildren === false )
 			{
-				SWYM.LogError(0, "Failed to merge expanding sequence: ["+rightTerm.children[0]+","+rightTerm.children[1]+"]");
-				return;
+				//SWYM.LogError(0, "Failed to merge expanding sequence: ["+rightTerm.children[0]+","+rightTerm.children[1]+"]");
+				return false;
 			}
 			
 			var mergedChild = SWYM.MergeEtc(leftTerm, mergedRightChildren, nth, etcId);
@@ -509,6 +509,23 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 			children[1-collected.recursiveIdx] = merged;
 			collected.exampleChildren[1-collected.recursiveIdx] = undefined;
 			collected.mergedBaseCase = true;
+		}
+		else
+		{
+			// ok, try it without the basecase.
+			var merged = examples[0];
+			for( var Idx = 1; Idx < examples.length; Idx++ )
+			{
+				merged = SWYM.MergeEtc(merged, examples[Idx], Idx, etcId);
+			}
+			
+			if( merged !== false )
+			{
+				// success! keep that.
+				children[1-collected.recursiveIdx] = merged;
+				collected.exampleChildren[1-collected.recursiveIdx] = undefined;
+				collected.mergedBaseCase = false;
+			}
 		}
 	}
 
@@ -1092,3 +1109,5 @@ SWYM.ResolveEtcSequence = function(sequence, index)
 
 	return result;
 }
+
+SWYM.onLoad("swymEtc.js");

@@ -405,13 +405,13 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	
 	if( typeA.needsCompiling || typeB.needsCompiling )
 	{
-		SWYM.LogError(errorContext, "Dynamic closures are not currently supported. Closure values must be known at compile time.");
+		SWYM.LogError(errorContext, "If a block can't be resolved until runtime, provide an explicit argument type for it by calling ArgType.block{...}.");
 		return typeA;
 	}
 
 	if( typeA.multivalueOf !== undefined && typeB.multivalueOf !== undefined )
 	{
-		return SWYM.ToMultivalueType(SWYM.TypeUnify(typeA.multivalueOf, typeB.multivalueOf));
+		return SWYM.ToMultivalueType(SWYM.TypeUnify(typeA.multivalueOf, typeB.multivalueOf, errorContext));
 	}
 	
 	if( typeA.multivalueOf !== undefined || typeB.multivalueOf !== undefined )
@@ -496,7 +496,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	
 	if( typeA.multivalueOf )
 	{
-		return SWYM.ToMultivalueType(SWYM.TypeUnify(typeA.multivalueOf, typeB.multivalueOf));
+		return SWYM.ToMultivalueType(SWYM.TypeUnify(typeA.multivalueOf, typeB.multivalueOf, errorContext));
 	}
 	
 	var toCompile = undefined;
@@ -595,18 +595,18 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 
 	if ( typeA.outType || typeB.outType )
 	{
-		result.outType = SWYM.TypeUnify(typeA.outType, typeB.outType);
+		result.outType = SWYM.TypeUnify(typeA.outType, typeB.outType, errorContext);
 	}
 
 	if ( typeA.contentType || typeB.contentType )
 	{
-		result.contentType = SWYM.TypeUnify(typeA.contentType, typeB.contentType);
+		result.contentType = SWYM.TypeUnify(typeA.contentType, typeB.contentType, errorContext);
 	}
 
 	//TODO: unifying argtypes is not really this simple.
 	if ( typeA.argType || typeB.argType )
 	{
-		result.argType = SWYM.TypeUnify(typeA.argType, typeB.argType);
+		result.argType = SWYM.TypeUnify(typeA.argType, typeB.argType, errorContext);
 	}
 	
 	if( typeA.memberTypes && typeB.memberTypes )
@@ -616,12 +616,12 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		{
 			if( typeB.memberTypes[memberName] !== undefined  )
 			{
-				newMemberTypes[memberName] = SWYM.TypeUnify(typeA.memberTypes[memberName], typeB.memberTypes[memberName]);
+				newMemberTypes[memberName] = SWYM.TypeUnify(typeA.memberTypes[memberName], typeB.memberTypes[memberName], errorContext);
 				foundAny = true;
 			}
 			else
 			{
-				newMemberTypes[memberName] = SWYM.TypeUnify(typeA.memberTypes[memberName], SWYM.VoidType);
+				newMemberTypes[memberName] = SWYM.TypeUnify(typeA.memberTypes[memberName], SWYM.VoidType, errorContext);
 				foundAny = true;
 			}
 		}
@@ -630,7 +630,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		{
 			if( typeA.memberTypes[memberName] === undefined  )
 			{
-				newMemberTypes[memberName] = SWYM.TypeUnify(typeB.memberTypes[memberName], SWYM.VoidType);
+				newMemberTypes[memberName] = SWYM.TypeUnify(typeB.memberTypes[memberName], SWYM.VoidType, errorContext);
 			}
 		}
 		
@@ -807,6 +807,11 @@ SWYM.ArrayToMultivalueType = function(arrayType, quantifier)
 	return result;
 }
 
+SWYM.FixedLengthStringType = function(length)
+{
+	return {type:"type", nativeType:"String", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.BakedValue(length), "keys":SWYM.IntArrayType}, debugName:"String("+length+")"};
+}
+
 SWYM.TupleTypeOf = function(tupleTypes, elementType, errorContext)
 {
 	if( elementType === undefined )
@@ -814,7 +819,7 @@ SWYM.TupleTypeOf = function(tupleTypes, elementType, errorContext)
 		elementType = SWYM.DontCareType;
 		for( var Idx = 0; Idx < tupleTypes.length; ++Idx )
 		{
-			elementType = SWYM.TypeUnify(tupleTypes[Idx], elementType);
+			elementType = SWYM.TypeUnify(tupleTypes[Idx], elementType, errorContext);
 		}
 	}
 	var result = SWYM.ArrayTypeContaining(elementType, false, (tupleTypes.length === 1), errorContext);
@@ -826,7 +831,7 @@ SWYM.AddTupleInfo = function(arrayType, tupleTypes, errorContext)
 {
 	arrayType.tupleTypes = tupleTypes;
 	arrayType.memberTypes.length = SWYM.BakedValue(tupleTypes.length, errorContext);
-	arrayType.memberTypes.keys = SWYM.BakedValue(SWYM.indexArray(tupleTypes.length), errorContext);
+	arrayType.memberTypes.keys = SWYM.IntArrayType;
 	
 	var debugName = SWYM.TypeToString(tupleTypes[0]);
 	for(var Idx = 1; Idx < tupleTypes.length; ++Idx )
@@ -1148,3 +1153,5 @@ SWYM.GetVariableTypeContents = function(variableType, errorContext)
 		return SWYM.DontCareType;
 	}
 }
+
+SWYM.onLoad("swymTypeCheck.js");

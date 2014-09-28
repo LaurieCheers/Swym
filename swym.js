@@ -1,6 +1,7 @@
 if( window.SWYM === undefined )
 {
 	SWYM = {};
+	SWYM.loaded = {};
 }
 
 SWYM.LogError = function(errorContext, message)
@@ -257,3 +258,5 @@ SWYM.FullEval = function(readsource, keepScope)
 
 	SWYM.errors = undefined; // report future errors directly
 }
+
+SWYM.onLoad("swym.js");
