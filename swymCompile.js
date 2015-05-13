@@ -1818,6 +1818,40 @@ SWYM.CompileLambdaInternalEntry = function(compileInfo, argType, executable, err
 
 	var returnType = SWYM.CompileNode(node, innerCScope, executable);
 	
+	// a simple optimization for small executables: strip off the #ArgStore instruction if it's easy to do so.
+	if( executable.length < 10 && executable[0] === "#ArgStore" )
+	{
+		var numArgLoads = 0;
+		for( var Idx = executable.length-1; Idx >= 2; --Idx )
+		{
+			if( executable[Idx] === "#Load" && executable[Idx+1] === argName )
+			{
+				numArgLoads++;
+			}
+			else if( SWYM.ScopeAccessorInstructions[executable[Idx]] === true )
+			{
+				numArgLoads = -1;
+				break;
+			}
+		}
+		
+		if( numArgLoads === 0 )
+		{
+			// this executable doesn't care about the argument passed in at all
+			executable.shift();
+			executable[0] = "#ClearStack";
+		}
+		else if( numArgLoads === 1 && executable[2] === "#Load" && executable[3] === argName )
+		{
+			// this executable loads its argument exactly once, at the beginning
+			// so we might as well omit the #ArgStore and #Load instructions.
+			executable.shift();
+			executable.shift();
+			executable.shift();
+			executable.shift();
+		}
+	}
+	
 	// TODO: closureInfo should be populated with the executable, and the
 	// list of variables that were captured from the containing scope.
 
@@ -1878,9 +1912,7 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 					++numClosureReferences;
 				}
 			}
-			else if( closureBody[Idx] === "#Store" || closureBody[Idx] === "#Closure" ||
-				closureBody[Idx] === "#Etc"|| closureBody[Idx] === "#EtcSequence" ||
-				closureBody[Idx] === "#Return" || closureBody[Idx] === "#IfElse" )
+			else if( SWYM.ScopeAccessorInstructions[closureBody[Idx]] === true )
 			{
 				cannotInline = true;
 			}
@@ -1939,6 +1971,16 @@ SWYM.CompileClosureCall = function(argType, argExecutable, closureType, closureE
 	
 	return returnType;
 }
+
+SWYM.ScopeAccessorInstructions = {
+	"#Store":true,
+	"#Overwrite":true,
+	"#Closure":true,
+	"#Etc":true,
+	"#EtcSequence":true,
+	"#Return":true,
+	"#IfElse":true,
+};
 
 // Compile deconstructing expressions such as ['x','y']->{ x+y }
 // (well, only the part in square brackets.)
