@@ -403,11 +403,11 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		return typeA;
 	}
 	
-	if( typeA.needsCompiling || typeB.needsCompiling )
+/*	if( typeA.needsCompiling || typeB.needsCompiling )
 	{
 		SWYM.LogError(errorContext, "If a block can't be resolved until runtime, provide an explicit argument type for it by calling ArgType.block{...}.");
 		return typeA;
-	}
+	}*/
 
 	if( typeA.multivalueOf !== undefined && typeB.multivalueOf !== undefined )
 	{
@@ -503,7 +503,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	
 	if( typeA.needsCompiling || typeB.needsCompiling )
 	{
-		var toCompile = [];
+		toCompile = [];
 		if( typeA.needsCompiling )
 		{
 			SWYM.pushEach(typeA.needsCompiling, toCompile);
@@ -515,7 +515,7 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 	}
 
 	var result = {type:"type", debugName:typeA.debugName+"|"+typeB.debugName};
-	
+		
 	if( typeA.nativeType !== undefined && typeA.nativeType === typeB.nativeType )
 	{
 		result.nativeType = typeA.nativeType;

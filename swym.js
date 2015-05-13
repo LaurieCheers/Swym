@@ -11,7 +11,7 @@ SWYM.LogError = function(errorContext, message)
 	{
 		textpos = errorContext;
 	}
-	else if( errorContext !== undefined )
+	else if( errorContext !== undefined && errorContext !== null )
 	{
 		textpos = errorContext.pos;
 		if( textpos === undefined && errorContext.op !== undefined )

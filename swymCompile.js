@@ -472,23 +472,21 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 	}
 	
 	var validOverloads = [];
-	var bestError = undefined;
-	var bestErrorQuality = -1;
+	var invalidOverloads = [];
 		
 	for( var Idx = 0; Idx < overloads.length; ++Idx )
 	{
-		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode);
+		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode, false);
 		
 		if( overloadResult.error === undefined )
 		{
 			validOverloads.push(overloadResult);
 		}
-		else if( bestErrorQuality < overloadResult.quality )
+		else
 		{
-			bestError = overloadResult.error;
-			bestErrorQuality = overloadResult.quality;
+			invalidOverloads.push(overloads[Idx]);
 		}
-
+		
 		if( Idx === overloads.length-1 && overloads.more )
 		{
 			// skip any 0-length entries
@@ -504,6 +502,19 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 	
 	if( validOverloads.length === 0 )
 	{
+		var bestError = undefined;
+		var bestErrorQuality = -1;
+		for( var Idx = 0; Idx < invalidOverloads.length; ++Idx )
+		{
+			var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, invalidOverloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode, true);
+			
+			if( bestErrorQuality < overloadResult.quality )
+			{
+				bestError = overloadResult.error;
+				bestErrorQuality = overloadResult.quality;
+			}
+		}
+
 		SWYM.LogError(fnNode, bestError);
 		return SWYM.DontCareType;
 	}
@@ -581,8 +592,19 @@ SWYM.TypeChecksStricter = function(curTypeChecks, bestTypeChecks)
 	return stricter;
 }
 
+SWYM.RecordErrorOfQuality = function(overloadResult, quality)
+{
+	// Returns true if this is the worst error we've seen
+	if( overloadResult.quality == 0 || overloadResult.quality > quality )
+	{
+		overloadResult.quality = quality;
+		return true;
+	}
+	return false;
+}
+
 // returns {error:<an error>, executable:<an executable>, returnType:<a return type>}
-SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, errorNode)
+SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, errorNode, isErrorReport)
 {
 	var overloadResult = {theFunction:theFunction, error:undefined, executable:[], typeChecks:{}, returnType:undefined, quality:0};
 	
@@ -603,6 +625,8 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 		
 	var nextPositionalArg = 0;
 	var inputArgNameList = [];
+	var qualityBonus = 0;
+	var checkExtraneousArgs = true;
 
 	// make sure all the expected args are present and of the correct types
 	for( var expectedArgIndex = 0; expectedArgIndex < expectedArgNamesByIndex.length; ++expectedArgIndex )
@@ -625,6 +649,13 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 			}
 			else if( theFunction.expectedArgs[expectedArgName].defaultValueNode === undefined )
 			{
+				// We found a missing parameter (and it's not allowed to be missing).
+				if( !isErrorReport )
+				{
+					overloadResult.error = "i dunno some error";
+					return overloadResult;
+				}
+				
 				var typeSig = "";
 				if( theFunction.expectedArgs[expectedArgName].typeCheck !== undefined )
 				{
@@ -633,25 +664,36 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 				
 				if( expectedArgName === "this" )
 				{
-					overloadResult.error = "Function '"+fnName+"' requires a 'this' parameter. something."+fnName+"";
-					overloadResult.quality = 10; // very bad match
+					if( SWYM.RecordErrorOfQuality(overloadResult, 10) ) // very bad match
+					{
+						overloadResult.error = "Function '"+fnName+"' requires a 'this' parameter. something."+fnName+"";
+					}
 				}				
 				else if( expectedArgName === "else" )
 				{
-					overloadResult.error = "Function '"+fnName+"' requires an 'else' parameter. fnName() else {...}";
-					overloadResult.quality = 10; // very bad match
+					if( SWYM.RecordErrorOfQuality(overloadResult, 10) ) // very bad match
+					{
+						overloadResult.error = "Function '"+fnName+"' requires an 'else' parameter. fnName() else {...}";
+					}
 				}
 				else if( args[positionalArgName] !== undefined && theFunction.expectedArgs[expectedArgName].explicitNameRequired )
 				{
-					overloadResult.error = "Function '"+fnName+"'s parameter '"+expectedArgName+"' must be given explicitly: "+fnName+"(&"+expectedArgName+"=something)";
-					overloadResult.quality = 50; // reasonable match
+					if( SWYM.RecordErrorOfQuality(overloadResult, 50) ) // reasonable match, you just forgot to state the name
+					{
+						overloadResult.error = "Function '"+fnName+"'s parameter '"+expectedArgName+"' must be given explicitly: "+fnName+"("+expectedArgName+"=something)";
+					}
+					
+					checkExtraneousArgs = false; // suppress errors about the extraneous positional argument
 				}
 				else
 				{
-					overloadResult.error = "Function '"+fnName+"' requires an additional argument "+typeSig+"'"+expectedArgName+"'";
-					overloadResult.quality = 10; // very bad match
+					if( SWYM.RecordErrorOfQuality(overloadResult, 10) ) // very bad match
+					{
+						overloadResult.error = "Function '"+fnName+"' requires an additional argument "+typeSig+"'"+expectedArgName+"'";
+					}
 				}
-				return overloadResult;
+				
+				continue;
 			}
 		}
 		else
@@ -672,54 +714,80 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 				}
 
 				overloadResult.typeChecks[inputArgName] = expectedArgTypeCheck;
-				if( !SWYM.TypeMatches(expectedArgTypeCheck, inputArgTypes[inputArgName]) )
+				if( SWYM.TypeMatches(expectedArgTypeCheck, inputArgTypes[inputArgName]) )
 				{
-					var expectedString;
-					if( inputArgTypes[inputArgName].baked !== undefined )
+					// Each valid argument increases the likelihood that this was the intended overload
+					qualityBonus += 10;
+				}
+				else
+				{
+					// Found an argument of the wrong type
+					if( !isErrorReport )
 					{
-						expectedString = " ("+SWYM.ToDebugString(inputArgTypes[inputArgName].baked)+" is not of type "+SWYM.TypeToString(expectedArgTypeCheck)+")";
+						overloadResult.error = "eek an error, run!";
+						return overloadResult;
 					}
-					else
+
+					if( SWYM.RecordErrorOfQuality(overloadResult, 100) ) // pretty good match - just the wrong type
 					{
-						expectedString = " (Expected "+SWYM.TypeToString(expectedArgTypeCheck)+", got "+SWYM.TypeToString(inputArgTypes[inputArgName])+")";
+						var expectedString;
+						if( inputArgTypes[inputArgName].baked !== undefined )
+						{
+							expectedString = " ("+SWYM.ToDebugString(inputArgTypes[inputArgName].baked)+" is not of type "+SWYM.TypeToString(expectedArgTypeCheck)+")";
+						}
+						else
+						{
+							expectedString = " (Expected "+SWYM.TypeToString(expectedArgTypeCheck)+", got "+SWYM.TypeToString(inputArgTypes[inputArgName])+")";
+						}
+						
+						if( inputArgName !== expectedArgName )
+						{
+							overloadResult.error = "Positional argument "+inputArgName+" was the wrong type for parameter \""+expectedArgName+"\" during call to function '"+fnName+"'."+expectedString;
+						}
+						else
+						{
+							overloadResult.error = "Argument '"+expectedArgName+"' was the wrong type during call to function '"+fnName+"'."+expectedString;
+						}
 					}
-					
-					if( inputArgName !== expectedArgName )
-					{
-						overloadResult.error = "Positional argument "+inputArgName+" was the wrong type for parameter \""+expectedArgName+"\" during call to function '"+fnName+"'."+expectedString;
-					}
-					else
-					{
-						overloadResult.error = "Argument '"+expectedArgName+"' was the wrong type during call to function '"+fnName+"'."+expectedString;
-					}
-					overloadResult.quality = 100; // pretty good match - just the wrong type
+					continue;
+				}
+			}
+		}
+	}
+		
+	// make sure there are no extraneous args
+	if( checkExtraneousArgs )
+	{
+		for ( var remainingArgName in args )
+		{
+			var matched = false;
+			for( var expectedArgIndex = 0; expectedArgIndex < expectedArgNamesByIndex.length; ++expectedArgIndex )
+			{
+				if( remainingArgName === inputArgNameList[expectedArgIndex] )
+				{
+					matched = true;
+					break;
+				}
+			}
+			
+			if( !matched )
+			{
+				if( !isErrorReport )
+				{
+					overloadResult.error = "errors, lol";
 					return overloadResult;
+				}
+
+				// terrible match: extraneous arguments are unlikely to be an accident
+				//(it's not just a mistyped name - that would have been caught as a missing argument.)
+				if( SWYM.RecordErrorOfQuality(overloadResult, 5) )
+				{
+					overloadResult.error = "Unexpected argument '"+remainingArgName+"' during call to function '"+fnName+"'.";
 				}
 			}
 		}
 	}
 	
-	// make sure there are no extraneous args
-	for ( var remainingArgName in args )
-	{
-		var matched = false;
-		for( var expectedArgIndex = 0; expectedArgIndex < expectedArgNamesByIndex.length; ++expectedArgIndex )
-		{
-			if( remainingArgName === inputArgNameList[expectedArgIndex] )
-			{
-				matched = true;
-				break;
-			}
-		}
-		
-		if( !matched )
-		{
-			overloadResult.error = "Unexpected argument '"+remainingArgName+"' during call to function '"+fnName+"'.";
-			overloadResult.quality = 5; // terrible match: extraneous arguments are unlikely to be an accident
-			return overloadResult;
-		}
-	}
-
 	var finalArgTypes = [];
 	for( var Idx = 0; Idx < inputArgNameList.length; Idx++ )
 	{
@@ -732,10 +800,32 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 		var typeCheckResult = theFunction.customTypeCheck(finalArgTypes);
 		if( typeCheckResult !== true )
 		{
-			overloadResult.error = typeCheckResult;
-			overloadResult.quality = 120; // pretty good match, just failed at the last hurdle
+			if( !isErrorReport )
+			{
+				overloadResult.error = "error, whatevs";
+				return overloadResult;
+			}
+			
+			// pretty good match, just failed at the last hurdle
+			if( SWYM.RecordErrorOfQuality(overloadResult, 120) )
+			{
+				overloadResult.error = typeCheckResult;
+			}
 			return overloadResult;
 		}
+	}
+
+	
+	if( isErrorReport )
+	{
+		if( overloadResult.error )
+		{
+			overloadResult.quality += qualityBonus;
+			return overloadResult;
+		}
+		
+		// Why are we still here!?
+		SWYM.LogError(0, "Fsckup: Expected an error while compiling this overload");
 	}
 
 	// in order to support function overloads, this function has been split into two halves.
@@ -935,7 +1025,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 				precompiled.executable = targetExecutable;
 			}
 			
-			if( theFunction.compiling !== undefined && theFunction.compiling.length > 3 &&
+			if( theFunction.compiling !== undefined && theFunction.compiling.length > 30 &&
 				theFunction.compiling.indexOf(precompiled) === -1 )
 			{
 				// we appear to be compiling a recursive function whose argument types don't remain consistent
@@ -1553,6 +1643,8 @@ SWYM.CScopeRedirect = function(cscope, argName)
 	return argName;
 }
 
+// Despite the name, this just constructs a block type.
+// The block itself doesn't get compiled yet.
 SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 {
 	var bodyText = braceNode.op.source.substring( braceNode.op.pos, braceNode.op.endSourcePos+1 );
@@ -1593,37 +1685,78 @@ SWYM.CompileLambda = function(braceNode, argNode, cscope, executable)
 		debugName = argText + "->" + debugName;
 	}
 
-	// TODO: closureInfo should list what variables need to be captured from the containing scope.
-	// (we can determine this now.)
-	var closureInfo = { type:"closure", debugName:debugName, debugText:bodyText, argName:argName };
+	// The closureInfo object gets embedded into the executable. It contains the data used at
+	// runtime to construct the actual closure/variable capture value.
+	// (capturedNames lists the local/global variables that are captured from its scope
+	// at creation time. It's currently empty - we'll populate this list if & when the closure
+	// actually gets compiled. Typically when we find a call site. The executable will remain
+	// undefined unless we find an ambiguous call site - i.e. one where we don't know at compile
+	// time which block it's actually calling.)
+	var closureInfo = { type:"closureInfo", capturedNames:[], executable:undefined, debugName:debugName, debugText:bodyText, argName:argName };
 
 	executable.push("#Closure");
 	executable.push(closureInfo);
 
-	var closureType = {type:"type",
-		debugName:"Closure("+debugName+")",
-		nativeType:"Closure",
-		argNode:argNode,
-		argName:argName,
+	var blockType = {type:"type",
+		debugName:"Block("+debugName+")",
+		nativeType:"Closure", // TODO: should be "Block", it won't become a closure unless we call it ambiguously
+		bodyText:bodyText,
 		bodyNode:braceNode.children[1],
-		cscope:cscope,
-		needsCompiling:true,
-		closureInfo:closureInfo,
+		needsCompiling: [{
+			debugName:debugName,
+			argNode:argNode,
+			argName:argName,
+			bodyNode:braceNode.children[1],
+			cscope:cscope,
+			closureInfo:closureInfo,
+		}],
 	};
 	
-	return closureType;
+	return blockType;
 }
 
+// This generates an executable from a block type. The block type's closureInfo
+// will be modified if appropriate.
 SWYM.CompileLambdaInternal = function(closureType, argType, executable, errorNode)
 {
 	if( !closureType.needsCompiling )
 	{
 		return SWYM.GetOutType(closureType, argType, errorNode);
 	}
+
+	if( closureType.needsCompiling.length == 1 )
+	{
+		return SWYM.CompileLambdaInternalEntry( closureType.needsCompiling[0], argType, executable, errorNode );
+	}
+	else
+	{
+		var returnType = undefined;
+		for(var Idx = 0; Idx < closureType.needsCompiling.length; ++Idx )
+		{
+			returnType = SWYM.TypeUnify(returnType, SWYM.CompileLambdaInternalEntry( closureType.needsCompiling[Idx], argType, undefined, errorNode ));
+		}
+		return returnType;
+	}
+}
+
+SWYM.CompileLambdaInternalEntry = function(compileInfo, argType, executable, errorNode)
+{	
+	var argNode = compileInfo.argNode;
+	var cscope = compileInfo.cscope;
+	var node = compileInfo.bodyNode;
+	var closureInfo = compileInfo.closureInfo;
 	
-	var argNode = closureType.argNode;
-	var cscope = closureType.cscope;
-	var node = closureType.bodyNode;
+	if( executable === undefined )
+	{
+		if( closureInfo.executable !== undefined )
+		{
+			SWYM.LogError(errorNode, "Tried to recompile a block!");
+		}
+		
+		// if we're not compiling a one-off executable, store it in the closureInfo.
+		executable = [];
+		closureInfo.executable = executable;
+	}
 	
 	var innerCScope;
 	
@@ -1679,9 +1812,15 @@ SWYM.CompileLambdaInternal = function(closureType, argType, executable, errorNod
 		}
 	}
 	
+	executable.unshift(argName);
+	executable.unshift("#ArgStore");
 	innerCScope[argName] = argType;
 
 	var returnType = SWYM.CompileNode(node, innerCScope, executable);
+	
+	// TODO: closureInfo should be populated with the executable, and the
+	// list of variables that were captured from the containing scope.
+
 	return returnType;
 	
 /*	executableBlock.argName = argName;
@@ -2229,7 +2368,7 @@ SWYM.CompileTable = function(node, cscope, executable)
 		if( elseExecutable !== undefined )
 		{
 			executable.push("#Closure");
-			executable.push({"argName":"it", "debugName":"else:"});
+			executable.push({"type":"closureInfo", "argName":"it", "debugName":"else:"});
 			executable.push("#Native");
 			executable.push(3);
 			executable.push(function(keys, values, elseClosure)
@@ -2471,7 +2610,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 
 				if( !typeType || !typeType.baked || typeType.baked.type !== "type" )
 				{
-					SWYM.LogError(typeNodes, "Type declaration for "+memberName+" is not a valid type!");
+					SWYM.LogError(typeNode, "Type declaration for "+memberName+" is not a valid type!");
 				}
 				else
 				{
@@ -2681,11 +2820,11 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 					// FIXME: need a way to detect out-of-bounds termination
 					executable.push("#Closure");
 					executable.push({
-						type:"closure",
+						type:"closureInfo",
 						debugName:"lazy etc",
 						debugText:"<etc expression>", //FIXME
 						argName:"<etcIndex>",
-						body:etcExecutable
+						body:etcExecutable // This won't actually work
 					});
 					executable.push("#Native");
 					executable.push(1)

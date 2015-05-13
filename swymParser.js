@@ -435,7 +435,8 @@ SWYM.OverloadableParseTreeNode = function(name)
 				name:name,
 				etc:op.etc,
 				children:[lhs, rhs],
-				argNames:["this", "__"]
+				argNames:["this", "__"],
+				pos:op.pos,
 			};
 		}
 		else if( lhs !== undefined )
@@ -444,7 +445,8 @@ SWYM.OverloadableParseTreeNode = function(name)
 				name:name,
 				etc:op.etc,
 				children:[lhs],
-				argNames:["this"]
+				argNames:["this"],
+				pos:op.pos
 			};
 		}
 		else if( rhs !== undefined )
@@ -453,7 +455,8 @@ SWYM.OverloadableParseTreeNode = function(name)
 				name:name,
 				etc:op.etc,
 				children:[rhs],
-				argNames:["__"]
+				argNames:["__"],
+				pos:op.pos
 			};
 		}
 		else
@@ -462,7 +465,8 @@ SWYM.OverloadableParseTreeNode = function(name)
 				name:name,
 				etc:op.etc,
 				children:[],
-				argNames:[]
+				argNames:[],
+				pos:op.pos
 			};
 		}
 	}
@@ -515,8 +519,16 @@ SWYM.ReadParamBlock = function(paramnode, fnnode)
 	else if( paramnode.op && paramnode.op.text === "=" &&
 				paramnode.children[0] && paramnode.children[0].type === "argname" )
 	{
-		// passing a named parameter
+		// passing a &named parameter
 		fnnode.argNames.push( paramnode.children[0].value );
+		fnnode.children.push( paramnode.children[1] );
+		paramnode.children[1].explicitNameRequired = true;
+	}
+	else if( paramnode.op && paramnode.op.text === "=" &&
+				paramnode.children[0] && paramnode.children[0].type === "name" )
+	{
+		// passing a named parameter
+		fnnode.argNames.push( paramnode.children[0].text );
 		fnnode.children.push( paramnode.children[1] );
 		paramnode.children[1].explicitNameRequired = true;
 	}

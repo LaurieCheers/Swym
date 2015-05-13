@@ -92,6 +92,12 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			stack.push(result);
 			PC += 3;
 			break;
+			
+		case "#ArgStore":
+			var varname = executable[PC+1];
+			rscope[varname] = stack.pop();
+			PC += 2;
+			break;
 					
 		case "#Store":
 			var varname = executable[PC+1];
@@ -208,15 +214,25 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			break;
 			
 		case "#Closure":
+			// This instruction has two different modes - if the closureInfo has an executable,
+			// it will build it into a full-fledged runtime-callable closure.
+			// If not it just builds a variable capture object; no runtime closure is needed.
+			// (it's been inlined, because all call sites were unambiguous at compile time.)
 			var closureInfo = executable[PC+1];
-			var newClosure =
-			{
-				type: "closure",
+			var variableCapture = {
+				type: "closure", // TODO: should be "variableCapture"
 				debugName: closureInfo.debugName,
-				argName:closureInfo.argName,
-				scope: rscope // TODO: pick out the elements of rscope which the closure actually refers to
+				scope: rscope // TODO: pick out the elements of rscope which the capture actually refers to
 			}
-			stack.push(newClosure);
+			
+			if( closureInfo.executable !== undefined )
+			{
+				stack.push( SWYM.NewClosure(closureInfo, variableCapture) );
+			}
+			else
+			{
+				stack.push(variableCapture);
+			}
 			PC += 2;
 			break;
 			
@@ -775,6 +791,18 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 		return stack.pop();
 }
 
+SWYM.NewClosure = function(closureInfo, variableCapture)
+{
+	var closureExecutable = closureInfo.executable;
+	var result = {
+		type:"closure",
+		debugName:closureInfo.debugName,
+		variableCapture:variableCapture,
+		run:function(key) { return SWYM.ClosureExec(variableCapture, key, closureExecutable); }
+	}
+	return result;
+}
+
 SWYM.CollectArgs = function(stack, numArgs)
 {
 	if( stack.length < numArgs )
@@ -821,7 +849,11 @@ SWYM.ForEachPairing = function(multiArgs, body)
 	{
 		// optimization for the 1 arg case
 		var multivalue = multiArgs[0];
-		if( multivalue )
+		if( multivalue === undefined )
+		{
+			SWYM.LogError(0, "Fsckup: Undefined multivalue at runtime!");
+		}
+		else
 		{
 			for( var Idx = 0; Idx < multivalue.length && !SWYM.halt; Idx++ )
 			{
@@ -834,11 +866,18 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		// optimization for the 2 arg case
 		var multivalueA = multiArgs[0];
 		var multivalueB = multiArgs[1];
-		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
+		if( multivalueA === undefined || multivalueB === undefined )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
+			SWYM.LogError(0, "Fsckup: Undefined multivalue at runtime!");
+		}
+		else
+		{
+			for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 			{
-				result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB)]) );
+				for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
+				{
+					result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB)]) );
+				}
 			}
 		}
 	}
@@ -848,13 +887,20 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		var multivalueA = multiArgs[0];
 		var multivalueB = multiArgs[1];
 		var multivalueC = multiArgs[2];
-		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
+		if( multivalueA === undefined || multivalueB === undefined || multivalueC === undefined )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
+			SWYM.LogError(0, "Fsckup: Undefined multivalue at runtime!");
+		}
+		else
+		{
+			for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 			{
-				for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
+				for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
 				{
-					result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC)]) );
+					for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
+					{
+						result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC)]) );
+					}
 				}
 			}
 		}
@@ -866,15 +912,22 @@ SWYM.ForEachPairing = function(multiArgs, body)
 		var multivalueB = multiArgs[1];
 		var multivalueC = multiArgs[2];
 		var multivalueD = multiArgs[3];
-		for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
+		if( multivalueA === undefined || multivalueB === undefined || multivalueC === undefined || multivalueD === undefined )
 		{
-			for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
+			SWYM.LogError(0, "Fsckup: Undefined multivalue at runtime!");
+		}
+		else
+		{
+			for( var IdxA = 0; IdxA < multivalueA.length && !SWYM.halt; IdxA++ )
 			{
-				for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
+				for( var IdxB = 0; IdxB < multivalueB.length && !SWYM.halt; IdxB++ )
 				{
-					for( var IdxD = 0; IdxD < multivalueD.length && !SWYM.halt; IdxD++ )
+					for( var IdxC = 0; IdxC < multivalueC.length && !SWYM.halt; IdxC++ )
 					{
-						result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC), multivalueD.run(IdxD)]) );
+						for( var IdxD = 0; IdxD < multivalueD.length && !SWYM.halt; IdxD++ )
+						{
+							result.push( body([multivalueA.run(IdxA), multivalueB.run(IdxB), multivalueC.run(IdxC), multivalueD.run(IdxD)]) );
+						}
 					}
 				}
 			}
@@ -1225,26 +1278,25 @@ SWYM.TableMatches = function(table, tablePattern)
 	return true;
 }
 
-SWYM.ClosureExec = function(closure, arg, executable)
+SWYM.ClosureExec = function(variableCapture, arg, executable)
 {
-	if( !closure )
+	if( variableCapture === undefined )
 	{
-		SWYM.LogError(-1, "Fsckup: missing closure body");
+		SWYM.LogError(-1, "Fsckup: #ClosureExec with no variableCapture value");
+		return;
 	}
-	else if( closure.run !== undefined )
+	else if ( variableCapture.run || variableCapture.type === "type" )
 	{
-		return closure.run(arg);
+		return SWYM.ClosureCall(variableCapture, arg);
 	}
-	else if( closure.type === "type" )
+	
+	if (variableCapture.variableCapture !== undefined)
 	{
-		return SWYM.IsOfType(arg, closure);
+		variableCapture = variableCapture.variableCapture;
 	}
-	else
-	{
-		var callScope = object(closure.scope)
-		callScope[closure.argName] = arg;
-		return SWYM.ExecWithScope(closure.debugName, executable, callScope, []);
-	}
+
+	var callScope = object(variableCapture.scope)
+	return SWYM.ExecWithScope(variableCapture.debugName, executable, callScope, [arg]);
 }
 
 SWYM.ClosureCall = function(closure, arg)
@@ -1394,6 +1446,16 @@ SWYM.SimpleCharRange = function(startCode, endCode, result)
 
 SWYM.CharRange = function(startStr,endStr)
 {
+	if( startStr === undefined )
+	{
+		SWYM.LogError(0, "Fsckup: Missing lhs when generating char range");
+		return SWYM.StringWrapper("");
+	}
+	else if( endStr === undefined )
+	{
+		SWYM.LogError(0, "Fsckup: Missing rhs when generating char range");
+		return SWYM.StringWrapper("");
+	}
 	if( startStr.length !== endStr.length )
 	{
 		SWYM.LogError(0, "Invalid char range ("+startStr.data+".."+endStr.data+") - examples must be of the same length");
@@ -1755,6 +1817,9 @@ SWYM.ToDebugString = function(value, loopBreaker)
 			else
 				return "["+value.first+".."+value.last+"]";
 		}
+
+		case "JSObject":
+			return JSON.stringify(value.object);
 
 		default:
 			SWYM.LogError(-1, "ToDebugString error: don't understand type "+value.type+" on <"+value+">");
