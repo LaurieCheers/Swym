@@ -3175,4 +3175,40 @@ SWYM.CreateLocal = function(declName, valueType, cscope, executable, errorNode)
 	}
 }
 
+SWYM.CompileMutableTable = function(keyType, valueType, defaultClosureExecutable, defaultClosureType, executable, errorNode)
+{
+	var defaultExecutable = [];
+	var defaultResultType = SWYM.CompileLambdaInternal(defaultClosureType, keyType, defaultExecutable, errorNode);
+	if(valueType === undefined)
+		valueType = defaultResultType;
+	else
+		SWYM.TypeCoerce(valueType, defaultResultType, errorNode);
+
+	SWYM.pushEach(defaultClosureExecutable, executable);
+	executable.push("#Native");
+	executable.push(1);
+	executable.push( function(defaultClosure)
+	{
+		return {
+			type:"table",
+			jsTable:{},
+			keys:SWYM.jsArray([]),
+			run:function(key)
+			{
+				var keyStr = SWYM.ToTerseString(key);
+				var result = this.jsTable[ keyStr ];				
+				if( result === undefined )
+				{
+					result = SWYM.ClosureExec(defaultClosure, key, defaultExecutable);
+					this.jsTable[ keyStr ] = result;
+					this.keys.push(key);
+				}
+				return result;
+			}
+		}
+	} );
+
+	return SWYM.TableTypeFromTo(keyType, valueType, true);
+}
+
 SWYM.onLoad("swymCompile.js");

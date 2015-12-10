@@ -393,11 +393,14 @@ function runDemo(div)
 		scratchNode.removeChild(scratchNode.firstChild);
 	}
 
-	var baseURL = window.location.href;
-	var cutIndex = baseURL.indexOf("?");
-	if( cutIndex >= 0 )
-		baseURL = baseURL.slice(0, cutIndex);
-	window.history.replaceState( {} , 'Swym Interpreter', baseURL + "?" + escape(SWYM.editor.getValue()) );	
+	if(document.origin !== "null")
+	{
+		var baseURL = window.location.href;
+		var cutIndex = baseURL.indexOf("?");
+		if( cutIndex >= 0 )
+			baseURL = baseURL.slice(0, cutIndex);
+		window.history.replaceState( {} , 'Swym Interpreter', baseURL + "?" + escape(SWYM.editor.getValue()) );
+	}
 	
 	var sourceCode = SWYM.editor.getValue();
 	

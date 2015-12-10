@@ -90,6 +90,7 @@ SWYM.StringArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringTy
 SWYM.StringCharArrayType = {type:"type", argType:SWYM.IntType, outType:SWYM.StringCharType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"StringChar.Array"};
 SWYM.MutableArrayType = {type:"type", isMutable:true, argType:SWYM.IntType, outType:SWYM.AnyType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"MutableArray"};
 SWYM.RangeArrayType = {type:"type", nativeType:"RangeArray", argType:SWYM.IntType, outType:SWYM.IntType, memberTypes:{"length":SWYM.IntType, "keys":SWYM.IntArrayType}, debugName:"RangeArray"};
+SWYM.MutableTableType = {type:"type", isMutable:true, argType:SWYM.StringType, outType:SWYM.AnyType, memberTypes:{"keys":SWYM.StringArrayType}, debugName:"MutableTable"};
 
 SWYM.MultivalueRangeType = SWYM.ToMultivalueType(SWYM.IntType);
 SWYM.MultivalueRangeType.nativeType = "RangeArray";
@@ -463,6 +464,8 @@ SWYM.operators = {
 			if ( lhs && lhs.type === "fnnode" && !lhs.isDecl )
 			{
 				// pass a __mutator={rhs} argument to this function
+				// FIXME: we're literally treating the expression as if it had a {} token around it, which is incorrect.
+				// References to the default object should be resolved in the original scope, not the mutator's.
 				var braceOp = SWYM.NewToken("op", op.pos, "{");
 				var childNode = braceOp.behaviour.customParseTreeNode(undefined, braceOp, rhs);
 				var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[childNode], argNames:["__mutator"]};
@@ -1440,6 +1443,7 @@ SWYM.DefaultGlobalCScope =
 	"JSObject": SWYM.BakedValue(SWYM.JSObjectType),
 	"JSString": SWYM.BakedValue(SWYM.JSStringType),
 	"MaybeFalse": SWYM.BakedValue(SWYM.MaybeFalseType),
+	"MutableArray": SWYM.BakedValue(SWYM.MutableArrayType),
 
 	// these two are redundant, they should be indistinguishable from a user's perspective. The only reason they're both here is for testing purposes.
 	"__novalues": {type:"type", debugName:"Literal(<no_values>)", multivalueOf:{type:"type", nativeType:"NoValues"}, baked:SWYM.jsArray([])},
@@ -2246,6 +2250,43 @@ SWYM.DefaultGlobalCScope =
 					}
 				);
 			}
+		},
+		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.MutableTableType},
+						"key":{index:1, typeCheck:SWYM.StringType},
+						"__mutator":{index:2}, typeCheck:SWYM.CallableType },
+			returnType:SWYM.VoidType,
+			customCompile:function(argTypes, cscope, executable, errorNode)
+			{
+				var keyType = SWYM.StringType;
+				var elementType = SWYM.GetOutType(argTypes[0], keyType);
+				
+				var mutatorExecutable = [];
+				var mutatorType = SWYM.CompileLambdaInternal(SWYM.ToSinglevalueType(argTypes[2]), elementType, mutatorExecutable, errorNode);
+				
+				if( !SWYM.TypeMatches(elementType, mutatorType) )
+				{
+					SWYM.LogError(errorNode, "Cannot store values of type "+SWYM.TypeToString(mutatorType)+" in a table of type "+SWYM.TypeToString(elementType));
+				}
+				
+				executable.push("#Native");
+				executable.push(3);
+				executable.push
+				(
+					function(table, key, mutator)
+					{
+						// oh, yuck... currently, writing "table.at(x) = y" generates
+						// a default value, then throws it away and overwrites it with y.
+						// This is wrong... but the whole point of the __mutator
+						// system was to let you treat a.at(b) = c exactly like a.at(b) += c.
+						// Reassessment needed.
+						
+						var keyStr = SWYM.ToTerseString(key);
+						//var oldValue = this.jsTable[ keyStr ];
+						var oldValue = table.run(key);
+						table.jsTable[keyStr] = SWYM.ClosureExec( mutator, oldValue, mutatorExecutable );
+					}
+				);
+			}
 		}],
 
 	"fn#value":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.VariableType} },
@@ -2298,6 +2339,43 @@ SWYM.DefaultGlobalCScope =
 
 					return SWYM.ArrayTypeContaining(varType, true, false);
 				}
+			}
+		}],
+		
+	"fn#mutableCopy":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+			{
+				executable.push("#CopyArray");
+				return SWYM.ArrayTypeContaining(argTypes[0].outType, true, false);
+			}
+		}],
+		
+	"fn#mutableTable":[
+		{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.TypeType}, "default":{index:1, typeCheck:SWYM.CallableType} },
+			customCompileWithoutArgs:true,
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+			{
+				var keyType = SWYM.StringType; // hard coded for now... :-/				
+				var valueType;
+				if ( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+				{
+					SWYM.LogError(0, "The first argument to 'mutableTable' must be a type.");
+					valueType = SWYM.DontCareType;
+				}
+				else
+				{
+					valueType = argTypes[0].baked;
+				}
+				
+				return SWYM.CompileMutableTable(keyType, valueType, argExecutables[1], argTypes[1], executable, errorNode);
+			}
+		},
+		{  expectedArgs:{ "default":{index:1, typeCheck:SWYM.CallableType} },
+			customCompileWithoutArgs:true,
+			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+			{
+				var keyType = SWYM.StringType; // hard coded for now... :-/					
+				return SWYM.CompileMutableTable(keyType, undefined, argExecutables[1], argTypes[1], executable, errorNode);
 			}
 		}],
 		
@@ -2507,6 +2585,44 @@ SWYM.DefaultGlobalCScope =
 			return SWYM.BakedValue(arrayType);
 		}
 	}],		
+
+	"fn#Table":[{  expectedArgs:{
+			"this":{index:0, typeCheck:SWYM.TypeType},
+		},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+			{
+				SWYM.LogError(0, "Argument to the Table function is not a valid type expression!");
+				return SWYM.DontCareType;
+			}
+			
+			var tableType = SWYM.TableTypeFromTo(SWYM.StringType, argTypes[0].baked);
+			executable.push("#Literal");
+			executable.push(tableType);
+			return SWYM.BakedValue(tableType);
+		}
+	}],
+
+	"fn#MutableTable":[{  expectedArgs:{
+			"this":{index:0, typeCheck:SWYM.TypeType},
+		},
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
+		{
+			if( !argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type" )
+			{
+				SWYM.LogError(0, "Argument to the MutableTable function is not a valid type expression!");
+				return SWYM.DontCareType;
+			}
+			
+			var tableType = SWYM.TableTypeFromTo(SWYM.StringType, argTypes[0].baked, true);
+			executable.push("#Literal");
+			executable.push(tableType);
+			return SWYM.BakedValue(tableType);
+		}
+	}],
 
 	"fn#String":[{  expectedArgs:{
 			"this":{index:0, typeCheck:SWYM.IntType},
@@ -3033,7 +3149,7 @@ Table.'inverse' returns table(keys=.values, values=.keys)\n\
 \n\
 \n\
 // == Strings ==\n\
-String.'lines' returns .splitOn(\"\\n\")\n\
+String.'lines' returns .where{!=\"\\r\"}.splitOn(\"\\n\")\n\
 String.'words' returns .splitOnAny(\" \\t\\n\")\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
@@ -3415,6 +3531,31 @@ Array.'firstKeyWhere'(Callable 'test') returns .cells.firstWhere{.value.(test)}{
 Array.'firstKeyWhere'(Callable 'test', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
 Array.'firstKeyWhere'(Callable 'test', Callable 'then', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
 Array.'lastKeyWhere'(Callable 'test') returns .cells.lastWhere{.value.(test)}.key\n\
+\n\
+Array.'permutations' returns array(length=this.length.factorial) 'idx'->\n\
+{\n\
+    'swaps' =\n\
+    [\n\
+        [1,floor(idx/1)%2],\n\
+        [2,floor(idx/2)%3],\n\
+        [3,floor(idx/6)%4],\n\
+        [4,floor(idx/24)%5],\n\
+        etc**this.length-1\n\
+    ]\n\
+    'scratch' = this.mutableCopy\n\
+    forEach(swaps) ['a','b']->\n\
+    {\n\
+        scratch.swap(a,b)\n\
+    }\n\
+    scratch//FIXME: cast to const\n\
+}\n\
+\n\
+MutableArray.'swap'(Int 'a', Int 'b')\n\
+{\n\
+    'temp' = this.at(a)\n\
+    this.at(a) = this.at(b)\n\
+    this.at(b) = temp\n\
+}\n\
 \n\
 \n\
 //== Cells ==\n\

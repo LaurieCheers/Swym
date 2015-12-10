@@ -841,9 +841,9 @@ SWYM.AddTupleInfo = function(arrayType, tupleTypes, errorContext)
 	arrayType.debugName = "Tuple["+debugName+"]";
 }
 
-SWYM.TableTypeFromTo = function(keyType, valueType)
+SWYM.TableTypeFromTo = function(keyType, valueType, isMutable)
 {
-	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:keyType, outType:valueType, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
+	return {type:"type", memberTypes:{keys:SWYM.ArrayTypeContaining(keyType)}, argType:keyType, outType:valueType, isMutable:isMutable, debugName:"Table("+SWYM.TypeToString(keyType)+"->"+SWYM.TypeToString(valueType)+")"};
 }
 
 SWYM.CallableTypeFromTo = function(argType, outType)

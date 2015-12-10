@@ -977,50 +977,75 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		term4s["cumulative geometric"] = cumgeometric(3);
 	}
 
+	// try the factorial sequence, e.g. 1, 2, 6, 24, etc
+	var factorialSeq = function(index)
+	{
+		var result = 1;
+		while(index >= 0)
+		{
+			result *= index+1;
+			index--;
+		}
+		return result;
+	};
+
+	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, factorialSeq))
+	{
+		sequence.type = SWYM.IntType;
+		return factorialSeq;
+	}
+	else
+	{
+		term4s["factorial"] = factorialSeq(3);
+	}
+
 	// try an arithmetic times geometric sequence, e.g. 1, 20, 300, 4000, etc
 	var sqrtTerm = Math.sqrt(1 + 1/((second*second/(base*third)) - 1)); // math, how does it even work, amirite
-	var arithStep = -base / ( 1-sqrtTerm );
-	var geoFactor = second/(base+arithStep)
-	var arithxgeo = function(index)
+	if(!isNaN(sqrtTerm))
 	{
-		return (base + arithStep*index) * Math.pow(geoFactor, index);
-	};
-
-	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeo))
-	{
-		sequence.type = (base%1==0 && arithStep%1==0 && geoFactor%1==0)? SWYM.IntType: SWYM.NumberType;
-
-		return arithxgeo;
-	}
-	else
-	{
-		var soln = arithxgeo(3);
-		if( !isNaN(soln) )
+		var arithStep = -base / ( 1-sqrtTerm );
+		var geoFactor = second/(base+arithStep)
+		var arithxgeo = function(index)
 		{
-			term4s["arithmetic * geometric"] = soln;
+			return (base + arithStep*index) * Math.pow(geoFactor, index);
+		};
+
+		if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeo))
+		{
+			sequence.type = (base%1==0 && arithStep%1==0 && geoFactor%1==0)? SWYM.IntType: SWYM.NumberType;
+
+			return arithxgeo;
 		}
-	}
-
-	// arithxgeo formula has two solutions - plus or minus sqrt.
-	var arithStepB = -base / ( 1+sqrtTerm )
-	var geoFactorB = second/(base+arithStepB)
-	var arithxgeoB = function(index)
-	{
-		return (base + arithStepB*index) * Math.pow(geoFactorB, index);
-	};
-
-	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeoB))
-	{
-		sequence.type = (base%1==0 && arithStepB%1==0 && geoFactorB%1==0)? SWYM.IntType: SWYM.NumberType;
-
-		return arithxgeoB;
-	}
-	else
-	{
-		var soln = arithxgeoB(3);
-		if( !isNaN(soln) )
+		else
 		{
-			term4s["a*g, 2nd solution"] = soln;
+			var soln = arithxgeo(3);
+			if( !isNaN(soln) )
+			{
+				term4s["arithmetic * geometric"] = soln;
+			}
+		}
+
+		// arithxgeo formula has two solutions - plus or minus sqrt.
+		var arithStepB = -base / ( 1+sqrtTerm )
+		var geoFactorB = second/(base+arithStepB)
+		var arithxgeoB = function(index)
+		{
+			return (base + arithStepB*index) * Math.pow(geoFactorB, index);
+		};
+
+		if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, arithxgeoB))
+		{
+			sequence.type = (base%1==0 && arithStepB%1==0 && geoFactorB%1==0)? SWYM.IntType: SWYM.NumberType;
+
+			return arithxgeoB;
+		}
+		else
+		{
+			var soln = arithxgeoB(3);
+			if( !isNaN(soln) )
+			{
+				term4s["a*g, 2nd solution"] = soln;
+			}
 		}
 	}
    	
