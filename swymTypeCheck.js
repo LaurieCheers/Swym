@@ -2,7 +2,10 @@ SWYM.TypeCoerce = function(typeCheck, valueInfo, errorNode, errorContext)
 {
 	if( !SWYM.TypeMatches(typeCheck, valueInfo) )
 	{
-		SWYM.LogError(errorNode, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo));
+		if(valueInfo.baked !== undefined)
+			SWYM.LogError(errorNode, "Type mismatch: "+SWYM.ToDebugString(valueInfo.baked)+" is not of type "+SWYM.TypeToString(typeCheck));
+		else
+			SWYM.LogError(errorNode, "Type mismatch: expected "+SWYM.TypeToString(typeCheck)+", got "+SWYM.TypeToString(valueInfo));
 	}
 	
 	return valueInfo;

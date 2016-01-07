@@ -1475,8 +1475,12 @@ SWYM.DefaultGlobalCScope =
 			{
 				if( memberTypes.hasOwnProperty(memberName) )
 				{
+					var memberType = memberTypes[memberName];
+					if(memberType === undefined)
+						memberType = SWYM.AnyType;
+					
 					// declare a member accessor function
-					SWYM.DeclareAccessor(memberName, newStruct, memberTypes[memberName], targetCScope);
+					SWYM.DeclareAccessor(memberName, newStruct, memberType, targetCScope);
 				}
 			}
 			
@@ -1486,6 +1490,73 @@ SWYM.DefaultGlobalCScope =
 			SWYM.DeclareNew(newStruct, defaultNodes, targetCScope);//SWYM.DefaultGlobalCScope);
 						
 			return SWYM.BakedValue(newStruct);
+		}
+	}],
+
+	"fn#struct":
+	[{
+		expectedArgs:{ "body":{index:0, typeCheck:SWYM.BlockType} },
+		customCompileWithoutArgs:true,
+		customCompile:function(argTypes, cscope, executable, errorNode)
+		{
+			var innerCScope = object(cscope);
+			var defaultNodes = {};
+			
+			var memberTypes = SWYM.CompileClassBody(argTypes[0].bodyNode, innerCScope, defaultNodes);
+			var newStructType = {type:"type", nativeType:"Struct", memberTypes:memberTypes};
+			var accessorScope = SWYM.MainCScope !== undefined? SWYM.MainCScope: SWYM.DefaultGlobalCScope;
+			
+			var memberNames = [];
+			var numMembers = 0;
+			var structDebugName = "Anon";
+			for( var memberName in memberTypes )
+			{
+				if( !memberTypes.hasOwnProperty(memberName) )
+					continue;
+				
+				structDebugName += "#"+memberName;
+								
+				// initialize a value for the struct
+				memberNames.push(memberName);
+				var memberValueType = SWYM.CompileNode(defaultNodes[memberName], cscope, executable);
+				
+				// declare a member accessor function
+				var declaredMemberType = memberTypes[memberName];
+
+				if(declaredMemberType === undefined)
+				{
+					SWYM.DeclareAccessor(memberName, newStructType, memberValueType, accessorScope);
+				}
+				else
+				{
+					// if you define a type, it's a mutable entry
+					SWYM.TypeCoerce(declaredMemberType, memberValueType, defaultNodes[memberName]);
+					
+					SWYM.DeclareMutator(memberName, newStructType, declaredMemberType, accessorScope)
+					SWYM.DeclareAccessor(memberName, newStructType, declaredMemberType, accessorScope);
+				}
+								
+				numMembers++;
+			}
+			
+			newStructType.debugName = structDebugName;
+			
+			executable.push("#CreateArray");
+			executable.push(numMembers);
+			
+			executable.push("#Native");
+			executable.push(1);
+			executable.push(function(arguments)
+			{
+				var members = {};
+				for( var Idx = 0; Idx < memberNames.length; ++Idx )
+				{
+					members[memberNames[Idx]] = arguments[Idx];
+				}
+				return {type:"struct", isMutable:newStructType.isMutable, debugName:SWYM.TypeToString(newStructType), structType:newStructType, members:members};
+			});
+						
+			return newStructType;
 		}
 	}],
 
@@ -3212,7 +3283,10 @@ String.'octalDecode' returns .baseDecode[\"0\"..\"7\"]\n\
 \n\
 Int.'decimalEncode' returns .baseEncode[\"0\"..\"9\"]\n\
 String.'decimalDecode' returns .baseDecode[\"0\"..\"9\"]\n\
-String.'toInt' returns .baseDecode[\"0\"..\"9\"]\n\
+String.'toInt' returns .if{.startsWith(\"-\")}\
+{-.tail.baseDecode[\"0\"..\"9\"] }\n\
+else\n\
+{.baseDecode[\"0\"..\"9\"] }\n\
 \n\
 'hexEncoding' = $[\"0\"..\"9\", \"a\"..\"f\"]\n\
 \n\

@@ -782,7 +782,10 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 				//(it's not just a mistyped name - that would have been caught as a missing argument.)
 				if( SWYM.RecordErrorOfQuality(overloadResult, 5) )
 				{
-					overloadResult.error = "Unexpected argument '"+remainingArgName+"' during call to function '"+fnName+"'.";
+					if(remainingArgName === "__mutator")
+						overloadResult.error = "function '"+fnName+"' does not support = modification.";
+					else
+						overloadResult.error = "Unexpected argument '"+remainingArgName+"' during call to function '"+fnName+"'.";
 				}
 			}
 		}
@@ -2644,7 +2647,7 @@ SWYM.CompileClassBody = function(node, cscope, defaultValueTable)
 			var typeNode = nameNodes[idx].children === undefined? undefined: nameNodes[idx].children[0];
 			if( typeNode === undefined )
 			{
-				memberTypes[memberName] = SWYM.AnyType;
+				memberTypes[memberName] = undefined;
 			}
 			else
 			{
