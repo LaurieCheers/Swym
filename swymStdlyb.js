@@ -21,6 +21,7 @@ SWYM.NextClassID = 8001;
 // Interesting issue - do we need two root objects, one for callables and one for noncallables?
 // Is Array a subtype of Table? They're basically compatible, except arrays renumber their keys; tables never do. :-/
 // No, both are subtypes of Container.
+// No, both are subtypes of Container.
 // Is an array a struct? Are there any predefined struct types? Can structs be callable?
 // How do we let arrays define their own "contains" or "random" methods?
 // Is Bool an enum? Should the type Struct match struct types, or struct instances?
@@ -3221,7 +3222,7 @@ Table.'inverse' returns table(keys=.values, values=.keys)\n\
 \n\
 // == Strings ==\n\
 String.'lines' returns .where{!=\"\\r\"}.splitOn(\"\\n\")\n\
-String.'words' returns .splitOnAny(\" \\t\\n\")\n\
+String.'words' returns .where{!=\"\\r\"}.splitOnAny(\" \\t\\n\")\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
@@ -3283,10 +3284,11 @@ String.'octalDecode' returns .baseDecode[\"0\"..\"7\"]\n\
 \n\
 Int.'decimalEncode' returns .baseEncode[\"0\"..\"9\"]\n\
 String.'decimalDecode' returns .baseDecode[\"0\"..\"9\"]\n\
-String.'toInt' returns .if{.startsWith(\"-\")}\
-{-.tail.baseDecode[\"0\"..\"9\"] }\n\
-else\n\
-{.baseDecode[\"0\"..\"9\"] }\n\
+String.'toInt'\n\
+{\n\
+	.if{.startsWith(\"-\")} {-.tail.baseDecode[\"0\"..\"9\"]}\n\
+	else {.baseDecode[\"0\"..\"9\"]}\n\
+}\n\
 \n\
 'hexEncoding' = $[\"0\"..\"9\", \"a\"..\"f\"]\n\
 \n\
@@ -3411,6 +3413,11 @@ Array.'slice'(Int &'length',Int &'trimEnd') returns\n\
 Array.'slice'['a'..<'b'] returns\n\
 	[ .at(a.clamp(min=0)..<b.clamp(max=.length)) ]\n\
 \n\
+Array.'slices'(Int &'start') returns array(.length+1-start) 'length'->\n\
+{\n\
+  this.slice(start=start, end=start+length)\n\
+}\n\
+\n\
 Array.'slices'(Int &'length') returns array(.length+1-length) 'start'->\n\
 {\n\
   this.slice(start=start, end=start+length)\n\
@@ -3452,12 +3459,25 @@ Array.'splitOutWhere'(Callable 'test') returns .cells.where{.value.(test)}.split
 Array.'splitOn'('value') returns .splitOutWhere{==value}\n\
 Array.'splitOnAny'(Array 'values') returns .splitOutWhere{==any values}\n\
 \n\
+Array.'splitPairsWhere'(Callable 'test')\n\
+{\n\
+  'pairsToSplit' = [[0,1],[1,2],[2,3],etc**.length-1].where{[this.at(.each)].(test)}\n\
+  'allPairs' = [[-1,0], pairsToSplit.each, [this.length-1,-1]]\n\
+  // TODO: fix etc's 1000-element limit so this doesn't need an explicit length\n\
+  allPairs.{[[this.at(.1st.2nd .. .2nd.1st)],[this.at(.2nd.2nd .. .3rd.1st)],etc**.length-1]}\n\
+}\n\
+\n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
 Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
+Array.'tail'(Int 'start') returns .slice(start=start)\n\
+Array.'tails' returns array(.length+1) 'idx'->{ this.tail(start=idx) }\n\
 Array.'tailWhere'('test') returns .slice( start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
 Array.'stem'(Int 'length') returns .slice(length=length)\n\
+Array.'stem'(Int 'end') returns .slice(length=length)\n\
+Array.'stem'(Int 'trim') returns .slice(length=.length-trim)\n\
+Array.'stems' returns array(.length+1) 'idx'->{ this.stem(length=idx) }\n\
 Array.'stemWhere'('test') returns .slice(end=.firstKeyWhere{.!(test)})\n\
 Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
 \n\
