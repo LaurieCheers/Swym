@@ -744,18 +744,46 @@ SWYM.BuildCompoundAssignmentNode = function(operatorName)
 	{
 		if ( lhs && lhs.type === "fnnode" && !lhs.isDecl )
 		{
-			// pass a __mutator={it op rhs} argument to this function
-			var compoundOp = SWYM.NewToken("op", op.pos, operatorName);
-			var compoundNode = compoundOp.behaviour.customParseTreeNode( SWYM.NewToken("name", op.pos, "it"), compoundOp, rhs );
-			var braceOp = SWYM.NewToken("op", op.pos, "{");
-			var braceNode = braceOp.behaviour.customParseTreeNode(undefined, braceOp, compoundNode);
-			var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[braceNode], argNames:["__mutator"]};
+			// parse "lhs.fn += rhs" as "lhs.fn( __mutator = rhs.'(rhs)'->{{ it + (rhs) }} )"
+			
+			var namedBraceOp = SWYM.NewToken("op", op.pos, "{");
+			namedBraceOp.argName = SWYM.NewToken("decl", op.pos, "'(rhs)'", "(rhs)");
+			
+			// this is stupidly complex... :-/
+			var mutatorNode = SWYM.ParseTreeNode(
+				rhs,
+				SWYM.NewToken("op", op.pos, "."),					// rhs.
+				SWYM.ParseTreeNode(
+					undefined,
+					namedBraceOp,									// '(rhs)'->{
+					SWYM.ParseTreeNode(
+						undefined,
+						SWYM.NewToken("op", op.pos, "{"),			// {
+						SWYM.ParseTreeNode(
+							SWYM.NewToken("name", op.pos, "it"),
+							SWYM.NewToken("op", op.pos, operatorName), // it + (rhs)
+							SWYM.NewToken("name", op.pos, "(rhs)")
+						)
+					)
+				)
+			);
+			
+			var result = {type:"fnnode", body:undefined, isDecl:undefined, name:undefined, children:[mutatorNode], argNames:["__mutator"]};
 			
 			return SWYM.CombineFnNodes(lhs, result);
 		}
+		else if ( lhs && lhs.type === "name" && !lhs.isDecl )
+		{
+			// parse "lhs += rhs" as "lhs = lhs + rhs"
+			var copyLhs = SWYM.NewToken("name", lhs.pos, lhs.text);
+			var rhsNode = SWYM.OverloadableParseTreeNode(operatorName)(copyLhs, op, rhs);
+			var fakeOp = SWYM.NewToken("op", op.pos, "=");
+
+			return fakeOp.behaviour.customParseTreeNode(lhs, fakeOp, rhsNode);
+		}
 		else
 		{
-			return SWYM.NonCustomParseTreeNode(lhs, op, rhs);
+			SWYM.LogError(op.pos, "Invalid assignment");
 		}
 	}
 }

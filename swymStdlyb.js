@@ -21,7 +21,6 @@ SWYM.NextClassID = 8001;
 // Interesting issue - do we need two root objects, one for callables and one for noncallables?
 // Is Array a subtype of Table? They're basically compatible, except arrays renumber their keys; tables never do. :-/
 // No, both are subtypes of Container.
-// No, both are subtypes of Container.
 // Is an array a struct? Are there any predefined struct types? Can structs be callable?
 // How do we let arrays define their own "contains" or "random" methods?
 // Is Bool an enum? Should the type Struct match struct types, or struct instances?
@@ -576,74 +575,19 @@ SWYM.operators = {
 		}
 	},
 	"+=": {precedence:50, argTypes:[undefined, SWYM.NumberType], returnType:SWYM.VoidType, infix:true,
-			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("+"),
-			customCompile:function(node, cscope, executable)
-			{
-				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
-				executable.push("#Dup");
-				executable.push("#VariableContents");
-				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
-				executable.push("#Add");
-				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
-				return varType;
-			}
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("+")
 		},
 	"-=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
-			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("-"),
-			customCompile:function(node, cscope, executable)
-			{
-				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
-				executable.push("#Dup");
-				executable.push("#VariableContents");
-				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
-				executable.push("#Sub");
-				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
-				return varType;
-			}
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("-")
 		},
 	"*=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
-			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("*"),
-			customCompile:function(node, cscope, executable)
-			{
-				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
-				executable.push("#Dup");
-				executable.push("#VariableContents");
-				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
-				executable.push("#Mul");
-				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
-				return varType;
-			}
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("*")
 		},
 	"/=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
-			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("/"),
-			customCompile:function(node, cscope, executable)
-			{
-				var varType = SWYM.CompileLValue(node.children[0], cscope, executable);
-				executable.push("#Dup");
-				executable.push("#VariableContents");
-				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
-				executable.push("#Div");
-				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
-				return varType;
-			}
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("/")
 		},
 	"%=": {precedence:50, argTypes:[SWYM.VarType, SWYM.NumberType], infix:true, returnType:SWYM.VoidType,
-			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("%"),
-			customCompile:function(node, cscope, executable)
-			{
-				var varType = SWYM.CompileNode(node.children[0], cscope, executable);
-				executable.push("#Dup");
-				executable.push("#VariableContents");
-				var modType = SWYM.CompileNode(node.children[1], cscope, executable);
-				executable.push("#Mod");
-				executable.push("#VariableAssign");
-				SWYM.TypeCoerce(SWYM.VariableTypeContaining(SWYM.NumberType), varType, node);
-				return varType;
-			}
+			customParseTreeNode:SWYM.BuildCompoundAssignmentNode("%")
 		},
 		
 	// the 'repeat' operator. 10**3 -> 10,10,10
@@ -994,10 +938,10 @@ SWYM.operators = {
 			postfix:function(a,b,op){ var temp = a.value; SWYM.assignmentOp(a,{value:a.value-1},op); return {value:temp}; }
 		},
 	
-	"&bitwise": {precedence:96, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.NumberType, infix:function(a,b){return a&b}, identity:function(){return ~0;} },
-	"|bitwise": {precedence:96, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.NumberType, infix:function(a,b){return a|b}, identity:function(){return 0;} },
-	"^bitwise": {precedence:96, argTypes:[SWYM.NumberType,SWYM.NumberType], returnType:SWYM.NumberType, infix:function(a,b){return a^b} },
-	"~bitwise": {precedence:96, argTypes:[SWYM.NumberType], returnType:SWYM.NumberType, prefix:function(v){return ~v} },
+	"&bitwise": {precedence:96, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.IntType, infix:function(a,b){return a&b}, identity:function(){return ~0;} },
+	"|bitwise": {precedence:96, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.IntType, infix:function(a,b){return a|b}, identity:function(){return 0;} },
+	"^bitwise": {precedence:96, argTypes:[SWYM.IntType,SWYM.IntType], returnType:SWYM.IntType, infix:function(a,b){return a^b} },
+	"~bitwise": {precedence:96, argTypes:[SWYM.IntType], returnType:SWYM.IntType, prefix:function(v){return ~v} },
 
 	"+": {precedence:101, infix:true, customParseTreeNode:SWYM.OverloadableParseTreeNode("+") },
 	"-": {precedence:102, prefixPrecedence:350, infix:true, prefix:true, customParseTreeNode:(function(baseCPTN)
@@ -3222,7 +3166,7 @@ Table.'inverse' returns table(keys=.values, values=.keys)\n\
 \n\
 // == Strings ==\n\
 String.'lines' returns .where{!=\"\\r\"}.splitOn(\"\\n\")\n\
-String.'words' returns .where{!=\"\\r\"}.splitOnAny(\" \\t\\n\")\n\
+String.'words' returns .where{!=\"\\r\"}.splitOnAny(\" \\t\\n\").where{!=\"\"}\n\
 \n\
 Number.'s_plural' returns if(this==1) {\"\"} else {\"s\"}\n\
 \n\
@@ -3469,14 +3413,16 @@ Array.'splitPairsWhere'(Callable 'test')\n\
 \n\
 Array.'tail' returns .atEach[1 ..< .length]\n\
 Array.'tail'(Int 'length') returns .slice( start=(.length-length).clamp(min=0) )\n\
-Array.'tail'(Int 'start') returns .slice(start=start)\n\
+Array.'tail'(Int &'start') returns .slice(start=start)\n\
+Array.'tail'(Int &'trim') returns .slice(start=trim)\n\
 Array.'tails' returns array(.length+1) 'idx'->{ this.tail(start=idx) }\n\
 Array.'tailWhere'('test') returns .slice( start=1+.lastKeyWhere{.!(test)})\n\
 \n\
 Array.'stem' returns .atEach[0 ..< .length-1]\n\
 Array.'stem'(Int 'length') returns .slice(length=length)\n\
-Array.'stem'(Int 'end') returns .slice(length=length)\n\
-Array.'stem'(Int 'trim') returns .slice(length=.length-trim)\n\
+Array.'stem'(Int &'end') returns .slice(end=end)\n\
+Array.'stem'(Int &'last') returns .slice(last=last)\n\
+Array.'stem'(Int &'trim') returns .slice(length=.length-trim)\n\
 Array.'stems' returns array(.length+1) 'idx'->{ this.stem(length=idx) }\n\
 Array.'stemWhere'('test') returns .slice(end=.firstKeyWhere{.!(test)})\n\
 Array.'stemUntil'(Callable 'test') returns .stem(length=.cells.firstWhere{.value.(test)}.key)\n\
@@ -3527,6 +3473,13 @@ Array.'categorizeBy'(Callable 'key')\n\
   }\n\
   result\n\
 }\n\
+Array.'categorizeBy'(Callable 'key')(Callable 'value')\n\
+{\n\
+  'result' = this.map(key).tabulate{this.ElementType.mutableArray[]}\n\
+  forEach(this){ .(key).(result).push(.(value)) }\n\
+  result\n\
+}\n\
+\n\
 Array.'categorize' returns .categorizeBy{it}\n\
 Array.'frequencies' returns .categorize.map{.length}\n\
 Array.'min' returns .reduce ['a','b']-> { a.clamp(max=b) }\n\
@@ -3625,6 +3578,8 @@ Array.'firstKeyWhere'(Callable 'test') returns .cells.firstWhere{.value.(test)}{
 Array.'firstKeyWhere'(Callable 'test', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key} else (else)\n\
 Array.'firstKeyWhere'(Callable 'test', Callable 'then', Callable 'else') returns .cells.firstWhere{.value.(test)}{.key.(then)} else (else)\n\
 Array.'lastKeyWhere'(Callable 'test') returns .cells.lastWhere{.value.(test)}.key\n\
+Array.'lastKeyWhere'(Callable 'test')(Callable 'body') returns .cells.lastWhere{.value.(test)}{.key.(body)}\n\
+Array.'lastKeyWhere'(Callable 'test')(Callable 'body')(Callable 'else') returns .cells.lastWhere{.value.(test)}{.key.(body)} else (else)\n\
 \n\
 Array.'permutations' returns array(length=this.length.factorial) 'idx'->\n\
 {\n\
@@ -3642,6 +3597,14 @@ Array.'permutations' returns array(length=this.length.factorial) 'idx'->\n\
         scratch.swap(a,b)\n\
     }\n\
     scratch//FIXME: cast to const\n\
+}\n\
+\n\
+Array.'subsets'(2.Literal 'length') returns array(.length.choose(2)) 'idx'->\n\
+{\n\
+    'triangleRoot' = (sqrt(idx*8+1)-1)/2\n\
+    'b' = floor(triangleRoot)\n\
+    'a' = floor((triangleRoot-b)*(b+1))\n\
+    [this.at(a),this.at(b+1)]\n\
 }\n\
 \n\
 MutableArray.'swap'(Int 'a', Int 'b')\n\
@@ -3677,6 +3640,10 @@ Cell.Array.'cellValues' returns [.each.value]\n\
 Cell.'toSlice'(&'length') returns .container.slice(start=.key, length=length)\n\
 Cell.'toSlice'(&'end') returns .container.slice(start=.key, end=end)\n\
 Cell.'toSlice'(&'start') returns .container.slice(start=start, end=.key)\n\
+Cell.'stemBefore' returns .container.stem(end=.key)\n\
+Cell.'stemTo' returns .container.stem(last=.key)\n\
+Cell.'tailFrom' returns .container.tail(start=.key)\n\
+Cell.'tailAfter' returns .container.tail(start=.key+1)\n\
 Array.'fenceGaps' returns .cells.{[[.at(0), .at(1)], [.at(1), .at(2)], etc**.length-1]}\n\
 \n\
 Cell.Array.'split' returns .1st.container.splitAt(.map{.key})\n\
