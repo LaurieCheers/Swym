@@ -1590,7 +1590,9 @@ SWYM.ToTerseString = function(value)
 		case "rangeArray":
 		case "lazyArray":
 			var result = "";
-			if( value.length > 10000 )
+			// TODO: this safety check simply means that long strings are broken in Swym.
+			// find a way to be smarter about this?
+/*			if( value.length > 10000 )
 			{
 				for( var Idx = 0; Idx < 10000; Idx++ )
 				{
@@ -1599,12 +1601,12 @@ SWYM.ToTerseString = function(value)
 				result += "..."
 			}
 			else
-			{
+			{*/
 				for( var Idx = 0; Idx < value.length; Idx++ )
 				{
 					result += SWYM.ToTerseString(value.run(Idx));
 				}
-			}
+			//}
 			return result;
 		
 		case "swymClass": case "swymObject": case "closure":
