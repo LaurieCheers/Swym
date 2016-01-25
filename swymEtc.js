@@ -455,7 +455,9 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		}
 		else
 		{
-			SWYM.LogError(parsetree, "Fsckup: Etc body doesn't match!");
+            // Apparently it's an etc expression with only one example.
+		    collected.baseCase = childNode;
+		    collected.exampleChildren = [undefined, [childNode]];
 		}
 	}
 	else
@@ -528,6 +530,13 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 			}
 		}
 	}
+	else if (collected.exampleChildren.length === 0)
+	{
+	    // it's an etc operation with only one term (a basecase).
+	    // For simplicity, let's copy it into the examples.
+	    collected.exampleChildren[1] = [collected.baseCase];
+	    collected.mergedBaseCase = true;
+	}
 
 	for( var childIdx = 0; childIdx < collected.exampleChildren.length; ++childIdx )
 	{
@@ -562,13 +571,17 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		}
 	}
 
+	var body;
 	if( etcOp.type === "fnnode" )
 	{
-		var body = {type:"fnnode", argNames:etcOp.children[0].argNames, children:children, name:etcOp.name};
+	    body = { type: "fnnode", argNames: etcOp.argNames, children: children, name: etcOp.name };
+
+	    // TODO: why was it accessing etcOp.children[0].argNames? Was that just wrong?
+	    // body = { type: "fnnode", argNames: etcOp.children[0].argNames, children: children, name: etcOp.name };
 	}
 	else
 	{
-		var body = {type:"node", op:etcOp, children:children};
+		body = {type:"node", op:etcOp, children:children};
 	}
 
 	return {

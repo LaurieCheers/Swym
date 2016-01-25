@@ -456,7 +456,9 @@ SWYM.TypeUnify = function(typeA, typeB, errorContext)
 		return typeB;
 	}
 
-	if( typeA.tupleTypes !== undefined || typeB.tupleTypes !== undefined )
+	if ((typeA.tupleTypes !== undefined && SWYM.TypeMatches(SWYM.CallableType, typeB)) ||
+        (typeB.tupleTypes !== undefined && SWYM.TypeMatches(SWYM.CallableType, typeA))
+       )
 	{
 		var elementType = SWYM.TypeUnify(
 			SWYM.GetOutType(typeA, SWYM.IntType, errorContext),
@@ -737,7 +739,7 @@ SWYM.ArrayTypeContaining = function(elementType, isMutable, canBake, errorContex
 		memberTypes:{length:lengthType, keys:SWYM.IntArrayType},
 		argType:SWYM.IntType,
 		outType:outType,
-		debugName:"Array("+SWYM.TypeToString(outType)+")"
+		debugName:(isMutable?"MutableArray":"Array")+"("+SWYM.TypeToString(outType)+")"
 	};
 	
 	if( elementType.multivalueOf !== undefined )

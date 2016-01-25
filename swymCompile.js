@@ -7,29 +7,29 @@ SWYM.Compile = function(parsetree)
 
 	if( !resultType || resultType.nativeType !== "Void" )
 	{
-		if( resultType && resultType.multivalueOf !== undefined )
-		{
-			executable.push("#ToMultiDebugString");
-		}
-		else if( !resultType || resultType.nativeType !== "Void" )
-		{
-			executable.push("#ToDebugString");
-		}
-		
-		executable.push("#Native", 1, function(value)
-		{
-			if( SWYM.doFinalOutput )
-			{
-				if( value !== undefined )
-				{
-					SWYM.DisplayOutput(value.data);
-				}
-				else
-				{
-					SWYM.LogError(0, "Fsckup: Program result was undefined.");
-				}
-			}
-		});
+	    if (resultType && resultType.multivalueOf !== undefined)
+	    {
+	        executable.push("#Native", 1, function (value)
+	        {
+	            if (SWYM.doFinalOutput)
+	            {
+	                for (var Idx = 0; Idx < value.length; Idx++)
+	                {
+	                    SWYM.DisplayValue(value.run(Idx));
+	                }
+	            }
+	        });
+	    }
+	    else
+	    {
+	        executable.push("#Native", 1, function (value)
+	        {
+	            if (SWYM.doFinalOutput)
+	            {
+	                SWYM.DisplayValue(value);
+	            }
+	        });
+	    }
 	}
 
 	return executable;
@@ -65,7 +65,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		}
 		
 		SWYM.pushEach([
-			"#Load", "<etcIndex>",
+			"#Load", "__etcIndex",
 			"#EtcExpansion", childExecutable
 		], executable);
 		
@@ -106,7 +106,7 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		else if ( parsetree.etcExpandingSequence )
 		{
 			executable.push("#Load");
-			executable.push("<etcIndex>");
+			executable.push("__etcIndex");
 			executable.push("#Load");
 			executable.push("<etcExpansion>");
 			executable.push("#Native");
@@ -861,15 +861,22 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 	
 	var numArgsPushed = 0;
 
-	for( var Idx = 0; Idx < data.inputArgNameList.length; Idx++ )
+	for (var Idx = 0; Idx < data.expectedArgNamesByIndex.length; Idx++)
 	{
 		var inputArgName = data.inputArgNameList[Idx];
-		if( inputArgName === undefined )
-		{
-			// default parameter, presumably
-			continue;
-		}
 		var expectedArgName = data.expectedArgNamesByIndex[Idx];
+		if (inputArgName === undefined)
+		{
+			// default parameter
+		    var defaultValueNode = theFunction.expectedArgs[expectedArgName].defaultValueNode;
+		    data.inputArgNameList[Idx] = expectedArgName;
+		    var defaultValueExecutable = [];
+		    data.inputArgExecutables[inputArgName] = defaultValueExecutable;
+
+		    // TODO: in allowing default arguments to access the caller's scope,
+		    // this breaks the old behaviour, where default arguments could access other arguments
+		    data.inputArgTypes[inputArgName] = SWYM.CompileNode(defaultValueNode, cscope, defaultValueExecutable);
+		}
 		var tempType = data.inputArgTypes[inputArgName];
 
 		argIndices[Idx] = Idx;
@@ -1047,7 +1054,7 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			{
 				bodyCScope[argNamesPassed[Idx]] = argTypesPassed[Idx];
 			}
-			bodyCScope["__default"] = {redirect:"this"};
+			bodyCScope["__default"] = { redirect: "this" };
 
 			var oldIsCompiling = precompiled.isCompiling;
 			
@@ -2701,7 +2708,9 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	var haltExecutable = [];
 	var haltCondition = undefined;
 	var limitTimesExecutable = undefined;
-	
+
+	cscope["__etcIndex"] = SWYM.IntType;
+
 	if( parsetree.etcType === "etc**" )
 	{
 		limitTimesExecutable = [];
@@ -2841,7 +2850,16 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	}
 	else
 	{
-		var elementType = SWYM.CompileNode(parsetree.body.children[1], etcScope, etcExecutable);
+	    var elementType;
+	    if (parsetree.body.children[1] !== undefined)
+	    {
+	        elementType = SWYM.CompileNode(parsetree.body.children[1], etcScope, etcExecutable);
+	    }
+	    else
+	    {
+	        etcExecutable = initialExecutable;
+	        elementType = initialType;
+	    }
 		
 		if( returnType === undefined && parsetree.body.op.behaviour.getReturnType )
 		{
@@ -2868,7 +2886,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 						type:"closureInfo",
 						debugName:"lazy etc",
 						debugText:"<etc expression>", //FIXME
-						argName:"<etcIndex>",
+						argName:"__etcIndex",
 						body:etcExecutable // This won't actually work
 					});
 					executable.push("#Native");

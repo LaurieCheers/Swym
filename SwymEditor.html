@@ -33,7 +33,7 @@
 		border-width: 1;
 		border-color: #AAAAAA;
 	}
-	div.outputcontainer{
+    div.outputcontainer{
 		background-color: #BCBCBC;
 		display: inline-block;
 		padding-top: 5px;
@@ -47,9 +47,6 @@
 		width: 100px;
 		vertical-align: top;
 		padding-right: 5px;
-	}
-	textarea.outputarea{
-		background-color: #CCCCCC;
 	}
 	code{
 		color: #0044AA;
@@ -77,6 +74,34 @@
 	tr.odd{
 		background-color: #F0F0F0;
 	}
+	.swymError{
+        font-family: 'Lucida Sans Typewriter', 'Lucida Typewriter', 'Courier New', Courier, monospace;
+		font-size: 9pt;
+		color: #440000;
+        background-color:#FFAA88;
+	}
+	.swymText{
+        font-family: 'Lucida Sans Typewriter', 'Lucida Typewriter', 'Courier New', Courier, monospace;
+		font-size: 9pt;
+	}
+	.swymValue{
+        font-family: 'Lucida Sans Typewriter', 'Lucida Typewriter', 'Courier New', Courier, monospace;
+		font-size: 9pt;
+	}
+	.swymKeywordValue{
+        color:#000088;
+        font-weight:bold;
+	}
+	.swymNumberValue{
+        color:#008888;
+	}
+	.swymStringValue{
+        color:#FF0000;
+	}
+    .swymValue a{
+        text-decoration:underline;
+        color:#000088;
+    }
 </style>
 <title>Swym Interpreter</title>
 <script language=javascript src="swymloader.js"></script>
@@ -356,37 +381,213 @@ function saveURL()
 	window.location.href = "SwymDisplay.html?" + escape(interpSource.value);
 }
 
-function getTextfields(div)
+function displayOutput(text)
 {
-		var destText;
-		
-		for( var Idx = 0; Idx < div.childNodes.length; Idx++ )
-		{
-			var nodeI = div.childNodes[Idx];
-			if ( nodeI && nodeI.type == "textarea" )
-			{
-/*				if ( !sourceText )
-				{
-					sourceText = nodeI;
-				}
-				else
-				{*/
-					destText = nodeI;
-//					break;
-//				}
-			}
-		}
-		
-		return {dest:destText};
+    var newChild = addElement(document.getElementById("swymscratcharea"), "SPAN", text);
+    newChild.className = "swymText";
+}
+
+function displayError(e)
+{
+    var newChild = addElement(document.getElementById("swymscratcharea"), "SPAN", e);
+    newChild.className = "swymError";
+}
+
+function displayRichValue(v)
+{
+    var scratchNode = document.getElementById("swymscratcharea");
+    var newChild = document.createElement("SPAN");
+    newChild.className = "swymValue";
+
+    displayRichValueElements(v, newChild);
+    addElement(newChild, "BR");
+
+    scratchNode.appendChild(newChild);
+}
+
+function displayRichValueElements(value, parentNode)
+{
+    var newChild = document.createElement("SPAN");
+    parentNode.appendChild(newChild);
+    switch (typeof value)
+    {
+        case "undefined":
+        case "boolean":
+            newChild.className = "swymKeywordValue";
+            newChild.innerText = "" + value;
+            return;
+        case "number":
+            newChild.className = "swymNumberValue";
+            newChild.innerText = "" + value;
+            return;
+        case "string":
+            newChild.className = "swymStringValue";
+            newChild.innerText = "jsstring(\"" + value + "\")";
+            return;
+    }
+
+    switch (value.type)
+    {
+        case "string":
+            newChild.className = "swymStringValue";
+            newChild.innerText = SWYM.ToDebugString(value);
+            break;
+
+        case "table":
+            newChild.innerText = "{";
+            if (value.keys)
+            {
+                for (var Idx = 0; Idx < value.keys.length; Idx++)
+                {
+                    if (Idx > 0)
+                        addElement(parentNode, "SPAN", ",");
+
+                    var key = value.keys.run(Idx);
+                    displayRichValueElements(key, parentNode);
+                    addElement(parentNode, "SPAN", ":");
+                    displayRichValueElements(value.run(key), parentNode);
+                }
+            }
+            else
+            {
+                var firstMember = true;
+                for (var memberName in value.data)
+                {
+                    if (firstMember)
+                        firstMember = false;
+                    else
+                        addElement(parentNode, "SPAN", ",");
+
+                    addElement(parentNode, "SPAN", memberName);
+                    addElement(parentNode, "SPAN", ":");
+                    displayRichValueElements(value.data[memberName], parentNode);
+                }
+            }
+            addElement(parentNode, "SPAN", "}");
+            break;
+
+        case "struct":
+            {
+                if (value.structType.toDebugString !== undefined)
+                {
+                    addElement(parentNode, "SPAN", SWYM.ToTerseString(value.structType.toDebugString(value)));
+                }
+                else
+                {
+                    newChild.innerText = value.structType.debugName + "(";
+                    var firstMember = true;
+                    for (var memberName in value.members)
+                    {
+                        if (firstMember)
+                            firstMember = false;
+                        else
+                            addElement(parentNode, "SPAN", ",");
+
+                        addElement(parentNode, "SPAN", memberName);
+                        addElement(parentNode, "SPAN", "=");
+                        displayRichValueElements(value.members[memberName], parentNode);
+                    }
+                    addElement(parentNode, "SPAN", ")");
+                }
+            }
+            break;
+
+        case "jsArray":
+            newChild.innerText = "[";
+
+            if (value.length > 0)
+            {
+                var firstEntry = value.run(0);
+                displayRichValueElements(firstEntry, parentNode);
+
+                for (var Idx = 1; Idx < value.length; Idx++)
+                {
+                    addElement(parentNode, "SPAN", ",");
+
+                    var element = value.run(Idx);
+                    displayRichValueElements(element, parentNode);
+                }
+            }
+
+            addElement(parentNode, "SPAN", "]");
+            break;
+
+        case "lazyArray":
+            {
+                newChild.innerText = "[";
+                displayRichValueElements(value.run(0), parentNode);
+                for (var Idx = 1; Idx < value.length && Idx < 3; ++Idx)
+                {
+                    addElement(parentNode, "SPAN", ",");
+                    displayRichValueElements(value.run(Idx), parentNode);
+                }
+                if (value.length > 3)
+                {
+                    addElement(parentNode, "SPAN", ",");
+                    displayDeferredElements("...", parentNode, function (placeholderNode)
+                    {
+                        for (var Idx = 3; Idx + 1 < value.length; Idx++)
+                        {
+                            displayRichValueElements(value.run(Idx), placeholderNode);
+                            addElement(placeholderNode, "SPAN", ",");
+                        }
+                        displayRichValueElements(value.run(Idx), placeholderNode);
+                    });
+                }
+                addElement(parentNode, "SPAN", "]");
+            }
+            break;
+
+        case "rangeArray":
+            {
+                if (value.length <= 2)
+                {
+                    newChild.innerText = SWYM.ToDebugString(value);
+                    return;
+                }
+                newChild.innerText = "[";
+                displayRichValueElements(value.first, parentNode);
+                displayDeferredElements("..", parentNode, function(placeholderNode)
+                {
+                    for (var Idx = 1; Idx+1 < value.length; Idx++)
+                    {
+                        addElement(placeholderNode, "SPAN", ",");
+                        displayRichValueElements(value.run(Idx), placeholderNode);
+                    }
+                    addElement(placeholderNode, "SPAN", ",");
+                });
+                displayRichValueElements(value.last, parentNode);
+                addElement(parentNode, "SPAN", "]");
+                break;
+            }
+        default:
+            newChild.innerText = SWYM.ToDebugString(value);
+            break;
+    }
+}
+
+function displayDeferredElements(deferText, parentNode, populate)
+{
+    var placeholderNode = addElement(parentNode, "SPAN", "");
+    var hyperlinkNode = addElement(parentNode, "A", deferText);
+    hyperlinkNode.onclick = function ()
+    {
+        populate(placeholderNode);
+        hyperlinkNode.parentNode.removeChild(hyperlinkNode);
+    };
+}
+
+function addElement(parentNode, elementType, text)
+{
+    var newElement = document.createElement(elementType);
+    parentNode.appendChild(newElement);
+    if(text !== undefined)
+        newElement.innerText = text;
+    return newElement;
 }
 
 function runDemo(div)
 {
-	//var theDiv = document.getElementById(divId);
-	var fields = getTextfields(div);
-		
-	fields.dest.value = "...waiting...";
-	
 	var scratchNode = document.getElementById("swymscratcharea");
 	while(scratchNode.firstChild)
 	{
@@ -405,18 +606,20 @@ function runDemo(div)
 	var sourceCode = SWYM.editor.getValue();
 	
 	// call out to the main "eval" method
-	SWYM.DisplayOutput = function(a){ fields.dest.value = a; SWYM.DisplayOutput = function(b){ fields.dest.value += b; }; };
-	SWYM.DisplayError = function(e){ fields.dest.value = e; SWYM.DisplayOutput = function(){}; };
+	SWYM.DisplayValue = displayRichValue;
+	SWYM.DisplayOutput = function (a) { displayOutput(a); SWYM.DisplayOutput = function (b) { displayOutput(b); }; };
+	SWYM.DisplayError = function (e) { displayError(e); SWYM.DisplayOutput = function () { }; };
 	SWYM.FullEval(sourceCode);
 	SWYM.DisplayOutput("");
 }
 
 function clearOutput(div)
 {
-	//var theDiv = document.getElementById(divId);
-	var fields = getTextfields(div);
-	
-	fields.dest.value = "";
+    var scratchNode = document.getElementById("swymscratcharea");
+    while (scratchNode.firstChild)
+    {
+        scratchNode.removeChild(scratchNode.firstChild);
+    }
 }
 </script>
 </head>
@@ -428,15 +631,14 @@ function clearOutput(div)
 <a href="http://cheersgames.com/swym/wiki.html">Documentation Wiki</a>
 </div>
 <div style="display:table-row;">
-  <div style="display:table-cell;">
-    <div class=outputcontainer>
-	  <div id="editor"></div><br>
-      <button type=button style="vertical-align: top;" onclick='runDemo(this.parentNode);'><div style="display:inline-block; vertical-align:middle;"><img src="play.png"></div>Run</button><br>
-	  <div id=swymscratcharea>
-	  </div>
-      <textarea cols=75 rows=10 class=outputarea id=outputbox readonly="yes"></textarea>
+    <div style="display:table-cell;">
+        <div class=outputcontainer>
+          <div id="editor"></div><br>
+          <button type=button style="vertical-align: top;" onclick='runDemo(this.parentNode);'><div style="display:inline-block; vertical-align:middle;"><img src="play.png"></div>Run</button><br>
+          <div id=swymscratcharea style="width:600px; max-width:600px; height:200px; overflow-y:scroll; word-wrap:break-word; background-color: #CCCCCC;">
+          </div>
+        </div>
     </div>
-  </div>
-  <div class=autocompleteBlock id=autocompleteBlock></div>
+    <div class=autocompleteBlock id=autocompleteBlock></div>
 </div>
 </body>

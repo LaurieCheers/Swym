@@ -107,11 +107,14 @@ function runDemo(div)
 		
 	fields.dest.value = "...waiting...";
 
-	var baseURL = window.location.href;
-	var cutIndex = baseURL.indexOf("?");
-	if( cutIndex >= 0 )
-		baseURL = baseURL.slice(0, cutIndex);
-	window.history.replaceState( {} , 'Swym Interpreter', baseURL + "?" + escape(fields.source.value) );	
+	if (document.origin !== "null")
+	{
+	    var baseURL = window.location.href;
+	    var cutIndex = baseURL.indexOf("?");
+	    if (cutIndex >= 0)
+	        baseURL = baseURL.slice(0, cutIndex);
+	    window.history.replaceState({}, 'Swym Interpreter', baseURL + "?" + escape(fields.source.value));
+	}
 	
 	// call out to the main "eval" method
 	SWYM.DisplayOutput = function(a){ fields.dest.value = a; SWYM.DisplayOutput = function(b){ fields.dest.value += b; }; };

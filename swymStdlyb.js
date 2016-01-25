@@ -2357,7 +2357,27 @@ SWYM.DefaultGlobalCScope =
 				}
 			}
 		}],
-		
+
+	"fn#MutableArray": [{
+	    expectedArgs: { "this": { index: 0, typeCheck: SWYM.TypeType } },
+	    customCompileWithoutArgs: true,
+	    customCompile: function (argTypes, cscope, executable, errorNode, argExecutables)
+	    {
+	        if (!argTypes[0] || !argTypes[0].baked || argTypes[0].baked.type !== "type")
+	        {
+	            SWYM.LogError(0, "The first argument to 'MutableArray' must be a type.");
+	            return SWYM.ArrayTypeContaining(SWYM.AnyType, true, false);
+	        }
+	        else
+	        {
+	            var arrayType = SWYM.ArrayTypeContaining(argTypes[0].baked, true, false);
+	            executable.push("#Literal");
+	            executable.push(arrayType);
+	            return SWYM.BakedValue(arrayType);
+	        }
+	    }
+	}],
+
 	"fn#mutableCopy":[{  expectedArgs:{ "this":{index:0, typeCheck:SWYM.ArrayType} },
 			customCompile:function(argTypes, cscope, executable, errorNode, argExecutables)
 			{
@@ -2541,7 +2561,7 @@ SWYM.DefaultGlobalCScope =
 	"fn#array":[{  expectedArgs:{
 			"length":{index:0, typeCheck:SWYM.IntType},
 			"at":{index:1, typeCheck:SWYM.CallableType},
-			"isLazy":{index:2, typeCheck:SWYM.BoolType, defaultValueNode:SWYM.NewToken("literal", -1, "false", false)}
+			"isLazy":{index:2, typeCheck:SWYM.BoolType, defaultValueNode:SWYM.NewToken("name", -1, "false")}
 			//"__default":{index:0, typeCheck:{type:"union", subTypes:[{type:"jsArray"}, {type:"string"}, {type:"json"}]}}, "__rhs":{index:1, typeCheck:{type:"union", subTypes:[{type:"string"}, {type:"number"}]}}
 		},
 		customCompile:function(argTypes, cscope, executable, errorNode)
@@ -2948,11 +2968,11 @@ Anything.'print' { output($this) }\n\
 Anything.'println' { output(\"$this\\n\") }\n\
 Anything.'trace' { output(\"$$this\\n\") }\n\
 \n\
-'if'(MaybeFalse 'cond', Callable 'then', Callable 'else') returns\n\
-	void.if{ cond }(then) else (else)\n\
+'if'(MaybeFalse 'cond', Callable 'then', Callable 'else', 'default'=__default) returns\n\
+	default.if{ cond }(then) else (else)\n\
 \n\
-'if'(MaybeFalse 'cond', Callable 'then') returns\n\
-	void.if{ cond }(then) else { __novalues }\n\
+'if'(MaybeFalse 'cond', Callable 'then', 'default'=__default) returns\n\
+	default.if{ cond }(then) else { __novalues }\n\
 \n\
 Anything.'if'(Callable 'test', Callable 'then') returns\n\
 	.if(test)(then) else { void }\n\
@@ -3277,6 +3297,7 @@ Array.'#ndLast' returns .atEnd(#-1)\n\
 Array.'#rdLast' returns .atEnd(#-1)\n\
 Array.'#thLast' returns .atEnd(#-1)\n\
 Array.'last' returns .atEnd(0)\n\
+Array.'eth'('etcIndex' = __etcIndex) returns .at(etcIndex)\n\
 ['lhs','rhs'].'lhs' returns lhs\n\
 ['lhs','rhs'].'rhs' returns rhs\n\
 \n\
@@ -3321,14 +3342,12 @@ Array.'tabulate'(Callable 'value')\n\
   table(keys=this, values=this.map(value))\n\
 }\n\
 Array.'each'('fn') returns [.each.(fn)]\n\
-Array.'no' { yield .none }\n\
-Array.'oneOrMore' { yield .some }\n\
-Array.'all'('body') returns [.all.(body)]\n\
-Array.'some'('body') returns [.some.(body)]\n\
-Array.'none'('body') returns [.none.(body)]\n\
-Array.'no'('body') returns [.no.(body)]\n\
+Array.'all'('body') returns .!containsWhere{.!(body)}\n\
+Array.'some'('body') returns .containsWhere(body)\n\
+Array.'none'('body') returns .!containsWhere(body)\n\
+Array.'no'('body') returns .!containsWhere(body)\n\
 \n\
-Array.'contains'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
+Array.'containsWhere'(Block 'test') returns .1st.(test) || .2nd.(test) || etc;\n\
 Array.'containsValue'('target') returns (.1st == target) || (.2nd == target) || etc;\n\
 \n\
 Array.'where'('test') returns .map{ .if(test) }\n\
