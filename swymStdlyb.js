@@ -1371,7 +1371,8 @@ SWYM.DefaultGlobalCScope =
 	"true": SWYM.BakedValue(true),
 	"false": SWYM.BakedValue(false),
 	"void": {type:"type", nativeType:"Void", debugName:"Void", baked:null},
-	
+	"__default": SWYM.BakedValue(null),
+
 	"Callable": SWYM.BakedValue(SWYM.CallableType),
 	"Type": SWYM.BakedValue(SWYM.TypeType),
 	"Container": SWYM.BakedValue(SWYM.ContainerType),
@@ -2569,28 +2570,22 @@ SWYM.DefaultGlobalCScope =
 			var elementExecutable = [];
 			var elementType = SWYM.CompileLambdaInternal(argTypes[1], SWYM.IntType, elementExecutable, errorNode);
 
-			executable.push("#Native");
-			
-			if( argTypes[2] === undefined )
-				executable.push(2);
-			else
-				executable.push(3);
-
 			if( elementType && elementType.multivalueOf !== undefined )
 			{
-				SWYM.LogError(errorNode, "Invalid array constructor - element type cannot be a multivalue");
+			    SWYM.LogError(errorNode, "Invalid array constructor - element getter may not return a multivalue");
+			    return SWYM.ArrayTypeContaining(elementType.multivalueOf);
 			}
-			else
+
+			executable.push("#Native");
+			executable.push(3);
+			executable.push(function(len, lookup, lazy)
 			{
-				executable.push(function(len, lookup, lazy)
-				{
-					return {
-						type:"lazyArray",
-						length:len,
-						run:function(key) {return SWYM.ClosureExec(lookup,key,elementExecutable);}
-					};
-				});
-			}
+				return {
+					type:"lazyArray",
+					length:len,
+					run:function(key) {return SWYM.ClosureExec(lookup,key,elementExecutable);}
+				};
+			});
 			
 			if( argTypes[2] && argTypes[2].baked == true )
 			{

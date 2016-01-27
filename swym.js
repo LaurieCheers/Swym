@@ -172,7 +172,7 @@ SWYM.EvalStdlyb = function()
 // html pages may override this to display richer information about the value
 SWYM.DisplayValue = function(v)
 {
-    SWYM.DisplayOutput(SWYM.ToDebugString(v)+"\n");
+    SWYM.DisplayOutput(SWYM.ToDebugString(v));
 };
 
 SWYM.Eval = function(readsource, keepScope)

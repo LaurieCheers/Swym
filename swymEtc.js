@@ -495,7 +495,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	//
 	// ok, I guess that answers both questions. User just has to keep that in mind if they want to rewrite x -> 1.
 	// hopefully it should be fairly clear that it changes the meaning.
-	if( collected.exampleChildren.length == 2 )
+	if (collected.recursiveIdx !== undefined && collected.exampleChildren.length == 2)
 	{
 		var examples = collected.exampleChildren[1-collected.recursiveIdx];
 
@@ -574,10 +574,14 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	var body;
 	if( etcOp.type === "fnnode" )
 	{
-	    body = { type: "fnnode", argNames: etcOp.argNames, children: children, name: etcOp.name };
-
-	    // TODO: why was it accessing etcOp.children[0].argNames? Was that just wrong?
-	    // body = { type: "fnnode", argNames: etcOp.children[0].argNames, children: children, name: etcOp.name };
+	    if (etcOp.children[0].type === "fnnode" && etcOp.name === etcOp.children[0].name)
+	    {
+	        body = { type: "fnnode", argNames: etcOp.children[0].argNames, children: children, name: etcOp.name };
+	    }
+	    else
+	    {
+	        body = { type: "fnnode", argNames: etcOp.argNames, children: children, name: etcOp.name };
+	    }
 	}
 	else
 	{

@@ -13,8 +13,12 @@ SWYM.Compile = function(parsetree)
 	        {
 	            if (SWYM.doFinalOutput)
 	            {
-	                for (var Idx = 0; Idx < value.length; Idx++)
+	                if(value.length > 0)
+	                    SWYM.DisplayValue(value.run(0));
+
+	                for (var Idx = 1; Idx < value.length; Idx++)
 	                {
+	                    SWYM.DisplayOutput("\n");
 	                    SWYM.DisplayValue(value.run(Idx));
 	                }
 	            }
@@ -1053,8 +1057,10 @@ SWYM.CompileFunctionOverload = function(fnName, data, cscope, executable)
 			for( var Idx = 0; Idx < argNamesPassed.length; Idx++ )
 			{
 				bodyCScope[argNamesPassed[Idx]] = argTypesPassed[Idx];
-			}
-			bodyCScope["__default"] = { redirect: "this" };
+
+                if(argNamesPassed[Idx] === "this")
+    				bodyCScope["__default"] = { redirect: "this" };
+            }
 
 			var oldIsCompiling = precompiled.isCompiling;
 			
@@ -1794,8 +1800,8 @@ SWYM.CompileLambdaInternalEntry = function(compileInfo, argType, executable, err
 	if( argNode !== undefined && argNode.type === "decl" )
 	{
 		argName = argNode.value;
-		innerCScope["__default"] = undefined;
-		innerCScope["it"] = undefined;
+		innerCScope["__default"] = SWYM.VoidType;
+		innerCScope["it"] = SWYM.VoidType;
 	}
 	else if ( argNode !== undefined && argNode.op !== undefined && (argNode.op.text === "[" || argNode.op.text === "{") )
 	{
