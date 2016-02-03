@@ -111,7 +111,7 @@ SWYM.EtcFindBestMatch = function(leftTerm, possibleTerms)
 	return bestIdx;
 }
 
-SWYM.CloneNode = function(node, newChildren)
+SWYM.CloneNode = function(node, newChildren, etcId, etcExpansionId)
 {
 	if ( !newChildren )
 	{
@@ -121,9 +121,9 @@ SWYM.CloneNode = function(node, newChildren)
 	}
 	
 	if( node.type === "node" )
-		return {type:"node", text:node.text, op:node.op, children:newChildren};
+	    return { type: "node", pos: node.pos, identity: node.identity, text: node.text, op: node.op, children: newChildren, etcExpansionId: etcExpansionId, etcId:etcId };
 	else if ( node.type === "fnnode" )
-		return {type:"fnnode", name:node.name, children:newChildren, argNames:node.argNames};
+	    return { type: "fnnode", pos: node.pos, identity: node.identity, name: node.name, argNames: node.argNames, children: newChildren, etcExpansionId: etcExpansionId, etcId:etcId };
 	else
 		SWYM.LogError(0, "Fsckup: invalid node for CloneNode");
 }
@@ -196,15 +196,51 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		return false;
 	
 	var baseMatch = SWYM.EtcMatchesExceptChildren(leftTerm, rightTerm);
-	if ( baseMatch )
+	if ( baseMatch !== false )
 	{
-		// recurse to merge the children
+	    if (leftTerm.etcExpandingSequence !== undefined && rightTerm.etcSequence !== undefined)
+	    {
+	        leftTerm.etcExpandingSequence.push(rightTerm.etcSequence);
+
+	        // continuing an expanding sequence term
+	        return {
+	            type: "literal",
+	            text: leftTerm.text + "(" + rightTerm.text + ")",
+	            etcExpandingSequence: leftTerm.etcExpandingSequence,
+	            etcId: leftTerm.etcId
+	        };
+	    }
+	    else if (leftTerm.etcExpansionId !== undefined)
+	    {
+	        // if this is an expanding expression, rightTerm should be the next step in the expansion.
+	        // merge the whole rightTerm together, then merge that with leftTerm.
+	        var collected = { op: leftTerm.op? leftTerm.op: leftTerm, exampleChildren: [], finalExample: [], afterEtc: false, recursiveIdx: 0 };
+	        SWYM.CollectEtcRec(rightTerm, collected);
+
+	        var mergeResult = collected.baseCase;
+	        for (var Idx = 0; Idx < collected.exampleChildren.length && mergeResult !== false; ++Idx)
+	        {
+	            mergeResult = SWYM.MergeEtc(mergeResult, collected.exampleChildren[1][Idx]);
+	        }
+
+	        if (mergeResult !== false)
+	            mergeResult = SWYM.MergeEtc(leftTerm.children[1], mergeResult);
+
+	        if (mergeResult !== false)
+	        {
+	            return SWYM.CloneNode(leftTerm, [SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergeResult], leftTerm.etcId, leftTerm.etcExpansionId);
+	        }
+
+	        return false;
+	    }
+
+	    // recurse to merge the children
 		if( rightTerm.type === "node" || rightTerm.type === "fnnode" ) // and by implication, leftTerm is a node too (because they matched)
 		{
-			var newChildren = [];
+		    var newChildren = [];
 			for( var Idx = 0; Idx < rightTerm.children.length; Idx++ )
 			{
-				var mergeResult;
+			    var mergeResult;
 
 				if ( leftTerm.etcExpandAround === Idx && nth > 1 )
 				{
@@ -255,10 +291,10 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 				}
 
 				// differences in children - make a new node
-				return SWYM.CloneNode(leftTerm, newChildren);
+				return SWYM.CloneNode(leftTerm, newChildren, leftTerm.etcId, leftTerm.etcExpansionId);
 			}
 		}
-		else if ( baseMatch !== true )
+		else if ( baseMatch !== true ) // i.e. baseMatch !== false and !== true: it's a partial match.
 		{
 			if( leftTerm.etcExpandingSequence !== undefined )
 			{
@@ -269,7 +305,6 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 					type:"literal",
 					text:leftTerm.text+"("+rightTerm.text+")",
 					etcExpandingSequence:leftTerm.etcExpandingSequence,
-					expandingId:etcId,
 					etcId:leftTerm.etcId
 				};
 			}
@@ -292,7 +327,6 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 					type:"literal",
 					text:"("+leftTerm.text+")("+rightTerm.text+")",
 					etcExpandingSequence:etcExpandingSequence,
-					expandingId:etcId,
 					etcId:leftTerm.etcId
 				};
 			}
@@ -341,9 +375,11 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 		return rightTerm;
 	}
 	
+    // Base match has failed, let's pick up the pieces...
+
 	if( rightTerm.type === "node" || rightTerm.type === "fnnode" )
 	{
-		// parentheses have no effect and can be ignored
+		// parentheses have no effect and can be ignored. Allows us to match x*(x+1)*etc
 		if( rightTerm.op && rightTerm.op.text === "(parentheses())" )
 		{
 			return SWYM.MergeEtc(leftTerm, rightTerm.children[0], nth, etcId);
@@ -383,28 +419,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 			
 			var mergedChild = SWYM.MergeEtc(leftTerm, mergedRightChildren, nth, etcId);
 
-			if( rightTerm.type === "node" )
-			{
-				return {type:"node",
-					pos:rightTerm.pos,
-					identity:rightTerm.identity,
-					text:rightTerm.text,
-					op:rightTerm.op,
-					children:[SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergedChild],
-					etcExpansionId:expansionId,
-					etcId:etcId};
-			}
-			else // rightTerm.type === "fnnode"
-			{
-				return {type:"fnnode",
-					pos:rightTerm.pos,
-					identity:rightTerm.identity,
-					name:rightTerm.name,
-					argNames:rightTerm.argNames,
-					children:[SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergedChild],
-					etcExpansionId:expansionId,
-					etcId:etcId};
-			}
+			return SWYM.CloneNode(rightTerm, [SWYM.NewToken("name", 0, "<etcExpansionCurrent>"), mergedChild], etcId, expansionId);
 		}
 	}
 
@@ -500,7 +515,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		var examples = collected.exampleChildren[1-collected.recursiveIdx];
 
 		var merged = collected.baseCase;
-		for( var Idx = 0; Idx < examples.length; Idx++ )
+		for( var Idx = 0; Idx < examples.length && merged !== false; Idx++ )
 		{
 			merged = SWYM.MergeEtc(merged, examples[Idx], Idx+1, etcId);
 		}

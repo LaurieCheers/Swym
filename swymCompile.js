@@ -480,7 +480,7 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 		
 	for( var Idx = 0; Idx < overloads.length; ++Idx )
 	{
-		var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode, false);
+	    var overloadResult = SWYM.TestFunctionOverload(fnName, args, cscope, overloads[Idx], isMulti, inputArgTypes, inputArgExecutables, fnNode, false);
 		
 		if( overloadResult.error === undefined )
 		{
@@ -608,10 +608,20 @@ SWYM.RecordErrorOfQuality = function(overloadResult, quality)
 }
 
 // returns {error:<an error>, executable:<an executable>, returnType:<a return type>}
-SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, errorNode, isErrorReport)
+SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti, inputArgTypes, inputArgExecutables, fnNode, isErrorReport)
 {
-	var overloadResult = {theFunction:theFunction, error:undefined, executable:[], typeChecks:{}, returnType:undefined, quality:0};
-	
+    var overloadResult = { theFunction: theFunction, error: undefined, executable: [], typeChecks: {}, returnType: undefined, quality: 0 };
+
+    // if this needs to have a __identity argument, ignore overloads without one
+    if (fnNode.etcId !== undefined && theFunction.expectedArgs.__identity === undefined)
+    {
+        if (SWYM.RecordErrorOfQuality(overloadResult, 1)) // very bad match
+        {
+            overloadResult.error = "Function '" + fnName + "' can't form an etc sequence because it has no '__identity' argument.";
+            return overloadResult;
+        }
+    }
+
 	// surely we should precompute this information?
 	var expectedArgNamesByIndex = [];
 	var numArgs = 0;
@@ -845,7 +855,7 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
 	overloadResult.inputArgExecutables = inputArgExecutables;
 	overloadResult.theFunction = theFunction;
 	overloadResult.isMulti = isMulti;
-	overloadResult.errorNode = errorNode;
+	overloadResult.errorNode = fnNode;
 	return overloadResult;
 }
 
@@ -2988,7 +2998,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 SWYM.GetFunctionIdentity = function(parsetree, cscope)
 {
 	var unusedExecutable = [];
-	var chosenFunction = {};
+	var chosenFunction = { __identity:true };
 	SWYM.CompileFunctionCall(parsetree, cscope, unusedExecutable, chosenFunction);
 	
 	if( chosenFunction.theFunction === undefined )
