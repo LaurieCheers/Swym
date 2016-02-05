@@ -47,6 +47,8 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		return SWYM.VoidType;
 	}
 
+	var identityValue = undefined;
+
 	if( parsetree.etcExpansionId !== undefined )
 	{
 		var childExecutable = [];
@@ -61,15 +63,17 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 				cscope["<etcExpansionCurrent>"] = SWYM.ToMultivalueType(SWYM.DontCareType); //FIXME
 			}
 			
-			SWYM.pushEach(["#Native", 0, parsetree.op.behaviour.identity], executable);
+			var identityValue = parsetree.op.behaviour.identity;
+			SWYM.pushEach(["#Native", 0, identityValue], executable);
 		}
 		else if( parsetree.type === "fnnode" )
 		{
-			SWYM.pushEach(["#Literal", SWYM.GetFunctionIdentity(parsetree, cscope)], executable);
+		    var identityValue = SWYM.GetFunctionIdentity(parsetree, cscope);
+		    SWYM.pushEach(["#Literal", identityValue], executable);
 		}
 		
 		SWYM.pushEach([
-			"#Load", "__etcIndex",
+			"#Load", "__n",
 			"#EtcExpansion", childExecutable
 		], executable);
 		
@@ -104,23 +108,23 @@ SWYM.CompileLValue = function(parsetree, cscope, executable)
 		else if ( parsetree.etcSequence )
 		{
 			executable.push("#EtcSequence");
-			executable.push(SWYM.EtcCreateGenerator(parsetree.etcSequence));
+			executable.push(SWYM.EtcCreateGenerator(parsetree.etcSequence, parsetree));
 			return parsetree.etcSequence.type;
 		}
 		else if ( parsetree.etcExpandingSequence )
 		{
 			executable.push("#Load");
-			executable.push("__etcIndex");
+			executable.push("__n");
 			executable.push("#Load");
 			executable.push("<etcExpansion>");
 			executable.push("#Native");
 			executable.push(2);
-			executable.push(SWYM.EtcCreateExpandingGenerator(parsetree.etcExpandingSequence));
+			executable.push(SWYM.EtcCreateExpandingGenerator(parsetree.etcExpandingSequence, parsetree));
 			return parsetree.etcExpandingSequence.type;
 		}
 		else
 		{
-			SWYM.LogError(parsetree, "Unexpected literal <"+parsetree.value+">.");
+			SWYM.LogError(parsetree, "Unexpected literal <"+parsetree.text+">.");
 		}
 	}
 	else if ( parsetree.type === "name" )
@@ -571,6 +575,31 @@ SWYM.CompileFunctionCall = function(fnNode, cscope, executable, OUT)
 	{
 		OUT.theFunction = chosenOverload.theFunction;
 	}
+
+	if (fnNode.rhsOmittedStart)
+	{
+	    var identityArg = chosenOverload.theFunction.expectedArgs["__identity"];
+	    if( identityArg === undefined || identityArg.defaultValueNode === undefined )
+	    {
+	        SWYM.LogError(parsetree, "Function "+fnName+" can't be used in etc expressions because it has no default argument named __identity.");
+	    }
+	    var identityType = SWYM.CompileNode(identityArg.defaultValueNode, cscope, []);
+
+	    if (fnNode.children[1].etcSequence === undefined || identityType.baked === undefined)
+	    {
+	        SWYM.LogError(parsetree, "Fsckup: Unable to restore omitted identity value to etcSequence");
+	    }
+	    else
+	    {
+	        // 'omitted start' means we wanted to insert the identity value into this sequence,
+	        /// but didn't know what it was yet. Now we do!
+	        fnNode.children[1].etcSequence.unshift(identityType.baked);
+
+	        var recompiledSequenceExecutable = [];
+	        SWYM.CompileNode(fnNode.children[1], cscope, recompiledSequenceExecutable);
+	        chosenOverload.inputArgExecutables[chosenOverload.inputArgNameList[1]] = recompiledSequenceExecutable;
+	    }
+	}
 	
 	return SWYM.CompileFunctionOverload( fnName, chosenOverload, cscope, executable );
 }
@@ -613,12 +642,11 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
     var overloadResult = { theFunction: theFunction, error: undefined, executable: [], typeChecks: {}, returnType: undefined, quality: 0 };
 
     // if this needs to have a __identity argument, ignore overloads without one
-    if (fnNode.etcId !== undefined && theFunction.expectedArgs.__identity === undefined)
+    if ((fnNode.etcId !== undefined || fnNode.rhsOmittedStart) && theFunction.expectedArgs.__identity === undefined)
     {
-        if (SWYM.RecordErrorOfQuality(overloadResult, 1)) // very bad match
+        if (SWYM.RecordErrorOfQuality(overloadResult, 80)) // ok match, this is an esoteric issue
         {
             overloadResult.error = "Function '" + fnName + "' can't form an etc sequence because it has no '__identity' argument.";
-            return overloadResult;
         }
     }
 
@@ -2725,7 +2753,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 	var haltCondition = undefined;
 	var limitTimesExecutable = undefined;
 
-	cscope["__etcIndex"] = SWYM.IntType;
+	cscope["__n"] = SWYM.IntType;
 
 	if( parsetree.etcType === "etc**" )
 	{
@@ -2902,7 +2930,7 @@ SWYM.CompileEtc = function(parsetree, cscope, executable)
 						type:"closureInfo",
 						debugName:"lazy etc",
 						debugText:"<etc expression>", //FIXME
-						argName:"__etcIndex",
+						argName: "__n",
 						body:etcExecutable // This won't actually work
 					});
 					executable.push("#Native");

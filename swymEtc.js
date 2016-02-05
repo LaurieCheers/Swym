@@ -125,68 +125,7 @@ SWYM.CloneNode = function(node, newChildren, etcId, etcExpansionId)
 	else if ( node.type === "fnnode" )
 	    return { type: "fnnode", pos: node.pos, identity: node.identity, name: node.name, argNames: node.argNames, children: newChildren, etcExpansionId: etcExpansionId, etcId:etcId };
 	else
-		SWYM.LogError(0, "Fsckup: invalid node for CloneNode");
-}
-
-SWYM.ConsiderOmittedStart = function(leftTerm, rightTerm)
-{
-	// This handles a specific type of sequence at a particular point in the processing.
-	// leftTerm = (single term; then term|op|whatever); rightTerm = term|op|whatever.
-	// e.g. 1, 1/2, 1/4, etc   or   10, 10+1, 10+2, etc
-	if( leftTerm.etcExpandAround === undefined )
-		return false;
-
-	var omittedIdx = -1;
-	var omittedValue = null;
-	if ( leftTerm.op.text === "*" || (leftTerm.op.text === "/" && leftTerm.etcExpandAround === 0) )
-	{
-		omittedIdx = 1-leftTerm.etcExpandAround;
-		omittedValue = 1;
-	}
-	else if ( leftTerm.op.text === "+" || (leftTerm.op.text === "-" && leftTerm.etcExpandAround === 0) )
-	{
-		omittedIdx = 1-leftTerm.etcExpandAround;
-		omittedValue = 0;
-	}
-	
-	if( omittedIdx === -1 )
-		return false;
-					
-	var omittedLhs = leftTerm.children[omittedIdx];
-	var omittedRhs = rightTerm.children[omittedIdx];
-	if ( omittedLhs && omittedLhs.type === "literal" && omittedRhs && omittedRhs.type === "literal" )
-	{
-		var newChildren = [];
-		for( var Idx = 0; Idx < leftTerm.children.length; Idx++ )
-		{
-			if( Idx !== omittedIdx )
-			{
-				newChildren.push(leftTerm.children[Idx]);
-			}
-			else
-			{
-				var newChild = {
-					type:"literal",
-					text:""+omittedValue+"/"+leftTerm.children[Idx].text+"/"+rightTerm.children[Idx].text,
-					etcSequence:[omittedValue]
-				};
-
-				if( leftTerm.children[Idx].etcSequence )
-					newChild.etcSequence = newChild.etcSequence.concat(leftTerm.children[Idx].etcSequence);
-				else
-					newChild.etcSequence.push(leftTerm.children[Idx].value);
-				
-				newChild.etcSequence.push(rightTerm.children[Idx].value);
-				
-				newChildren.push(newChild);
-			}
-		}
-
-		//NB this intentionally discards the node's "etcExpandAround" tag.
-		return {type:"node",text:leftTerm.text,op:leftTerm.op, children:newChildren};
-	}
-
-	return false;
+		SWYM.LogError(node, "Fsckup: invalid node for CloneNode");
 }
 
 // nth should be the example number, or "finalExample", or "finalExampleExcluded".
@@ -198,13 +137,16 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 	var baseMatch = SWYM.EtcMatchesExceptChildren(leftTerm, rightTerm);
 	if ( baseMatch !== false )
 	{
-	    if (leftTerm.etcExpandingSequence !== undefined && rightTerm.etcSequence !== undefined)
+	    if (leftTerm.etcExpandingSequence !== undefined)
 	    {
-	        leftTerm.etcExpandingSequence.push(rightTerm.etcSequence);
+	        // continuing an expanding sequence term with a sequence
+	        var newSequence = [];
+	        SWYM.PopulateEtcSequence(rightTerm, newSequence);
+	        leftTerm.etcExpandingSequence.push(newSequence);
 
-	        // continuing an expanding sequence term
 	        return {
 	            type: "literal",
+                pos:leftTerm.pos,
 	            text: leftTerm.text + "(" + rightTerm.text + ")",
 	            etcExpandingSequence: leftTerm.etcExpandingSequence,
 	            etcId: leftTerm.etcId
@@ -214,17 +156,36 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 	    {
 	        // if this is an expanding expression, rightTerm should be the next step in the expansion.
 	        // merge the whole rightTerm together, then merge that with leftTerm.
-	        var collected = { op: leftTerm.op? leftTerm.op: leftTerm, exampleChildren: [], finalExample: [], afterEtc: false, recursiveIdx: 0 };
-	        SWYM.CollectEtcRec(rightTerm, collected);
+	        // (which will hopefully trigger the rightTerm.etcSequence code above, but we can't just move
+	        // that code in here; the sequence could be embedded in an arbitrarily complex parsetree such as
+	        // foo[1].length, foo[1].length+foo[2].length, foo[1].length+foo[2].length+foo[3].length, etc)
+	        var collectedResult = { rootNode: leftTerm, exampleChildren: [], finalExample: [], afterEtc: false, recursiveIdx: 0 };
+	        SWYM.CollectEtcRec(rightTerm, collectedResult);
 
-	        var mergeResult = collected.baseCase;
-	        for (var Idx = 0; Idx < collected.exampleChildren.length && mergeResult !== false; ++Idx)
+	        var mergeResult = collectedResult.baseCase;
+	        for (var Idx = 0; Idx < collectedResult.exampleChildren[1].length && mergeResult !== false; ++Idx)
 	        {
-	            mergeResult = SWYM.MergeEtc(mergeResult, collected.exampleChildren[1][Idx]);
+	            mergeResult = SWYM.MergeEtc(mergeResult, collectedResult.exampleChildren[1][Idx]);
 	        }
 
+	        if (mergeResult !== false && leftTerm.type === "fnnode" && leftTerm.children[1] !== undefined && 
+                leftTerm.children[1].etcExpandingSequence !== undefined && leftTerm.children[1].etcExpandingSequence.length === 2 &&
+                mergeResult.etcSequence !== undefined && mergeResult.etcSequence.length === 2)
+	        {
+	            //Looks like this is actually an 'omitted start' expression such as 1, 1/2, 1/4, etc
+	            var leftTermSequence = leftTerm.children[1].etcExpandingSequence;
+	            var lhsSequence = [leftTermSequence[0][0], leftTermSequence[1][0], mergeResult.etcSequence[0]];
+	            var rhsSequence = [leftTermSequence[1][1], mergeResult.etcSequence[1]];
+
+	            var lhs = { type: "literal", pos:leftTerm.pos, text: lhsSequence[0] + "/" + lhsSequence[1] + "/" + lhsSequence[2], etcSequence: lhsSequence, etcId: etcId };
+	            var rhs = { type: "literal", pos: rightTerm.pos, text: rhsSequence[0] + "/" + rhsSequence[1], etcSequence: rhsSequence, etcId: etcId };
+	            var result = SWYM.CloneNode(rightTerm, [lhs, rhs]);
+	            result.rhsOmittedStart = true;
+	            return result;
+            }
+
 	        if (mergeResult !== false)
-	            mergeResult = SWYM.MergeEtc(leftTerm.children[1], mergeResult);
+	            mergeResult = SWYM.MergeEtc(leftTerm.children[1], mergeResult, nth);
 
 	        if (mergeResult !== false)
 	        {
@@ -242,25 +203,7 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 			{
 			    var mergeResult;
 
-				if ( leftTerm.etcExpandAround === Idx && nth > 1 )
-				{
-					// if the expression expands around this child, that means this child on the right hand side
-					// should match the entire left hand side
-					if ( !SWYM.EtcMatches(leftTerm, SWYM.MergeEtc(leftTerm, rightTerm.children[Idx], nth-1, etcId)))
-						return false;
-					
-					// bizarre Firefox bug!? - if I don't use a temp variable here,
-					// we get an undefined mergeResult.
-					var huh = leftTerm;
-					mergeResult = huh.children[Idx];
-				}
-				else if ( leftTerm.etcExpandAround !== undefined && nth >= 0 )
-				{
-					// if the expression expands around another child, that means this term gets appended at
-					// each iteration. Merge this with previous appended terms.
-					mergeResult = SWYM.MergeEtc(leftTerm.children[Idx], rightTerm.children[Idx], nth-1, etcId);
-				}
-				else if ( leftTerm.children[Idx] === undefined && rightTerm.children[Idx] === undefined )
+			    if ( leftTerm.children[Idx] === undefined && rightTerm.children[Idx] === undefined )
 				{
 					mergeResult = undefined;
 				}
@@ -271,11 +214,9 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 				
 				if( mergeResult === false )
 				{
-					if ( leftTerm.etcExpandAround !== undefined && nth === 2 )
-						return SWYM.ConsiderOmittedStart(leftTerm, rightTerm);
-					else
-						return false; // can't merge
+					return false;
 				}
+
 				if( mergeResult !== leftTerm.children[Idx] )
 				{
 					newChildren[Idx] = mergeResult;
@@ -294,81 +235,45 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 				return SWYM.CloneNode(leftTerm, newChildren, leftTerm.etcId, leftTerm.etcExpansionId);
 			}
 		}
-		else if ( baseMatch !== true ) // i.e. baseMatch !== false and !== true: it's a partial match.
+		else if (rightTerm.etcSequence !== undefined || rightTerm.etcMergeCount !== undefined)
 		{
-			if( leftTerm.etcExpandingSequence !== undefined )
-			{
-				leftTerm.etcExpandingSequence.push(rightTerm.etcSequence);
-				
-				// continuing an expanding sequence term
-				return {
-					type:"literal",
-					text:leftTerm.text+"("+rightTerm.text+")",
-					etcExpandingSequence:leftTerm.etcExpandingSequence,
-					etcId:leftTerm.etcId
-				};
-			}
-			else if( rightTerm.etcSequence !== undefined )
-			{
-				var etcExpandingSequence = [];
-				if( leftTerm.etcSequence !== undefined )
-				{
-					etcExpandingSequence.push(leftTerm.etcSequence);
-				}
-				else
-				{
-					etcExpandingSequence.push([leftTerm.value]);
-				}
-				etcExpandingSequence.push(rightTerm.etcSequence);
-				etcExpandingSequence.type = rightTerm.etcSequence.type;
-				
-				// starting a new expanding sequence term
-				return {
-					type:"literal",
-					text:"("+leftTerm.text+")("+rightTerm.text+")",
-					etcExpandingSequence:etcExpandingSequence,
-					etcId:leftTerm.etcId
-				};
-			}
-			else
-			{
-				// a partially matched literal
-				var etcSequence = [];
-				var oldSeq = leftTerm.etcSequence;
-				
-				if ( oldSeq )
-				{
-					for(var elem in oldSeq)
-						etcSequence.push(oldSeq[elem]);
-				}
-				else if ( nth === 0 || nth > 1 )
-				{
-					// can only start a new etcSequence when nth == 1
-					// (i.e. when we're seeing the second term of the sequence)
-					return false;
-				}
-				else
-				{
-					etcSequence.push(leftTerm.value);
-				}
+		    var newLhsSequence = [];
+		    SWYM.PopulateEtcSequence(leftTerm, newLhsSequence);
 
-				if( nth === "finalExample" )
-				{
-					etcSequence.finalExample = rightTerm.value;
-					etcSequence.excludeFinalExample = false;
-				}
-				else if( nth === "finalExampleExcluded" )
-				{
-					etcSequence.finalExample = rightTerm.value;
-					etcSequence.excludeFinalExample = true;
-				}
-				else
-				{
-					etcSequence.push(rightTerm.value);
-				}
-					
-				return {type:"literal", text:leftTerm.text+"/"+rightTerm.text, etcSequence:etcSequence, etcId:etcId};
-			}
+		    var newRhsSequence = [];
+		    SWYM.PopulateEtcSequence(rightTerm, newRhsSequence);
+
+		    // starting a new expanding sequence term
+		    return {
+		        type: "literal",
+		        pos: leftTerm.pos,
+		        text: "(" + SWYM.EtcSequenceToString(newLhsSequence) + ")(" + SWYM.EtcSequenceToString(newRhsSequence) + ")",
+		        etcExpandingSequence: [newLhsSequence, newRhsSequence],
+		        etcId: leftTerm.etcId
+		    };
+		}
+		else if (leftTerm.type === "literal")
+		{
+		    if (leftTerm.etcSequence !== undefined || baseMatch !== true) // i.e. baseMatch !== false and !== true: it's a partial match.
+		    {
+		        // a partially matched literal
+		        var newSequence = [];
+		        SWYM.PopulateEtcSequence(leftTerm, newSequence);
+		        newSequence.push(rightTerm.value);
+
+		        return { type: "literal", pos: leftTerm.pos, text: SWYM.EtcSequenceToString(newSequence), etcSequence: newSequence, etcId: etcId };
+		    }
+            else
+		    {
+		        var mergeCount = 2;
+		        if (leftTerm.etcMergeCount !== undefined)
+		            mergeCount += leftTerm.etcMergeCount - 1;
+
+		        if (rightTerm.etcMergeCount !== undefined)
+		            mergeCount += rightTerm.etcMergeCount - 1;
+
+		        return { type: "literal", pos: leftTerm.pos, text: leftTerm.text, value: leftTerm.value, etcMergeCount: mergeCount };
+		    }
 		}
 
 		// matched perfectly, just use the existing node
@@ -426,6 +331,39 @@ SWYM.MergeEtc = function(leftTerm, rightTerm, nth, etcId)
 	return false;
 }
 
+SWYM.PopulateEtcSequence = function (literalTerm, etcSequence)
+{
+    if (literalTerm.etcSequence !== undefined)
+    {
+        for (var Idx = 0; Idx < literalTerm.etcSequence.length; ++Idx)
+        {
+            etcSequence.push(literalTerm.etcSequence[Idx]);
+        }
+    }
+    else
+    {
+        etcSequence.push(literalTerm.value);
+
+        if (literalTerm.etcMergeCount !== undefined)
+        {
+            for (var Idx = 1; Idx < literalTerm.etcMergeCount; ++Idx)
+            {
+                etcSequence.push(literalTerm.value);
+            }
+        }
+    }
+}
+
+SWYM.EtcSequenceToString = function (etcSequence)
+{
+    var result = "" + etcSequence[0];
+    for (var Idx = 1; Idx < etcSequence.length; ++Idx)
+    {
+        result += "/"+etcSequence[Idx];
+    }
+    return result;
+}
+
 SWYM.HALT_AFTER = 2;
 SWYM.HALT_BEFORE = 1;
 SWYM.HALT_NO = 0;
@@ -442,62 +380,61 @@ SWYM.HaltCondition = function(test, haltValue)
 	}
 }
 
-SWYM.CollectEtc = function(parsetree, etcOp, etcId)
+SWYM.CollectEtc = function(parsetree, etcRoot, etcId)
 {
-	if( !etcOp )
+    if (!etcRoot)
 		return parsetree;
 	
-	var collected = {op:etcOp, exampleChildren:[], finalExample:[], afterEtc:false, recursiveIdx:0};
+	var collectedResult = { rootNode: etcRoot, exampleChildren: [], finalExample: [], afterEtc: false, recursiveIdx: 0 };
 	
 	if( parsetree.arbitraryRecursion )
 	{
-		collected.recursiveIdx = undefined;
+	    collectedResult.recursiveIdx = undefined;
 	}
 		
-	if( etcOp.children && etcOp.children[1] !== undefined )
+	if (etcRoot.children && etcRoot.children[1] !== undefined)
 	{
-		collected.finalExample.push(etcOp.children[1]);
+	    collectedResult.finalExample.push(etcRoot.children[1]);
 	}
 	
-	if( etcOp === parsetree )
+	if (etcRoot === parsetree)
 	{
 		// left-associative op: the etc node is the root, and its left child is the examples
 		var childNode = parsetree.children[0];
-		if( (childNode.type === "node" && childNode.op.text === collected.op.text) ||
-			(collected.op.type === "fnnode" && childNode.name === collected.op.name))
+		if (SWYM.IsContinuingEtc(childNode, collectedResult))
 		{
-			SWYM.CollectEtcRec(parsetree.children[0], collected);
+		    SWYM.CollectEtcRec(parsetree.children[0], collectedResult);
 		}
 		else
 		{
             // Apparently it's an etc expression with only one example.
-		    collected.baseCase = childNode;
-		    collected.exampleChildren = [undefined, [childNode]];
+		    collectedResult.baseCase = childNode;
+		    collectedResult.exampleChildren = [undefined, [childNode]];
 		}
 	}
 	else
 	{
-		// right-associative op: the node we found is the root, and its right child contains the etcOp 
-		SWYM.CollectEtcRec(parsetree, collected);
+		// right-associative op: the node we found is the root, and its right child contains the current etcRoot 
+	    SWYM.CollectEtcRec(parsetree, collectedResult);
 	}
 	
-	if (collected.finalExample.length > 1)
+	if (collectedResult.finalExample.length > 1)
 	{
-		SWYM.LogError(parsetree.pos, "Too many additional terms after "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
+	    SWYM.LogError(parsetree, "Too many additional terms after " + etcRoot.etc + " expression (required 1, got " + collectedResult.finalExample.length + ")");
 	}
-	else if (etcOp.etc === 'etc' && collected.finalExample.length !== 0)
+	else if (etcRoot.etc === 'etc' && collectedResult.finalExample.length !== 0)
 	{
-		SWYM.LogError(parsetree.pos, "Cannot have additional terms after "+etcOp.etc+" expression");
+	    SWYM.LogError(parsetree, "Cannot have additional terms after " + etcRoot.etc + " expression");
 	}
-	else if (etcOp.etc !== 'etc' && etcOp.etc !== 'etc..' && collected.finalExample.length !== 1)
+	else if (etcRoot.etc !== 'etc' && etcRoot.etc !== 'etc..' && collectedResult.finalExample.length !== 1)
 	{
-		SWYM.LogError(parsetree.pos, "Fsckup: Invalid number of final examples for "+etcOp.etc+" expression (required 1, got "+collected.finalExample.length+")");
+	    SWYM.LogError(parsetree, "Fsckup: Invalid number of final examples for " + etcRoot.etc + " expression (required 1, got " + collectedResult.finalExample.length + ")");
 	}
 	
 	var children = [];
-	if( collected.recursiveIdx !== undefined )
+	if (collectedResult.recursiveIdx !== undefined)
 	{
-		children[collected.recursiveIdx] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
+	    children[collectedResult.recursiveIdx] = SWYM.NewToken("name", parsetree.pos, "<etcSoFar>");
 	}
 	
 	// if there's exactly one child, merge the base case with it (and if that fails, try treating them separately.)
@@ -510,11 +447,11 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	//
 	// ok, I guess that answers both questions. User just has to keep that in mind if they want to rewrite x -> 1.
 	// hopefully it should be fairly clear that it changes the meaning.
-	if (collected.recursiveIdx !== undefined && collected.exampleChildren.length == 2)
+	if (collectedResult.recursiveIdx !== undefined && collectedResult.exampleChildren.length == 2)
 	{
-		var examples = collected.exampleChildren[1-collected.recursiveIdx];
+	    var examples = collectedResult.exampleChildren[1 - collectedResult.recursiveIdx];
 
-		var merged = collected.baseCase;
+	    var merged = collectedResult.baseCase;
 		for( var Idx = 0; Idx < examples.length && merged !== false; Idx++ )
 		{
 			merged = SWYM.MergeEtc(merged, examples[Idx], Idx+1, etcId);
@@ -523,9 +460,9 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		if( merged !== false )
 		{
 			// success! keep that.
-			children[1-collected.recursiveIdx] = merged;
-			collected.exampleChildren[1-collected.recursiveIdx] = undefined;
-			collected.mergedBaseCase = true;
+		    children[1 - collectedResult.recursiveIdx] = merged;
+		    collectedResult.exampleChildren[1 - collectedResult.recursiveIdx] = undefined;
+		    collectedResult.mergedBaseCase = true;
 		}
 		else
 		{
@@ -539,23 +476,23 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 			if( merged !== false )
 			{
 				// success! keep that.
-				children[1-collected.recursiveIdx] = merged;
-				collected.exampleChildren[1-collected.recursiveIdx] = undefined;
-				collected.mergedBaseCase = false;
+			    children[1 - collectedResult.recursiveIdx] = merged;
+			    collectedResult.exampleChildren[1 - collectedResult.recursiveIdx] = undefined;
+			    collectedResult.mergedBaseCase = false;
 			}
 		}
 	}
-	else if (collected.exampleChildren.length === 0)
+	else if (collectedResult.exampleChildren.length === 0)
 	{
 	    // it's an etc operation with only one term (a basecase).
 	    // For simplicity, let's copy it into the examples.
-	    collected.exampleChildren[1] = [collected.baseCase];
-	    collected.mergedBaseCase = true;
+	    collectedResult.exampleChildren[1] = [collectedResult.baseCase];
+	    collectedResult.mergedBaseCase = true;
 	}
 
-	for( var childIdx = 0; childIdx < collected.exampleChildren.length; ++childIdx )
+	for (var childIdx = 0; childIdx < collectedResult.exampleChildren.length; ++childIdx)
 	{
-		var examples = collected.exampleChildren[childIdx];
+	    var examples = collectedResult.exampleChildren[childIdx];
 
 		if( examples === undefined )
 		{
@@ -565,7 +502,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 		if( examples.length < 1 || examples.length > 4 )
 		{
 			// we allow 1-4 terms before
-			SWYM.LogError(parsetree.pos, "Invalid number of terms before "+etcOp.etc+" (allowed 1-4 terms, got "+examples.length+")");
+			SWYM.LogError(parsetree, "Invalid number of terms before "+etcRoot.etc+" (allowed 1-4 terms, got "+examples.length+")");
 		}
 		else
 		{
@@ -577,7 +514,7 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 
 			if ( !merged )
 			{
-				SWYM.LogError(parsetree.pos, "Failed to extrapolate etc sequence for "+parsetree);
+				SWYM.LogError(parsetree, "Failed to extrapolate etc sequence for "+parsetree);
 			}
 			
 			// check for nested etc expressions
@@ -587,34 +524,40 @@ SWYM.CollectEtc = function(parsetree, etcOp, etcId)
 	}
 
 	var body;
-	if( etcOp.type === "fnnode" )
+	if( etcRoot.type === "fnnode" )
 	{
-	    if (etcOp.children[0].type === "fnnode" && etcOp.name === etcOp.children[0].name)
+	    if (etcRoot.children[0].type === "fnnode" && etcRoot.name === etcRoot.children[0].name)
 	    {
-	        body = { type: "fnnode", argNames: etcOp.children[0].argNames, children: children, name: etcOp.name };
+	        body = { type: "fnnode", argNames: etcRoot.children[0].argNames, children: children, name: etcRoot.name };
 	    }
 	    else
 	    {
-	        body = { type: "fnnode", argNames: etcOp.argNames, children: children, name: etcOp.name };
+	        body = { type: "fnnode", argNames: etcRoot.argNames, children: children, name: etcRoot.name };
 	    }
 	}
 	else
 	{
-		body = {type:"node", op:etcOp, children:children};
+		body = {type:"node", op:etcRoot.op, children:children};
 	}
 
 	return {
 		type:"etc",
-		etcType:etcOp.etc,
-		baseCase:collected.baseCase,
-		mergedBaseCase:collected.mergedBaseCase,
+		etcType:etcRoot.etc,
+		baseCase: collectedResult.baseCase,
+		mergedBaseCase: collectedResult.mergedBaseCase,
 		body:body,
-		rhs:collected.finalExample[0],
+		rhs: collectedResult.finalExample[0],
 		etcId:etcId
 	};
 }
 
-SWYM.CollectEtcRec = function(parsetree, resultSoFar)
+SWYM.IsContinuingEtc = function (parsetree, collectedResult)
+{
+    return (parsetree.type === "node" && collectedResult.rootNode.type === "node" && parsetree.op.text === collectedResult.rootNode.op.text) ||
+        (parsetree.type === "fnnode" && collectedResult.rootNode.type === "fnnode" && parsetree.name === collectedResult.rootNode.name);
+}
+
+SWYM.CollectEtcRec = function (parsetree, collectedResult)
 {
 	if( !parsetree )
 		return;
@@ -624,7 +567,7 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	{
 		for( var Idx = 1; Idx < idxLimit; Idx++ )
 		{			
-			resultSoFar.finalExample.push( parsetree.children[Idx] );
+		    collectedResult.finalExample.push(parsetree.children[Idx]);
 		}
 		idxLimit = 1;
 	}
@@ -632,49 +575,48 @@ SWYM.CollectEtcRec = function(parsetree, resultSoFar)
 	for( var Idx = 0; Idx < idxLimit; Idx++ )
 	{
 		var childNode = parsetree.children[Idx];
-		if( (childNode.type === "node" && childNode.op.text === resultSoFar.op.text) ||
-			(resultSoFar.op.type === "fnnode" && childNode.name === resultSoFar.op.name))
+		if (SWYM.IsContinuingEtc(childNode, collectedResult))
 		{
-			if( Idx !== resultSoFar.recursiveIdx && resultSoFar.recursiveIdx !== undefined )
+		    if (Idx !== collectedResult.recursiveIdx && collectedResult.recursiveIdx !== undefined)
 			{
 				SWYM.LogError(childNode, "Inconsistent recursion in etc!");
 			}
 			
-			resultSoFar.recursiveIdx = Idx;
-			SWYM.CollectEtcRec(childNode, resultSoFar);
+		    collectedResult.recursiveIdx = Idx;
+		    SWYM.CollectEtcRec(childNode, collectedResult);
 		}
-		else if( Idx === resultSoFar.recursiveIdx && resultSoFar.recursiveIdx !== undefined )
+		else if (Idx === collectedResult.recursiveIdx && collectedResult.recursiveIdx !== undefined)
 		{
-			if( resultSoFar.baseCase === undefined )
+		    if (collectedResult.baseCase === undefined)
 			{
-				resultSoFar.baseCase = childNode;
+		        collectedResult.baseCase = childNode;
 			}
 			else
 			{
-				SWYM.LogError(childNode.pos, "Fsckup: Too many base cases for etc sequence!?");
+				SWYM.LogError(childNode, "Fsckup: Too many base cases for etc sequence!?");
 			}
 		}
 		else
 		{
-			if( resultSoFar.exampleChildren[Idx] === undefined )
+		    if (collectedResult.exampleChildren[Idx] === undefined)
 			{
-				resultSoFar.exampleChildren[Idx] = [];
+		        collectedResult.exampleChildren[Idx] = [];
 			}
-			resultSoFar.exampleChildren[Idx].push(parsetree.children[Idx]);
+		    collectedResult.exampleChildren[Idx].push(parsetree.children[Idx]);
 		}
 	}
 
 	if((parsetree.op && parsetree.op.etc) || (parsetree.type === "fnnode" && parsetree.etc))
 	{
-		if( resultSoFar.afterEtc )
-			SWYM.LogError(parsetree.pos, "Cannot have more than one etc per sequence!");
+	    if (collectedResult.afterEtc)
+			SWYM.LogError(parsetree, "Cannot have more than one etc per sequence!");
 
 		if( parsetree.op && parsetree.op.etc === "etc" )
-			resultSoFar.stopCollecting = true;
+		    collectedResult.stopCollecting = true;
 		else if( parsetree.type === "fnnode" && parsetree.etc === "etc" )
-			resultSoFar.stopCollecting = true;
+		    collectedResult.stopCollecting = true;
 
-		resultSoFar.afterEtc = true;
+		collectedResult.afterEtc = true;
 	}
 }
 
@@ -685,31 +627,29 @@ SWYM.FindAndProcessEtcRec = function(parsetree, etcId)
 
 	if( parsetree.type === "node" || parsetree.type === "fnnode" )
 	{
-		if( parsetree.etc )
-			return parsetree;
-		else if(parsetree.op && parsetree.op.etc)
-			return parsetree.op; //found an etc node! Notify the caller.
+		if( parsetree.etc || (parsetree.op && parsetree.op.etc))
+			return parsetree; //found an etc node! Notify the caller.
 
-		var etcOp;
+		var etcRoot;
 		for( var Idx = 0; Idx < parsetree.children.length; Idx++ )
 		{
-			etcOp = SWYM.FindAndProcessEtcRec(parsetree.children[Idx], etcId);
-			if ( etcOp )
+		    etcRoot = SWYM.FindAndProcessEtcRec(parsetree.children[Idx], etcId);
+		    if (etcRoot)
 			{
-				if( parsetree.op && etcOp.text === parsetree.op.text )
+		        if (parsetree.op && etcRoot.op && etcRoot.op.text === parsetree.op.text)
 				{
 					// this continues an etc node! Notify the caller.
-					return etcOp;
+		            return etcRoot;
 				}
-				else if ( parsetree.type === "fnnode" && etcOp.name === parsetree.name)
+		        else if (parsetree.type === "fnnode" && etcRoot.type === "fnnode" && etcRoot.name === parsetree.name)
 				{
 					// this continues an etc function! Notify the caller.
-					return etcOp;
+		            return etcRoot;
 				}
 				else
 				{
 					// we have found the limit of this whole etc - now process it.
-					parsetree.children[Idx] = SWYM.CollectEtc(parsetree.children[Idx], etcOp, etcId);
+		            parsetree.children[Idx] = SWYM.CollectEtc(parsetree.children[Idx], etcRoot, etcId);
 				}
 			}
 		}
@@ -723,9 +663,9 @@ SWYM.FindAndProcessEtcRec = function(parsetree, etcId)
 
 SWYM.FindAndProcessEtc = function(parsetree, etcId)
 {
-	var etcOp = SWYM.FindAndProcessEtcRec(parsetree, etcId);
-	if( etcOp )
-		return SWYM.CollectEtc(parsetree, etcOp, etcId);
+	var etcRoot = SWYM.FindAndProcessEtcRec(parsetree, etcId);
+	if( etcRoot )
+		return SWYM.CollectEtc(parsetree, etcRoot, etcId);
 	else
 		return parsetree;
 }
@@ -747,28 +687,46 @@ SWYM.EtcTryNumberGenerator = function(sequence, generator)
 	for(var Idx = 0; Idx < sequence.length; Idx++ )
 	{
 		var resultAtIdx = generator(Idx);
-		if( resultAtIdx + 0.0000000001 < sequence[Idx] || resultAtIdx - 0.0000000001 > sequence[Idx] )
+		if( resultAtIdx + 0.0000000001 < sequence[Idx] || resultAtIdx - 0.0000000001 > sequence[Idx] || isNaN(resultAtIdx))
 			return false;
 	}
 	
 	return true;
 }
 
-SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
+SWYM.EtcCreateExpandingGenerator = function (expandingSequence, errorNode)
 {
 	// simple rule: build a generator for the longest sequence,
 	// and then check that all the others match the stem/tail of it.
 	// This handles sequences like [[1],[1,2],[1,2,3],etc]
-	// and [[1],[2,1],[3,2,1],etc]
-	
+    // and [[1],[2,1],[3,2,1],etc]
+    for (var Idx = 0; Idx < expandingSequence.length; ++Idx)
+    {
+        if (expandingSequence[Idx].length !== Idx+1)
+        {
+            SWYM.LogError(errorNode, "Don't know how to extrapolate from this pattern: " + expandingSequence);
+            return;
+        }
+    }
+
 	var longestSequence = expandingSequence[expandingSequence.length-1];
 
-	var forwardGenerator = SWYM.EtcCreateGenerator(longestSequence);
+	var forwardGenerator = SWYM.EtcCreateGenerator(longestSequence, undefined);
 	expandingSequence.type = longestSequence.type;
-	
-	longestSequence.reverse();
-	var reverseGenerator = SWYM.EtcCreateGenerator(longestSequence);
-	longestSequence.reverse();
+
+	var reverseGenerator = undefined;
+	if (forwardGenerator !== undefined)
+	{
+	    longestSequence.reverse();
+	    reverseGenerator = SWYM.EtcCreateGenerator(longestSequence, undefined);
+	    longestSequence.reverse();
+	}
+
+	if (forwardGenerator === undefined && reverseGenerator === undefined)
+	{
+        // report the error
+	    SWYM.EtcCreateGenerator(longestSequence, errorNode);
+	}
 
 	var matchesStem = (forwardGenerator !== undefined);
 	var matchesTail = (reverseGenerator !== undefined);
@@ -814,7 +772,7 @@ SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 	// Try flattening the seuquence and applying the generator to it as a whole.
 	// This handles sequences like [[1], [2,3], [4,5,6], etc]
 	var flattened = Array.prototype.concat.apply([], expandingSequence);
-	var flattenedGenerator = SWYM.EtcCreateGenerator(flattened);
+	var flattenedGenerator = SWYM.EtcCreateGenerator(flattened, errorNode);
 	
 	if( flattenedGenerator !== undefined )
 	{
@@ -824,25 +782,25 @@ SWYM.EtcCreateExpandingGenerator = function(expandingSequence)
 		}
 	}
 	
-	SWYM.LogError(0, "etc - can't find a rule for sequence ["+expandingSequence+"].");
+	SWYM.LogError(errorNode, "etc - can't find a rule for sequence [" + expandingSequence + "].");
 	return undefined;
 }
 
-SWYM.EtcCreateGenerator = function(sequence)
+SWYM.EtcCreateGenerator = function (sequence, errorNode)
 {
 	if( typeof(sequence[0]) === "string" )
 	{
 		// string sequences
-		return SWYM.EtcCreateStringGenerator(sequence)
+	    return SWYM.EtcCreateStringGenerator(sequence, errorNode)
 	}
 	else if( typeof(sequence[0]) === "number" )
 	{
 		// number sequences
-		return SWYM.EtcCreateNumberGenerator(sequence)
+	    return SWYM.EtcCreateNumberGenerator(sequence, errorNode)
 	}
 }
 
-SWYM.EtcCreateStringGenerator = function(sequence)
+SWYM.EtcCreateStringGenerator = function (sequence, errorNode)
 {
 	var base = sequence[0];
 	sequence.type = SWYM.StringType;
@@ -882,11 +840,11 @@ SWYM.EtcCreateStringGenerator = function(sequence)
 		}
 	}
 	
-	SWYM.LogError(0, "etc - can't find a rule for sequence ["+sequence+"].");
+	SWYM.LogError(errorNode, "etc - can't find a rule for sequence ["+sequence+"].");
    	return undefined;
 }
 
-SWYM.EtcCreateNumberGenerator = function(sequence)
+SWYM.EtcCreateNumberGenerator = function (sequence, errorNode)
 {
 	var base = sequence[0];
 	
@@ -990,26 +948,29 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		return lastValue;
 	};
 
-	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, cumgeometric))
+	if (SWYM.EtcTryNumberGenerator(sequence, cumgeometric))
 	{
-		if( factor > 0 )
-		{
-			if( firstDiff > 0 )
-				sequence.direction = "ascending";
-			else if ( firstDiff < 0 )
-				sequence.direction = "descending";
-		}
-			
-		sequence.type = (base%1==0 && firstDiff%1==0 && factor%1==0)? SWYM.IntType: SWYM.NumberType;
+	    if (sequence.length >= 4)
+	    {
+	        if (factor > 0)
+	        {
+	            if (firstDiff > 0)
+	                sequence.direction = "ascending";
+	            else if (firstDiff < 0)
+	                sequence.direction = "descending";
+	        }
 
-		return cumgeometric;
-	}
-	else
-	{
-		term4s["cumulative geometric"] = cumgeometric(3);
+	        sequence.type = (base % 1 == 0 && firstDiff % 1 == 0 && factor % 1 == 0) ? SWYM.IntType : SWYM.NumberType;
+
+	        return cumgeometric;
+	    }
+	    else
+	    {
+	        term4s["cumulative geometric"] = cumgeometric(3);
+	    }
 	}
 
-	// try the factorial sequence, e.g. 1, 2, 6, 24, etc
+	// try the factorial sequence, i.e. 1, 2, 6, 24, etc
 	var factorialSeq = function(index)
 	{
 		var result = 1;
@@ -1021,14 +982,47 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		return result;
 	};
 
-	if( sequence.length >= 4 && SWYM.EtcTryNumberGenerator(sequence, factorialSeq))
+	if (SWYM.EtcTryNumberGenerator(sequence, factorialSeq))
 	{
-		sequence.type = SWYM.IntType;
-		return factorialSeq;
+	    if (sequence.length >= 4)
+	    {
+	        sequence.type = SWYM.IntType;
+	        return factorialSeq;
+	    }
+	    else
+	    {
+	        term4s["factorial"] = factorialSeq(3);
+	    }
 	}
-	else
+
+    // try the fibonacci sequence, i.e. 1, 1, 2, 3, 5, etc
+	var fibonacciSeq = function (index)
 	{
-		term4s["factorial"] = factorialSeq(3);
+	    var a = 0;
+	    var b = 1;
+	    while (index > 0)
+	    {
+	        a = a + b;
+	        b = a + b;
+	        index-=2;
+	    }
+
+	    if (index == 0)
+	        return b;
+	    return a;
+	};
+
+	if (SWYM.EtcTryNumberGenerator(sequence, fibonacciSeq))
+	{
+	    if (sequence.length >= 4)
+	    {
+	        sequence.type = SWYM.IntType;
+	        return fibonacciSeq;
+	    }
+	    else
+	    {
+	        term4s["fibonacci"] = fibonacciSeq(3);
+	    }
 	}
 
 	// try an arithmetic times geometric sequence, e.g. 1, 20, 300, 4000, etc
@@ -1081,90 +1075,27 @@ SWYM.EtcCreateNumberGenerator = function(sequence)
 		}
 	}
    	
-	if( sequence.length == 3 )
+	if (errorNode !== undefined)
 	{
-		var contList = "";
-		for( var title in term4s )
-		{
-			if(contList !== "")
-				contList += ", ";
-			
-			contList += term4s[title]+" ("+title+")";
-		}
+	    if (sequence.length == 3)
+	    {
+	        var contList = "";
+	        for (var title in term4s)
+	        {
+	            if (contList !== "")
+	                contList += ", ";
 
-		SWYM.LogError(0, "etc - ambiguous sequence ["+sequence+"]. Please provide a 4th term. Known ways to continue this sequence: "+contList);
-	}
-	else
-	{
-		SWYM.LogError(0, "etc - can't find a rule for sequence ["+sequence+"].");
+	            contList += term4s[title] + " (" + title + ")";
+	        }
+
+	        SWYM.LogError(errorNode, "etc - ambiguous sequence [" + sequence + "]. Please provide a 4th term. Known ways to continue this sequence: " + contList);
+	    }
+	    else
+	    {
+	        SWYM.LogError(errorNode, "etc - can't find a rule for sequence [" + sequence + "].");
+	    }
 	}
    	return undefined;
-}
-
-SWYM.ResolveEtcSequence = function(sequence, index)
-{
-	if( sequence.length > index )
-		return sequence[index];
-	
-	if (!sequence.generator)
-	{
-		var genOffset = 0;
-		for( var Idx = 0; Idx < sequence.length; Idx++ )
-		{
-			if ( sequence[Idx] !== undefined )
-			{
-				genOffset = Idx;
-				break;
-			}
-		}
-		sequence.generator = SWYM.EtcCreateGenerator(sequence.slice(genOffset, sequence.length));
-		if ( !sequence.generator )
-		{
-			SWYM.LogError(0, "Unable to find a rule that generates sequence "+sequence);
-			return undefined;
-		}
-		
-		if( genOffset > 0 )
-		{
-			var oldGen = sequence.generator;
-			sequence.generator = function(index) { return oldGen(index-genOffset); };
-		}
-	}
-
-	var result = sequence.generator(index);
-	var outOfBounds = false;
-
-	// check for the end of the sequence
-	if( result !== undefined && sequence.maxIndex === undefined && sequence.finalExample !== undefined )
-	{
-		if( result === sequence.finalExample )
-		{
-			if( sequence.excludeFinalExample )
-			{
-				sequence.maxIndex = index-1;
-				outOfBounds = true;
-			}
-			else
-			{
-				sequence.maxIndex = index;
-			}
-		}
-		else if ( (sequence.direction === "ascending" && result > sequence.finalExample) ||
-				(sequence.direction === "descending" && result < sequence.finalExample))
-		{
-			outOfBounds = true;
-		}
-	}
-
-	if( outOfBounds || (sequence.maxIndex !== undefined && index > sequence.maxIndex) )
-	{
-		if ( SWYM.scope["#outOfBoundsFlag"].value === false )
-			SWYM.scope["#outOfBoundsFlag"].value = true;
-		
-		return null;
-	}
-
-	return result;
 }
 
 SWYM.onLoad("swymEtc.js");

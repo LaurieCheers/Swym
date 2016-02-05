@@ -403,12 +403,17 @@ SWYM.NonCustomParseTreeNode = function(lhs, op, rhs)
             children = [];
         }
 
-        return {
+        var result = {
             children:children,
             op:op,
             toString:function(){ return "(" + (this.children[0]?this.children[0]+" ":"") + (this.op.behaviour.debugText? this.op.behaviour.debugText: this.op.text) + (this.children[1]?" "+this.children[1]:"") + ")"; },
             type:"node"
         };
+
+        if (op.etc)
+            result.etc = op.etc;
+
+        return result;
     }
 }
 

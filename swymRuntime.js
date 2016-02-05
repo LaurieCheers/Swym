@@ -633,7 +633,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			for( var etcIndex = 0; etcIndex < limit; ++etcIndex )
 			{
-				rscope["__etcIndex"] = etcIndex;
+			    rscope["__n"] = etcIndex;
 				
 				var newValue = SWYM.ExecWithScope("EtcStep", etcStepExecutable, rscope, []);
 
@@ -669,7 +669,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			var haltValue = SWYM.ExecWithScope("EtcHaltValue", etcHaltExecutable, rscope, []);
 
 			var newRScope = object(rscope);
-			newRScope["__etcIndex"] = 0;
+			newRScope["__n"] = 0;
 			var etcResult = SWYM.ExecWithScope("EtcInitial", etcInitialExecutable, newRScope, []);
 			
 			SWYM.g_etcState.depth++;
@@ -677,7 +677,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 
 			for( var etcIndex = 0; etcIndex < limitTimes; ++etcIndex )
 			{
-				newRScope["__etcIndex"] = etcIndex;
+			    newRScope["__n"] = etcIndex;
 				var nextResult = SWYM.ExecWithScope("EtcBody", etcBodyExecutable, newRScope, []);
 
 				if( etcStepExecutable !== undefined )
@@ -711,7 +711,7 @@ SWYM.ExecWithScope = function(inDebugName, executable, rscope, stack)
 			
 		case "#EtcSequence":
 			var etcGenerator = executable[PC+1];
-			var index = rscope["__etcIndex"];
+			var index = rscope["__n"];
 			if( index === undefined )
 			{
 				SWYM.LogError(-1, "Fsckup: missing etcIndex!");

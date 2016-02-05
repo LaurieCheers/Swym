@@ -3041,7 +3041,7 @@ Number.'+'(Number 'rhs', '__identity'=0) returns\n\
 Number.'*'(Number 'rhs', '__identity'=1) returns\n\
 	Number<< javascript(&pure){'this', 'rhs'}{ return this*rhs }\n\
 \n\
-Number.'/'(Number 'rhs') returns\n\
+Number.'/'(Number 'rhs', '__identity'=1) returns\n\
 	Number<< javascript(&pure){'this', 'rhs'}{ return this/rhs }\n\
 \n\
 Number.'%'(Number 'rhs') returns\n\
@@ -3292,7 +3292,8 @@ Array.'#ndLast' returns .atEnd(#-1)\n\
 Array.'#rdLast' returns .atEnd(#-1)\n\
 Array.'#thLast' returns .atEnd(#-1)\n\
 Array.'last' returns .atEnd(0)\n\
-Array.'eth'('etcIndex' = __etcIndex) returns .at(etcIndex)\n\
+Array.'nth'(&'n' = __n) returns .at(n)\n\
+Array.'#plusNth'(&'n' = __n) returns .at(#+n)\n\
 ['lhs','rhs'].'lhs' returns lhs\n\
 ['lhs','rhs'].'rhs' returns rhs\n\
 \n\
