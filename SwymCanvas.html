@@ -209,12 +209,25 @@
 			SWYM.DefaultGlobalCScope["fn#tick"] =
 			[{
 				expectedArgs:{ "this":{index:0} },
-				customCompile:function(argTypes, cscope, executable)
+				customCompile:function(argTypes, cscope, executable, errorNode)
 				{
-					SWYM.GetOutType( argTypes[0], SWYM.NumberType ); // force compile
-					executable.push("#Native");
-					executable.push(1);
-					executable.push(function(body){ tickBlock = body; });
+					var bodyExecutable = [];
+					var outType = SWYM.CompileLambdaInternal(argTypes[0], SWYM.NumberType, bodyExecutable, errorNode);
+
+					var result = object(SWYM.CallableTypeFromTo(SWYM.NumberType, outType));
+			
+					SWYM.pushEach([
+						"#Native", 1,
+						function(lookup)
+						{
+							tickBlock = {
+								type:"closure",
+								debugName:lookup.debugName,
+								run:function(key) { return SWYM.ClosureExec(lookup, key, bodyExecutable); }
+							};
+						}
+					], executable);
+
 					return SWYM.VoidType;
 				}
 			}];
