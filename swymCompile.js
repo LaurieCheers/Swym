@@ -651,19 +651,7 @@ SWYM.TestFunctionOverload = function(fnName, args, cscope, theFunction, isMulti,
     }
 
 	// surely we should precompute this information?
-	var expectedArgNamesByIndex = [];
-	var numArgs = 0;
-	var hasOnlyThis = theFunction.expectedArgs["this"] !== undefined;
-	for( var expectedArgName in theFunction.expectedArgs )
-	{
-		expectedArgNamesByIndex[ theFunction.expectedArgs[expectedArgName].index ] = expectedArgName;
-		++numArgs;
-		
-		if( expectedArgName !== "this" && expectedArgName !== "#" )
-		{
-			hasOnlyThis = false;
-		}
-	}
+	var expectedArgNamesByIndex = theFunction.expectedArgNamesByIndex;
 		
 	var nextPositionalArg = 0;
 	var inputArgNameList = [];
@@ -1289,7 +1277,12 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 			}
 				
 			// a type check
-			var typeCheckType = SWYM.GetTypeFromPatternNode(argNode, cscope);
+			var typeCheckScope = object(cscope);
+			for(var expected in expectedArgs)
+			{
+				typeCheckScope[expected] = SWYM.DontCareType;
+			}
+			var typeCheckType = SWYM.GetTypeFromPatternNode(argNode, typeCheckScope);
 
 			if( typeCheckType === undefined && argNode !== undefined )
 			{
@@ -1359,7 +1352,7 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 		toString: function(){ return "'"+fnName+"'"; },
 		returnType:returnType
 	};
-
+	
 	SWYM.AddFunctionDeclaration(fnName, cscope, cscopeFunction);
 		
 	var negateExecutable = ["#Native",1,function(v){return !v}];
@@ -1404,6 +1397,24 @@ SWYM.CompileFunctionDeclaration = function(fnName, argNames, argTypes, body, ret
 	return SWYM.VoidType;
 }
 
+SWYM.PrecomputeFunctionProperties = function(theFunction)
+{
+	// so that we don't have to calculate this stuff for each function call
+	var expectedArgNamesByIndex = [];
+	var hasOnlyThis = theFunction.expectedArgs["this"] !== undefined;
+	for( var expectedArgName in theFunction.expectedArgs )
+	{
+		expectedArgNamesByIndex[ theFunction.expectedArgs[expectedArgName].index ] = expectedArgName;
+		
+		if( expectedArgName !== "this" && expectedArgName !== "#" )
+		{
+			hasOnlyThis = false;
+		}
+	}
+	theFunction.hasOnlyThis = hasOnlyThis;
+	theFunction.expectedArgNamesByIndex = expectedArgNamesByIndex;
+}
+
 SWYM.AddFunctionDeclaration = function(fnName, cscope, cscopeFunction)
 {
 	if( !cscope[fnName] )
@@ -1419,6 +1430,7 @@ SWYM.AddFunctionDeclaration = function(fnName, cscope, cscopeFunction)
 		cscope[fnName].more = temp;
 	}
 
+	SWYM.PrecomputeFunctionProperties(cscopeFunction);
 	cscope[fnName].push( cscopeFunction );
 }
 
@@ -1528,7 +1540,7 @@ SWYM.GetTypeFromPatternNode = function(node, cscope)
 		{
 			var executable = [];
 			outType = SWYM.CompileNode(node, cscope, executable);
-			debugName = "??<FIXME>";
+			debugName = "??<FIXME>"; // we really need a node to string function...
 		}
 
 		if( outType === undefined )

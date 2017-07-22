@@ -131,42 +131,57 @@ SWYM.ReportErrors = function(ErrorType, OutputSoFar)
   }
 }
 
-SWYM.EvalStdlyb = function()
+SWYM.EvalLibrary = function(source, debugName)
 {
-	SWYM.initStdlyb();
-	
-	SWYM.errors = "";
-	SWYM.safeMode = 0;
 	SWYM.halt = false;
-	
-	var tokenlist = SWYM.Tokenize(SWYM.stdlyb);
-	var parsetree = SWYM.Parse(tokenlist);
 
-	SWYM.DefaultGlobalRScope = {};
-	for( var name in SWYM.DefaultGlobalCScope )
-	{
-		if( SWYM.DefaultGlobalCScope[name].baked !== undefined )
-			SWYM.DefaultGlobalRScope[name] = SWYM.DefaultGlobalCScope[name].baked;
-	}
+	var tokenlist = SWYM.Tokenize(source);
+	var parsetree = SWYM.Parse(tokenlist);
 
 	var executable = [];
 	var resultType = SWYM.CompileNode(parsetree, SWYM.DefaultGlobalCScope, executable);
 
-	var result = SWYM.ReportErrors("Stdlyb Error");
+	var result = SWYM.ReportErrors(debugName+" Error");
 	if ( result )
 	{
-		alert("Stdlyb compile error!");
+		alert(debugName+" compile error!");
 		return SWYM.DisplayError(result);
 	}
 	
-	SWYM.ExecWithScope("stdlyb", executable, SWYM.DefaultGlobalRScope, []);
-
-	result = SWYM.ReportErrors("Stdlyb Exec Error");
+	SWYM.ExecWithScope(debugName, executable, SWYM.DefaultGlobalRScope, []);
+	
+	result = SWYM.ReportErrors(debugName+" Exec Error");
 	if ( result )
 	{
-		alert("Stdlyb exec error!");
+		alert(debugName+" exec error!");
 		return SWYM.DisplayError(result);
 	}
+}
+
+SWYM.EvalStdlyb = function()
+{
+	SWYM.initStdlyb();
+	
+	SWYM.DefaultGlobalRScope = {};
+	for( var name in SWYM.DefaultGlobalCScope )
+	{
+		if(name.startsWith("fn#"))
+		{
+			var fn = SWYM.DefaultGlobalCScope[name];
+			for(var Idx = 0; Idx < fn.length; ++Idx)
+			{
+				SWYM.PrecomputeFunctionProperties(fn[Idx]);
+			}
+		}
+
+		if( SWYM.DefaultGlobalCScope[name].baked !== undefined )
+			SWYM.DefaultGlobalRScope[name] = SWYM.DefaultGlobalCScope[name].baked;
+	}
+
+	SWYM.errors = "";
+	SWYM.safeMode = 0;
+	
+	SWYM.EvalLibrary(SWYM.stdlyb, "Stdlyb");
 }
 
 // html pages may override this to display richer information about the value

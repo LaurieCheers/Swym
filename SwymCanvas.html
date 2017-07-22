@@ -212,10 +212,9 @@
 				customCompile:function(argTypes, cscope, executable, errorNode)
 				{
 					var bodyExecutable = [];
-					var outType = SWYM.CompileLambdaInternal(argTypes[0], SWYM.NumberType, bodyExecutable, errorNode);
-
-					var result = object(SWYM.CallableTypeFromTo(SWYM.NumberType, outType));
-			
+					
+					SWYM.CompileLambdaInternal(argTypes[0], SWYM.NumberType, bodyExecutable, errorNode);
+					
 					SWYM.pushEach([
 						"#Native", 1,
 						function(lookup)
@@ -353,6 +352,14 @@
 			SWYM.DefaultGlobalRScope["VK_DOWN"] = SWYM.DefaultGlobalCScope["VK_DOWN"].baked;
 			SWYM.DefaultGlobalRScope["VK_MOUSE"] = SWYM.DefaultGlobalCScope["VK_MOUSE"].baked;
 
+			SWYM.EvalLibrary(
+				"\
+				'CanvasElement' = Struct{ CanvasElement 'parent'; CanvasElement.List 'elements' }\n\
+				'Canvas' = CanvasElement.extend{  }\n\
+				",
+				"CanvasLyb"
+			);
+			
 			test();
 			initialized = true;
 		}
